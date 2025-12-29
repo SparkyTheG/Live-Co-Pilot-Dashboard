@@ -1,0 +1,50 @@
+,,,,,
+,,,,,
+,Pillar 5: Responsibility & Ownership,,,,
+,,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+17,Ownership of the Problem,Low (1–3),Personal Dev,“What do you think created this issue?”,“It’s because of my parents / society / bad luck.”
+17,Ownership of the Problem,Mid (4–6),Personal Dev,“Have you played any role in how this has continued?”,“Maybe... I’ve avoided dealing with it.”
+17,Ownership of the Problem,High (7–10),Personal Dev,“Who’s ultimately responsible for where things are now?”,“I am. I’ve made choices that led here.”
+17,Ownership of the Problem,Low (1–3),B2B,“What’s causing this problem?”,“The market is tough / sales just aren’t closing.”
+17,Ownership of the Problem,Mid (4–6),B2B,“Where does your team fit into the problem?”,“Some internal processes are messy — part of it’s on us.”
+17,Ownership of the Problem,High (7–10),B2B,“How accountable is your team for this issue?”,“We’ve let this slip — and we’re responsible for fixing it.”
+17,Ownership of the Problem,Low (1–3),Real Estate,“Why hasn’t the home sold yet?”,“The market’s bad. Buyers are flaky.”
+17,Ownership of the Problem,Mid (4–6),Real Estate,“Do you feel you’ve done everything possible to sell?”,“Not really — we didn’t do much prep.”
+17,Ownership of the Problem,High (7–10),Real Estate,“What role have you played in the current situation?”,“We priced high and delayed showings — that’s on us.”
+18,Ownership of the Solution,Low (1–3),Personal Dev,“Whose job is it to fix this?”,“I hope someone helps me... I can’t do it alone.”
+18,Ownership of the Solution,Mid (4–6),Personal Dev,“Are you the one who will drive this change?”,“I think so — I just don’t know how yet.”
+18,Ownership of the Solution,High (7–10),Personal Dev,“Who’s ultimately responsible for solving this?”,“Me. It starts with me taking action.”
+18,Ownership of the Solution,Low (1–3),B2B,“What needs to happen for this to change?”,“We need someone else to come in and shake things up.”
+18,Ownership of the Solution,Mid (4–6),B2B,“Is your team in a position to drive this forward?”,“We could — with the right support.”
+18,Ownership of the Solution,High (7–10),B2B,“Who owns the solution from your side?”,“We do. We’ll lead internally with external help.”
+18,Ownership of the Solution,Low (1–3),Real Estate,“What’s needed to sell this home?”,“Hopefully a buyer comes along.”
+18,Ownership of the Solution,Mid (4–6),Real Estate,“Are you ready to take new action if needed?”,“Yes — but I’d want more advice first.”
+18,Ownership of the Solution,High (7–10),Real Estate,“Who’s driving the result here?”,“We are — and we’re ready to do what’s needed.”
+19,Belief in Ability to Solve,Low (1–3),Personal Dev,“Do you believe you can truly change this?”,"“Honestly, no. I’ve tried and failed.”"
+19,Belief in Ability to Solve,Mid (4–6),Personal Dev,“What’s your confidence in solving this?”,“I think I can... with the right help.”
+19,Belief in Ability to Solve,High (7–10),Personal Dev,“Do you trust yourself to make this shift?”,“Yes. I’ve overcome bigger things. I know I can.”
+19,Belief in Ability to Solve,Low (1–3),B2B,“Does your team have the ability to fix this?”,“Not without a major overhaul.”
+19,Belief in Ability to Solve,Mid (4–6),B2B,“Do you believe this is solvable internally?”,“Maybe — we’ll need strong support.”
+19,Belief in Ability to Solve,High (7–10),B2B,“Do you believe your team can implement this solution?”,“Yes — we’re capable if the right pieces are in place.”
+19,Belief in Ability to Solve,Low (1–3),Real Estate,“Do you believe you can get the sale you want?”,“Not really. It feels impossible.”
+19,Belief in Ability to Solve,Mid (4–6),Real Estate,“Do you think your plan can work with support?”,"“Yes, if I have help.”"
+19,Belief in Ability to Solve,High (7–10),Real Estate,“Are you confident you can make this happen?”,“Yes — I know what to do now.”
+20,Self-Trust / Follow-Through,Low (1–3),Personal Dev,“How well do you stick with things you commit to?”,“I struggle — I lose momentum fast.”
+20,Self-Trust / Follow-Through,Mid (4–6),Personal Dev,“How’s your follow-through on goals?”,"“Inconsistent. I try, but sometimes give up.”"
+20,Self-Trust / Follow-Through,High (7–10),Personal Dev,“Do you trust yourself to follow through?”,"“Yes. When I say yes, I do it.”"
+20,Self-Trust / Follow-Through,Low (1–3),B2B,“How consistent is your team with execution?”,“We start things… but don’t always finish.”
+20,Self-Trust / Follow-Through,Mid (4–6),B2B,“What’s your team’s follow-through like?”,"“We mean well, but competing priorities get in the way.”"
+20,Self-Trust / Follow-Through,High (7–10),B2B,“Can your team follow through on this commitment?”,"“Yes — if we commit, we deliver.”"
+20,Self-Trust / Follow-Through,Low (1–3),Real Estate,“Do you follow through on what you say you’ll do?”,“Not always — I tend to delay.”
+20,Self-Trust / Follow-Through,Mid (4–6),Real Estate,“How reliable are you when it comes to financial or legal tasks?”,“I get them done eventually.”
+20,Self-Trust / Follow-Through,High (7–10),Real Estate,“Can I count on you to execute what’s needed?”,“Yes. I’m a person of my word.”
+24,ROI Ownership Framing,Low (1–3),Personal Dev,“Why do you think this program is worth the price?”,“I hope it finally fixes me — it worked for others.”
+24,ROI Ownership Framing,Mid (4–6),Personal Dev,“What makes you think this could help you?”,“It might work… if I actually apply it.”
+24,ROI Ownership Framing,High (7–10),Personal Dev,“Why are you confident this will pay off?”,"“If I apply it, I know I’ll change things for good.”"
+24,ROI Ownership Framing,Low (1–3),B2B,“What kind of return are you expecting from this?”,"“If your team delivers, we should get results.”"
+24,ROI Ownership Framing,Mid (4–6),B2B,“What makes this investment feel smart?”,"“If our managers implement it right, it should help.”"
+24,ROI Ownership Framing,High (7–10),B2B,“Why do you believe this is the right investment for your team?”,"“With full adoption, we’ll exceed ROI.”"
+24,ROI Ownership Framing,Low (1–3),Real Estate,“Why list at this commission?”,“I hope you can sell it fast and get a good offer.”
+24,ROI Ownership Framing,Mid (4–6),Real Estate,“What makes you believe this listing strategy will work?”,"“If the market cooperates, it should sell.”"
+24,ROI Ownership Framing,High (7–10),Real Estate,“Why are you confident in the value of your investment?”,"“If we execute our plan, we’ll hit our number.”"

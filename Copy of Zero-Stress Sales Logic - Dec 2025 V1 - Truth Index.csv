@@ -1,0 +1,26 @@
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+Rule ID,Incoherence Condition,Trigger Logic,Penalty (Points),Notes
+T1,High Pain + Low Urgency,Pain Intensity (P1) ≥ 7 AND Urgency (P2) ≤ 4,–15,Claims deep pain but no urgency to act
+T2,High Desire + Low Decisiveness,Desire Clarity or Priority ≥ 7 AND Decisiveness (P3) ≤ 4,–15,Wants change but avoids decision
+T3,High Money Access + High Price Sensitivity,Available Money (P4) ≥ 7 AND Price Sensitivity raw (P6) ≥ 8,–10,"Can afford it, but still resists price"
+T4,Claims Authority + Reveals Need for Approval,Decision Authority = “Yes” but later mentions needing external approval or another condition,–10,Self-contradiction in who owns the decision
+T5,High Desire + Low Responsibility,Desire Clarity or Priority ≥ 7 AND Responsibility & Ownership (P5) ≤ 5,–15,"Craves result, but doesn’t own the change"

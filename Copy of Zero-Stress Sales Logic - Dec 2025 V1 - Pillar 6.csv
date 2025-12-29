@@ -1,0 +1,31 @@
+,,,,,
+,,,,,
+,Pillar 6: Price Sensitivity,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+21,Emotional Response to Spending,Low (1–3),Personal Dev,“How does investing in yourself feel right now?”,“It feels overwhelming. I’m scared to make that decision.”
+21,Emotional Response to Spending,Mid (4–6),Personal Dev,“Have you spent this much before?”,“Not really. I’m not sure how I feel about it.”
+21,Emotional Response to Spending,High (7–10),Personal Dev,“What’s your gut reaction to this investment?”,“I feel confident. This is an investment I’m ready to make.”
+21,Emotional Response to Spending,Low (1–3),B2B,“Does the budget feel like a stretch?”,“Yes. Our CFO is nervous.”
+21,Emotional Response to Spending,Mid (4–6),B2B,“Any emotional hesitations from leadership?”,“They want more proof before spending.”
+21,Emotional Response to Spending,High (7–10),B2B,“How does your team feel about allocating this budget?”,“Everyone agrees it’s worth it for the goal.”
+21,Emotional Response to Spending,Low (1–3),Real Estate,“How do you feel about spending to prep the house?”,“I don’t want to spend anything else.”
+21,Emotional Response to Spending,Mid (4–6),Real Estate,“Are you okay with investing in staging or repairs?”,“I guess... if it’s really necessary.”
+21,Emotional Response to Spending,High (7–10),Real Estate,“Are you comfortable putting money in to get a higher return?”,“Absolutely. I’m good with that.”
+22,Negotiation Reflex,Low (1–3),Personal Dev,“Any concerns about the offer as it stands?”,“Can you give me a discount or payment plan?”
+22,Negotiation Reflex,Mid (4–6),Personal Dev,“Do you want to explore other pricing options?”,“Maybe — is there a smaller program or a bonus?”
+22,Negotiation Reflex,High (7–10),Personal Dev,“Do the terms feel good as-is?”,“Yes — I’m all in if this solves my issue.”
+22,Negotiation Reflex,Low (1–3),B2B,“Is pricing a blocker at this stage?”,“We need a price cut to even consider this.”
+22,Negotiation Reflex,Mid (4–6),B2B,“Do you see any terms that might need adjusting?”,“We’d want some internal buy-in or modifications.”
+22,Negotiation Reflex,High (7–10),B2B,“Are you comfortable with our offer as it stands?”,“Yes — we’re good to roll out if it fits.”
+22,Negotiation Reflex,Low (1–3),Real Estate,“Any concerns with commission or fees?”,“Can you lower your commission?”
+22,Negotiation Reflex,Mid (4–6),Real Estate,“Is the fee structure acceptable?”,“We might want to revisit after listing.”
+22,Negotiation Reflex,High (7–10),Real Estate,“Are you aligned on terms and pricing?”,“Yes — we’re happy with the terms as-is.”
+23,Structural Rigidity,Low (1–3),Personal Dev,“Do you need a different format or refund option?”,“I need flexibility or guarantees to feel okay.”
+23,Structural Rigidity,Mid (4–6),Personal Dev,“Would flexible terms change how you feel?”,“Maybe… I’d feel better with some options.”
+23,Structural Rigidity,High (7–10),Personal Dev,“How do you feel about the structure as-is?”,“It works. The value matters more than the format.”
+23,Structural Rigidity,Low (1–3),B2B,“Do our terms fit your procurement needs?”,“No — we can’t accept the current structure.”
+23,Structural Rigidity,Mid (4–6),B2B,“Would you need internal review before approval?”,“Yes — legal would need to look at it.”
+23,Structural Rigidity,High (7–10),B2B,“Can we move forward as-is?”,“Yes — we’re ready to proceed.”
+23,Structural Rigidity,Low (1–3),Real Estate,“Do you need flexible staging/commission/closing options?”,“Yes — we need max flexibility.”
+23,Structural Rigidity,Mid (4–6),Real Estate,“Would you be open to structure changes later?”,“Yes — we can revisit if needed.”
+23,Structural Rigidity,High (7–10),Real Estate,“Are you good with the listing structure and timeline?”,“Yes — happy to proceed as planned.”

@@ -1,0 +1,41 @@
+,,,,,
+,,,,,
+,Pillar 4: Available Money,,,,
+,,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+13,Resource Availability,Low (1–3),Personal Dev,“Do you have the financial ability to move forward if it’s a fit?”,"“No, I’m between jobs and have nothing saved.”"
+13,Resource Availability,Mid (4–6),Personal Dev,“Could this be something you budget for or use credit if needed?”,“Maybe. I’d have to think about how to shift things.”
+13,Resource Availability,High (7–10),Personal Dev,“Is the investment within your reach?”,"“Yes, I have funds or access if I feel it’s right.”"
+13,Resource Availability,Low (1–3),B2B,“Is this within your current budget?”,“No. We’re frozen until next fiscal cycle.”
+13,Resource Availability,Mid (4–6),B2B,“Could funds be moved or unlocked?”,“Possibly. Depends on internal discussions.”
+13,Resource Availability,High (7–10),B2B,“Is there budget earmarked for this problem?”,"“Yes, or I can pull from discretionary funds.”"
+13,Resource Availability,Low (1–3),Real Estate,"“Do you have the funds for staging, repairs, or closing costs?”","“No, I’d have to wait or borrow.”"
+13,Resource Availability,Mid (4–6),Real Estate,“Can you cover partial costs or stretch a little if needed?”,"“Maybe, but it’d be tight.”"
+13,Resource Availability,High (7–10),Real Estate,“Are you financially ready to prep and list?”,"“Yes, I have the means or credit ready.”"
+14,Investment Mindset,Low (1–3),Personal Dev,“Have you ever invested in coaching or growth before?”,"“No, I usually just read free stuff.”"
+14,Investment Mindset,Mid (4–6),Personal Dev,“How do you see investing in yourself?”,"“It sounds good, but I’m still getting used to the idea.”"
+14,Investment Mindset,High (7–10),Personal Dev,“Do you see this as something worth investing in?”,“Absolutely. I’ve invested before and it changed my life.”
+14,Investment Mindset,Low (1–3),B2B,“Is this seen as a necessary expense internally?”,“Not really. Leadership doesn’t prioritize it.”
+14,Investment Mindset,Mid (4–6),B2B,“How do you value outside solutions?”,"“We’ve tried some, but leadership still hesitates.”"
+14,Investment Mindset,High (7–10),B2B,“Is this a type of tool/service your org believes in?”,“Yes. We invest in areas with strong ROI.”
+14,Investment Mindset,Low (1–3),Real Estate,“Do you see value in paying for professional help or prep?”,"“No, I don’t want to spend money upfront.”"
+14,Investment Mindset,Mid (4–6),Real Estate,“Have you considered what impact investment might make?”,"“I’m curious, but I’d need convincing.”"
+14,Investment Mindset,High (7–10),Real Estate,“Are you open to investing in services to improve your outcome?”,“Yes — I see it as necessary to get top dollar.”
+15,Resourcefulness,Low (1–3),Personal Dev,"“If you knew this would change your life, what would you do?”","“Nothing — if I don’t have the money, it’s a no.”"
+15,Resourcefulness,Mid (4–6),Personal Dev,“Would you explore options if this felt right?”,"“I’d consider it, but I’d be nervous.”"
+15,Resourcefulness,High (7–10),Personal Dev,“Would you find a way if it really aligned?”,“Yes — I’ve moved mountains for things that matter.”
+15,Resourcefulness,Low (1–3),B2B,“Is it possible to reallocate or borrow from another budget?”,“No — we’re locked down.”
+15,Resourcefulness,Mid (4–6),B2B,“Are there alternate funding paths you could explore?”,"“Maybe, I’d have to ask.”"
+15,Resourcefulness,High (7–10),B2B,“Would you make a business case to unlock the budget?”,"“Yes — if it solves a big pain, we get scrappy.”"
+15,Resourcefulness,Low (1–3),Real Estate,"“If staging could help your sale, would you find a way to pay?”","“No, I just can’t.”"
+15,Resourcefulness,Mid (4–6),Real Estate,“Would you explore partial options or creative strategies?”,"“I guess so, depending on results.”"
+15,Resourcefulness,High (7–10),Real Estate,"“Would you pull from savings, credit, or future equity if needed?”","“Yes — if it helps the sale, I’ll figure it out.”"
+16,Relationship to Money,Low (1–3),Personal Dev,“How do you usually feel about making financial decisions?”,“Anxious. I avoid them or delay forever.”
+16,Relationship to Money,Mid (4–6),Personal Dev,“Do you feel confident choosing when to invest?”,“Sometimes — depends on the pressure.”
+16,Relationship to Money,High (7–10),Personal Dev,“How do you feel about this kind of money decision?”,“I’m clear and intentional. I trust myself to choose well.”
+16,Relationship to Money,Low (1–3),B2B,“What’s the energy around budget decisions in your org?”,“Tense. People are afraid to take initiative.”
+16,Relationship to Money,Mid (4–6),B2B,“Are your team’s spending decisions confident or hesitant?”,"“Mixed. Some play it safe, others push for value.”"
+16,Relationship to Money,High (7–10),B2B,“How comfortable is your team making smart investments?”,"“We’re decisive — when there’s ROI, we act fast.”"
+16,Relationship to Money,Low (1–3),Real Estate,“How do you feel about spending money during the sale?”,“Nervous — I’d rather not spend at all.”
+16,Relationship to Money,Mid (4–6),Real Estate,“Do you usually feel clear making financial choices?”,“Not always — depends on timing.”
+16,Relationship to Money,High (7–10),Real Estate,“Are you comfortable investing to get the best outcome?”,“Yes. I’ve done it before and it paid off.”

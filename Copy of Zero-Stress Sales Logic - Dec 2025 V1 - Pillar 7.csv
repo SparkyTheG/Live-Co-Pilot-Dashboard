@@ -1,0 +1,43 @@
+,,,,,
+,,,,,
+,Pillar 7: Trust ,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+1,Trust in Provider,Low (1–3),Personal Dev,“What made you book this call?”,“I’m still checking out different options. Just seeing what’s out there.”
+1,Trust in Provider,Mid (4–6),Personal Dev,“Have you seen some of my work or testimonials?”,"“Yeah, I skimmed a few. Looks interesting.”"
+1,Trust in Provider,High (7–10),Personal Dev,“Why did you choose to speak with me specifically?”,“I’ve followed your content for months. I trust how you approach this.”
+1,Trust in Provider,Low (1–3),B2B,“What do you know about our firm?”,“Not much yet. We’re just talking to a few vendors.”
+1,Trust in Provider,Mid (4–6),B2B,“What drew you to book this call?”,“We saw a webinar — looked solid. Still evaluating.”
+1,Trust in Provider,High (7–10),B2B,“What made you consider us over others?”,“You’ve worked with a company just like ours. Your results speak for themselves.”
+1,Trust in Provider,Low (1–3),Real Estate,“How did you hear about me?”,“Online. I’ve got a few agents I’m talking to.”
+1,Trust in Provider,Mid (4–6),Real Estate,“Why are you considering working with me?”,"“You were referred, and I’ve seen a couple of listings.”"
+1,Trust in Provider,High (7–10),Real Estate,“Why me and why now?”,“You’ve sold 3 homes in this area. I’ve been watching your results.”
+,,,,,
+2,Offer Validation Confidence,Low (1–3),Personal Dev,“Does this approach resonate with you?”,“Not sure yet. I’ve tried a lot that didn’t work.”
+2,Offer Validation Confidence,Mid (4–6),Personal Dev,“How does this program feel so far?”,"“Parts of it make sense, I just don’t know if it’s the right time.”"
+2,Offer Validation Confidence,High (7–10),Personal Dev,“Does this feel like the right fit for you?”,“This feels exactly like what I’ve been looking for.”
+2,Offer Validation Confidence,Low (1–3),B2B,“Does this solution fit your goals?”,“Hard to tell. We’re still reviewing others.”
+2,Offer Validation Confidence,Mid (4–6),B2B,“Where does this rank compared to others you’ve seen?”,“Top 3. Still some questions about implementation.”
+2,Offer Validation Confidence,High (7–10),B2B,“What makes this a strong contender?”,“You hit the nail on the head — this is the most aligned offer we’ve seen.”
+2,Offer Validation Confidence,Low (1–3),Real Estate,“How do you feel about the pricing strategy?”,“Not sure. Another agent suggested something different.”
+2,Offer Validation Confidence,Mid (4–6),Real Estate,“Do you feel confident in our plan to sell?”,"“Generally yes, but I’d want to see a bit more proof.”"
+2,Offer Validation Confidence,High (7–10),Real Estate,“How does this listing plan feel to you?”,“It’s exactly what we were hoping for.”
+,,,,,
+3,Trust in Self,Low (1–3),Personal Dev,“What’s your biggest concern?”,"“Honestly, I’m not sure I’ll follow through.”"
+3,Trust in Self,Mid (4–6),Personal Dev,“Do you think you can apply this work?”,“I hope so. It depends on the support.”
+3,Trust in Self,High (7–10),Personal Dev,“What makes you ready now?”,"“I know if I commit to this, I’ll make it happen.”"
+3,Trust in Self,Low (1–3),B2B,“Any risk to implementing this on your side?”,“Yes — we’ve had initiatives fail before. I’m concerned.”
+3,Trust in Self,Mid (4–6),B2B,“Do you feel ready to adopt a new system?”,“Mostly. There are some team capability concerns.”
+3,Trust in Self,High (7–10),B2B,“Can your team execute on this?”,“Absolutely. We’re prepared and resourced.”
+3,Trust in Self,Low (1–3),Real Estate,“Are you ready to handle what this sale requires?”,“I’m nervous. It’s a lot.”
+3,Trust in Self,Mid (4–6),Real Estate,“Do you feel prepared for the next steps?”,“Mostly. I just don’t want to mess it up.”
+3,Trust in Self,High (7–10),Real Estate,“Do you feel confident about the sale process?”,“Yes. Let’s do this.”
+,,,,,
+4,Risk Tolerance,Low (1–3),Personal Dev,“How do you feel about stepping into this?”,“It’s scary. I’m afraid of failing again.”
+4,Risk Tolerance,Mid (4–6),Personal Dev,“Are you comfortable with the unknowns?”,“Sort of. I’m trying to be.”
+4,Risk Tolerance,High (7–10),Personal Dev,“Are you open to taking a leap for growth?”,“Yes — I know it’s time. I’m done hesitating.”
+4,Risk Tolerance,Low (1–3),B2B,“Is this decision risky for your team?”,“Yes. We’d prefer to delay until everything’s certain.”
+4,Risk Tolerance,Mid (4–6),B2B,“Is your team okay with some uncertainty here?”,“Depends. We’d need strong reassurance.”
+4,Risk Tolerance,High (7–10),B2B,“How does your team view the risk-reward tradeoff?”,“They’re ready to move — no growth without risk.”
+4,Risk Tolerance,Low (1–3),Real Estate,“Are you worried about market timing?”,“Yes. We may hold off.”
+4,Risk Tolerance,Mid (4–6),Real Estate,“Do you feel comfortable listing now?”,"“I think so, but I’m nervous.”"
+4,Risk Tolerance,High (7–10),Real Estate,“Are you willing to list even with current uncertainty?”,“Yes — let’s go. I believe it’s the right move.”

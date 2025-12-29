@@ -1,0 +1,32 @@
+,,,,,
+,Pillar 2: Urgency,,,,
+,,,,,
+,,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+1,Timing Pressure,Low (1–3),Personal Dev,"""What’s making you consider this now?""","""No real reason, I just figured I’d explore it."""
+1,Timing Pressure,Mid (4–6),Personal Dev,"""Is there something that made you think more seriously?""","""I went through a breakup last month and realized I need to look at my patterns."""
+1,Timing Pressure,High (7–10),Personal Dev,"""Is now the right time for you to tackle this?""","""I’ve put this off for too long. I can’t keep doing this to myself."""
+1,Timing Pressure,Low (1–3),B2B,"""Is this project tied to any timeline?""","""No, it’s more of a long-term idea."""
+1,Timing Pressure,Mid (4–6),B2B,"""Is there a reason you're looking at this now?""","""We’ve started Q2 planning and want to explore options."""
+1,Timing Pressure,High (7–10),B2B,"""Is there a deadline driving this initiative?""","""We must have a system before the fiscal year starts next month."""
+1,Timing Pressure,Low (1–3),Real Estate,"""Why are you looking to sell now?""","""Just curious what we could get. No pressure."""
+1,Timing Pressure,Mid (4–6),Real Estate,"""Any ideal timing you’re hoping for?""","""Preferably by summer so we can travel more easily."""
+1,Timing Pressure,High (7–10),Real Estate,"""What’s driving the need to sell now?""","""We need to sell within 30 days or we lose our next home."""
+2,Perceived Cost of Delay,Low (1–3),Personal Dev,"""What if you wait another year?""","""Nothing terrible would happen. I’m used to it."""
+2,Perceived Cost of Delay,Mid (4–6),Personal Dev,"""Is there a downside to not acting now?""","""More of the same — lonely weekends, second-guessing myself."""
+2,Perceived Cost of Delay,High (7–10),Personal Dev,"""What would it cost emotionally to stay in this place?""","""It’s devastating. I feel like I’m missing out on building a future."""
+2,Perceived Cost of Delay,Low (1–3),B2B,"""What’s the downside if this doesn’t get done soon?""","""Not much. It’s just inefficient."""
+2,Perceived Cost of Delay,Mid (4–6),B2B,"""Impact of continuing as-is for a few more months?""","""Burning 10–15 hours/week in admin and cleanup."""
+2,Perceived Cost of Delay,High (7–10),B2B,"""What’s the cost of delaying this fix?""","""We’re losing $30K/month in churn — it’s bleeding revenue."""
+2,Perceived Cost of Delay,Low (1–3),Real Estate,"""What happens if the house doesn’t sell soon?""","""Not a big deal. We’re flexible."""
+2,Perceived Cost of Delay,Mid (4–6),Real Estate,"""Is there a consequence to waiting?""","""Longer we hold it, more we pay in taxes and maintenance."""
+2,Perceived Cost of Delay,High (7–10),Real Estate,"""Why can’t this wait?""","""We’ll lose our deposit and financing if we don’t sell in 45 days."""
+3,Execution Bandwidth,Low (1–3),Personal Dev,"""Do you have capacity to focus on this now?""","""No. Work is crazy and I’m barely keeping up."""
+3,Execution Bandwidth,Mid (4–6),Personal Dev,"""What else do you have going on right now?""","""Got a lot, but I think I could make room."""
+3,Execution Bandwidth,High (7–10),Personal Dev,"""Do you have the bandwidth to work on this?""","""Yes. I’ve cleared time and this is my #1 priority."""
+3,Execution Bandwidth,Low (1–3),B2B,"""Does your team have space to take this on now?""","""No — we’re mid-implementation on something else."""
+3,Execution Bandwidth,Mid (4–6),B2B,"""Will this conflict with ongoing projects?""","""It might, but we can stagger rollout."""
+3,Execution Bandwidth,High (7–10),B2B,"""Can your team implement this right now?""","""Absolutely. It’s our next key project and we’ve freed up resources."""
+3,Execution Bandwidth,Low (1–3),Real Estate,"""Ready to move forward if a good offer comes in?""","""We’re traveling for 6 weeks, so not really."""
+3,Execution Bandwidth,Mid (4–6),Real Estate,"""Is your timeline flexible?""","""We prefer now, but have logistics to work through."""
+3,Execution Bandwidth,High (7–10),Real Estate,"""Can you engage quickly if we bring a buyer?""","""Yes. Everything is packed and we’re ready to sign."""

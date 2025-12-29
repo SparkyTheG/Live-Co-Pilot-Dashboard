@@ -1,0 +1,538 @@
+# Foreclosure Sales Discovery Framework - RAG Optimized
+
+## Framework Overview: 5 Core Questions
+
+### Question 1: Why are they talking now?
+**Context:** Foreclosure initiated, sale date set or imminent, legal action started
+
+### Question 2: What pressure are they under?
+**Context:** Extreme time pressure, legal consequences, credit destruction
+
+### Question 3: What outcome do they want?
+**Context:** Stop foreclosure immediately, save credit if possible, avoid deficiency judgment
+
+### Question 4: What has failed already?
+**Context:** Tried everything, time ran out, no options left
+
+### Question 5: Are they open to non-traditional solutions?
+**Context:** Maximum - facing legal action, needs solution immediately
+
+---
+
+## Discovery Phases (1-7)
+
+### Phase 1: Context & Control
+**Objective:** Establish exact foreclosure timeline and legal status
+
+**Key Questions:**
+- When is the foreclosure sale date?
+- Have you received foreclosure lawsuit papers?
+- How many months behind are you on payments?
+- Have you consulted with an attorney?
+- Do you have the foreclosure notice? Can you send it?
+
+**Qualification Signals:**
+- Has foreclosure documents
+- Knows exact sale date
+- Clear about timeline
+- Ready to act immediately
+
+**Warning Signs:**
+- Vague on foreclosure status
+- No documentation
+- Claims foreclosure but timeline unclear
+- May not be in actual foreclosure
+
+---
+
+### Phase 2: Property & Loan Reality
+**Objective:** Understand loan balance, arrears, equity position, property status
+
+**Key Questions:**
+- What's the total amount needed to bring loan current?
+- What's the property worth vs what you owe?
+- Is the property occupied or vacant?
+- What's the condition?
+- Have you received a payoff quote from the bank?
+
+**Qualification Signals:**
+- Has payoff or arrears figure
+- Realistic about value
+- Honest about condition
+- Documents available
+
+**Warning Signs:**
+- No idea of arrears amount
+- Won't contact bank for info
+- Wildly inflated value
+- Can't provide documentation
+
+---
+
+### Phase 3: Pain & Motivation Dig
+**Objective:** Understand consequences they're facing and commitment level
+
+**Key Questions:**
+- What happens to you if this goes to auction?
+- Do you understand the credit impact of foreclosure?
+- What about deficiency judgment risk?
+- What are you willing to do to stop this?
+- Is there ANY other option you have?
+
+**Qualification Signals:**
+- Understands full consequences
+- Genuine fear and urgency
+- Will do whatever it takes
+- No other options available
+
+**Warning Signs:**
+- Doesn't grasp severity
+- Still has other options
+- Not actually urgent
+- May be wasting time
+
+---
+
+### Phase 4: Failed Solutions Check
+**Objective:** Confirm they've exhausted all options
+
+**Key Questions:**
+- Did you try loan modification? What happened?
+- Did you try to sell it? Why didn't that work?
+- Have you filed bankruptcy?
+- Any family able to help?
+- What prevented those from working?
+
+**Qualification Signals:**
+- Tried everything
+- Understands why options failed
+- Truly out of options
+- Time is the constraint
+
+**Warning Signs:**
+- Haven't tried obvious things
+- Giving up prematurely
+- Bankruptcy still possible
+- Not actually at end
+
+---
+
+### Phase 5: Desired Outcome Clarity
+**Objective:** Set realistic expectations
+
+**Key Questions:**
+- At this point, is stopping foreclosure the win?
+- Do you understand you're walking away with nothing?
+- Are you clear this is about avoiding foreclosure, not getting paid?
+- What do you need to feel okay about moving forward?
+- Can you make a decision today?
+
+**Qualification Signals:**
+- Realistic expectations
+- Accepts reality
+- Relief-focused
+- Ready to decide now
+
+**Warning Signs:**
+- Still expects money out
+- Unrealistic given situation
+- Can't commit today
+- Hasn't accepted reality
+
+---
+
+### Phase 6: Openness to Creative Solutions
+**Objective:** Confirm readiness to proceed immediately
+
+**Key Questions:**
+- If we can stop the foreclosure, are you ready to sign today?
+- Do you understand we need to move in days, not weeks?
+- What would prevent you from moving forward immediately?
+- Are you the only decision maker or do others need to agree?
+
+**Qualification Signals:**
+- Ready to sign immediately
+- Understands urgency
+- No blockers
+- Sole decision maker
+
+**Warning Signs:**
+- Needs time to think
+- Other decision makers
+- Shopping around
+- Urgency not matching situation
+
+---
+
+### Phase 7: Subject-To Positioning (High-Level Only)
+**Objective:** Present foreclosure rescue
+
+**Key Questions:**
+- We can stop the foreclosure by bringing the loan current and taking over payments
+- You'll deed us the property and we handle everything from here
+- Your credit is protected from foreclosure and you walk away clean
+- Are you ready to move forward?
+
+**Qualification Signals:**
+- Immediate relief and agreement
+- Asks about next steps
+- Ready to provide documents
+- Grateful for solution
+
+**Warning Signs:**
+- Skeptical despite situation
+- Won't commit
+- Wants to explore other options
+- May not follow through
+
+---
+
+## Prospect Reality & Pressure
+
+### Time Pressure Indicators
+- Sale date is set
+- Days until auction
+- Legal deadline imminent
+- Zero time for alternatives
+
+### Financial Pressure Indicators
+- Massive arrears accumulated
+- No ability to cure
+- Deficiency judgment risk
+- Credit being annihilated
+
+### Emotional Pressure Indicators
+- Extreme stress and panic
+- Public embarrassment
+- Family affected
+- Desperation visible
+
+### Authority Pressure Indicators
+- Court action forces decision
+- Bank has control
+- Need solution immediately
+- No negotiation leverage
+
+---
+
+## Property & Loan Reality
+
+### Occupancy Status
+- May be occupied or vacant
+- Possibly abandoned
+- Condition declining
+
+### Condition Burden
+- Often neglected
+- Maintenance deferred
+- May need significant work
+- Declining due to vacancy
+
+### Loan Presence
+- Deeply underwater or no equity
+- Massive arrears
+- Foreclosure costs added
+- Attorney fees included
+
+### Payment Status
+- 6+ months behind
+- Acceleration letter received
+- Legal action filed
+- Sale scheduled
+
+### Structural Viability for Creative Finance
+- Subject-To only if math works
+- Must cure large arrears
+- Time-critical
+
+---
+
+## Pain & Motivation Dig
+
+### Core Pain Statements
+- "The auction is scheduled - I'm about to lose everything"
+- "My credit will be destroyed for 7 years"
+- "I could face a deficiency judgment for years"
+- "This is a public humiliation and legal nightmare"
+
+### Deepening Questions
+- What happens to you when the property sells at auction?
+- Do you understand what foreclosure means for the next 7 years?
+- What would stopping this be worth to you?
+- Is there any other option you have right now?
+
+### Emotional Signals to Listen For
+- Panic or resignation
+- Desperate energy
+- Immediate relief at any solution
+- May cry or show extreme emotion
+
+### Guidance Note
+Foreclosure prospects are in legal crisis. Be empathetic but extremely direct. Time is everything. No sales pitch needed - they need rescue.
+
+---
+
+## Failed Solutions
+
+### What They Tried
+- Loan modification - denied or too late
+- Tried to sell - no time or no equity
+- Bankruptcy considered but won't help
+- Borrowed from everyone possible
+- Applied for assistance programs - denied
+
+### Why It Failed
+- Too deep in arrears
+- No equity for sale
+- Time ran out
+- No resources left
+- System couldn't help fast enough
+
+### Remaining Hope Assessment
+Zero - foreclosure is happening unless intervention now
+
+---
+
+## Desired Outcome Clarity
+
+### What Success Means to Them
+- Foreclosure stopped
+- Avoiding public sale
+- Credit protected from foreclosure
+- No deficiency judgment
+
+### Trade-offs (Speed vs Price vs Certainty)
+- Will give up property for nothing
+- Any solution that stops foreclosure
+- Speed is only priority
+- Walking away clean is the win
+
+### What They Want Off Their Plate
+- Legal action
+- Public foreclosure sale
+- Deficiency judgment risk
+- Credit annihilation
+
+---
+
+## Openness to Creative Solutions
+
+### Permission-Based Bridge Questions
+- We can stop this foreclosure - are you ready to move now?
+- Does it matter how we do it, as long as foreclosure is stopped?
+- Can you make a decision today?
+- What would prevent you from signing immediately?
+
+### If Openness is Low
+Should not exist in real foreclosure. If present, foreclosure may not be real or they don't understand severity. Verify situation immediately.
+
+---
+
+## Likely Objections (Translated)
+
+### Objection: "I should get something out of this"
+**Protecting:** Ego and sense of fairness
+**Risk Behind Objection:** Feeling exploited
+**Control Question:** "I understand - but what's the alternative if we don't stop the foreclosure?"
+
+### Objection: "Can I just file bankruptcy?"
+**Protecting:** Hope for different solution
+**Risk Behind Objection:** More legal action
+**Control Question:** "Have you talked to bankruptcy attorney? How long would that take and what would it cost?"
+
+### Objection: "What if the bank works with me?"
+**Protecting:** Hope for miracle
+**Risk Behind Objection:** False hope
+**Control Question:** "When's the sale date? How much time do you have for the bank to change their mind?"
+
+### Objection: "This feels like I'm giving up"
+**Protecting:** Self-image and ego
+**Risk Behind Objection:** Feeling of failure
+**Control Question:** "What's giving up: stopping foreclosure now, or letting it go to auction?"
+
+---
+
+## Truth Index: Compliance Signals
+
+### Signal: Says yes but won't send foreclosure documents
+**Assessment:** May not be in actual foreclosure or timeline not real
+
+### Signal: Agrees but wants to wait
+**Assessment:** Doesn't understand urgency or not serious
+
+### Signal: Won't provide attorney or bank contact
+**Assessment:** Hiding something or not legitimate
+
+---
+
+## Truth Index: Red Flags
+
+### Red Flag: Claims foreclosure but has no documents
+**Impact:** Situation may not be real
+
+### Red Flag: Vague on sale date or amount owed
+**Impact:** Not actually in foreclosure
+
+### Red Flag: Still expects to get paid
+**Impact:** Not grounded in reality
+
+### Red Flag: Won't commit immediately despite urgency
+**Impact:** Timeline doesn't match behavior - verify situation
+
+---
+
+## Decision-Making Style
+
+### Crisis Mode Decision Maker
+**What They Need:**
+- Immediate action
+- Clear direction
+- Fast resolution
+- Someone to trust
+
+**What Not To Do:**
+- Delays
+- Complexity
+- More uncertainty
+- Additional problems
+
+---
+
+## False Beliefs & Limiting Stories
+
+### Belief: Bank will work with me at last minute
+**Statement:** "They won't really foreclose, they'll negotiate... (denial, time's up)"
+
+### Belief: Someone will rescue me
+**Statement:** "A family member or miracle will appear... (avoiding reality)"
+
+### Belief: Bankruptcy will solve this
+**Statement:** "I can just file bankruptcy and stop it... (may be too late, costs money)"
+
+### Belief: I should get something
+**Statement:** "I shouldn't have to walk away with nothing... (ego overriding reality)"
+
+---
+
+## Deal Structure Matching
+
+### Structure: Subject-To
+**Best Fit:** Only option if math works
+**Primary Lever:** Foreclosure stopped, arrears cured, credit protected
+**When NOT to Use:** Arrears too large, property value too low, math doesn't work
+
+---
+
+## Deal Structure Comparison
+
+**Cash Structure:**
+- Speed: Fast (7-14 days)
+- Bank Approval: Not required
+- Credit Impact: None
+- Seller Payments: None - lump sum
+- Flexibility: Low
+- Best Use Case: Urgent exit, equity position
+
+**Subject-To Structure:**
+- Speed: Fast (14-21 days)
+- Bank Approval: Not required
+- Credit Impact: Loan stays on credit
+- Seller Payments: We make mortgage
+- Flexibility: High
+- Best Use Case: Relief + equity preservation
+
+**Seller Finance Structure:**
+- Speed: Moderate (21-30 days)
+- Bank Approval: Not required
+- Credit Impact: Loan paid off
+- Seller Payments: Monthly installments
+- Flexibility: Very High
+- Best Use Case: Income stream desired
+
+**Hybrid Structure:**
+- Speed: Moderate (21-45 days)
+- Bank Approval: Sometimes
+- Credit Impact: Varies by structure
+- Seller Payments: Mixed
+- Flexibility: Maximum
+- Best Use Case: Complex situations
+
+---
+
+## Incentives & Protections
+
+### Servicing & Monitoring
+- Professional loan servicing
+- Payment tracking dashboard
+- Automated payment processing
+- Monthly statements
+
+### Insurance & Protection
+- Property insurance maintained
+- Title insurance protection
+- Liability coverage
+- Default protection clauses
+
+### Written Protections
+- Attorney-drafted agreements
+- Recorded documents
+- Performance guarantees
+- Default remedies defined
+
+### Seller Incentives
+- Immediate relief from payments
+- Credit protection options
+- Equity preservation strategies
+- Tax advantage consultation
+
+---
+
+## Core Transformation
+
+### FROM (Current State)
+- ✕ Days from public foreclosure sale
+- ✕ Legal action and court
+- ✕ 7-year credit destruction
+- ✕ Potential deficiency judgment
+
+### TO (Desired State)
+- ✓ Foreclosure stopped
+- ✓ Legal action resolved
+- ✓ Credit protected from foreclosure
+- ✓ Clean exit from nightmare
+
+---
+
+## Common Closer Mistakes
+
+### Mistake: Explaining too early
+**Why:** Presenting structure before understanding pain removes leverage and creates confusion
+**Instead:** Complete discovery fully - earn the right to present solutions
+
+### Mistake: Leading with strategy
+**Why:** Prospects care about relief, not mechanisms. Strategy-first creates skepticism
+**Instead:** Lead with outcome transformation, explain structure only when asked
+
+### Mistake: Selling terms instead of relief
+**Why:** Terms are abstract. Relief is visceral. Wrong focus = low conversion
+**Instead:** Anchor to their pain point and desired outcome, terms are delivery vehicle
+
+### Mistake: Presenting Subject-To prematurely
+**Why:** Without proper framing, Subject-To sounds risky or too good to be true
+**Instead:** Build trust, demonstrate understanding, frame as proven solution
+
+---
+
+## Training Usage
+
+### Role-play by Prospect Type
+Use prospect type selector to practice different scenarios
+
+### Objection Translation Drills
+Study objection translations and practice control questions
+
+### Deal-Matching Exercises
+Practice matching prospect types to optimal deal structures
+
+### Confidence Calibration
+Review warning signs and red flags to improve qualification

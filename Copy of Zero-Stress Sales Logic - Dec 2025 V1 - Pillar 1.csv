@@ -1,0 +1,40 @@
+,,,,,
+,Pillar 1: Perceived Spread (Pain & Desire Gap),,,,
+,,,,,
+Indicator ID,Indicator Name,Score Level,Domain,Sample Question,Example Prospect Answer
+1,Pain Intensity,Low (1–3),Personal Dev,"“On a scale of 1 to 10, how much is this affecting your day-to-day life right now?”","“Maybe a 2. It crosses my mind occasionally, but it’s not urgent.”"
+1,Pain Intensity,Mid (4–6),Personal Dev,“How often do you find yourself thinking about this or feeling stuck because of it?”,“A few times a week. It’s frustrating when I notice I’m repeating the same mistakes.”
+1,Pain Intensity,High (7–10),Personal Dev,“How painful or disruptive has this been for you emotionally or mentally?”,“It’s exhausting. I cry myself to sleep some nights. It feels like I’ll never get this right.”
+1,Pain Intensity,Low (1–3),B2B,“How much is this issue costing you in actual dollars or time per month?”,“It’s not a huge problem — maybe a few hours of inefficiency here and there.”
+1,Pain Intensity,Mid (4–6),B2B,“Is this starting to affect team performance or client satisfaction?”,"“We’ve had a couple of complaints, and the team is definitely feeling stretched.”"
+1,Pain Intensity,High (7–10),B2B,"“If this doesn’t get resolved soon, what will it mean for your bottom line or team health?”","“We’ve lost two key clients and morale is low. If not fixed, we’ll miss our revenue targets.”"
+1,Pain Intensity,Low (1–3),Real Estate,“How urgent is it for you to sell the house in the next 30–60 days?”,“Not urgent at all. We’re in no rush — just exploring.”
+1,Pain Intensity,Mid (4–6),Real Estate,“What would happen if the house didn’t sell this season?”,"“We’d probably just rent it out for now. It’s not ideal, but not the end of the world.”"
+1,Pain Intensity,High (7–10),Real Estate,“What’s the personal or financial cost of not selling this property soon?”,“I need to sell fast to split assets after the divorce. Each week makes it harder emotionally and financially.”
+2,Pain Awareness,Low (1–3),Personal Dev,“What makes you feel like something needs to shift?”,“I’m not really sure. Just thought I’d talk to someone.”
+2,Pain Awareness,Mid (4–6),Personal Dev,“Have you noticed any repeating patterns in your relationships?”,“Yeah… I guess I attract the same kind of unavailable people.”
+2,Pain Awareness,High (7–10),Personal Dev,“What do you believe is the real reason you’re not attracting the right partner?”,“I have a deep fear of being seen. I sabotage intimacy.”
+2,Pain Awareness,Low (1–3),B2B,“What’s the current bottleneck in your system?”,“We don’t really have one — just exploring tools.”
+2,Pain Awareness,Mid (4–6),B2B,“Have you identified any friction points in your process?”,“Yes — onboarding is slow and hurting efficiency.”
+2,Pain Awareness,High (7–10),B2B,“What’s creating the biggest breakdown in results?”,“Lack of visibility between sales and delivery — it’s affecting retention and profit.”
+2,Pain Awareness,Low (1–3),Real Estate,“What’s holding you back from listing the property now?”,“Not sure. We haven’t thought about it.”
+2,Pain Awareness,Mid (4–6),Real Estate,“Are there any challenges with keeping the property longer term?”,“It’s a hassle maintaining two homes. Inconvenient.”
+2,Pain Awareness,High (7–10),Real Estate,“What do you see as the real downside of holding onto this property?”,“It’s draining our cash flow and wasting time — we’ve outgrown this chapter.”
+3,Desire Clarity,Low (1–3),Personal Dev,“What would you like instead?”,“I just want to be happy… I guess.”
+3,Desire Clarity,Mid (4–6),Personal Dev,"“If this changed, what would be different?”",“I’d be in a healthy relationship. That would feel good.”
+3,Desire Clarity,High (7–10),Personal Dev,“Describe your ideal future in this area.”,"“I want a long-term, emotionally available relationship.”"
+3,Desire Clarity,Low (1–3),B2B,“What would success look like?”,“Just smoother… something better than this.”
+3,Desire Clarity,Mid (4–6),B2B,“What outcome are you hoping for?”,“We want to improve onboarding. Save time.”
+3,Desire Clarity,High (7–10),B2B,“What’s the specific result your team wants?”,“Reduce onboarding from 14 to 5 days; boost retention 20%.”
+3,Desire Clarity,Low (1–3),Real Estate,“What’s your ideal outcome from selling?”,"“I don’t know. Just be done with it, maybe.”"
+3,Desire Clarity,Mid (4–6),Real Estate,“What’s your goal with this property sale?”,“Decent price and a buyer this season.”
+3,Desire Clarity,High (7–10),Real Estate,"“What do you want most out of this sale, and why now?”",“Sell for $1.1M in 45 days to close on next home — avoid bridge loan.”
+4,Desire Priority,Low (1–3),Personal Dev,“How important is this for you to solve this year?”,"“Not that important. If it happens, great.”"
+4,Desire Priority,Mid (4–6),Personal Dev,“Is this something you want to work on soon or just explore?”,"“It’s on my radar, but not urgent.”"
+4,Desire Priority,High (7–10),Personal Dev,“Where does this rank in your priorities?”,“Top thing holding me back — I can’t keep delaying it.”
+4,Desire Priority,Low (1–3),B2B,“Where does this initiative fit in your goals?”,“Nice-to-have. Not urgent.”
+4,Desire Priority,Mid (4–6),B2B,“Is this on your roadmap?”,“It’s in Q3 planning — not top tier yet.”
+4,Desire Priority,High (7–10),B2B,“Why solve this now?”,“Budget allocated. Delay affects KPIs. Must deliver in Q1.”
+4,Desire Priority,Low (1–3),Real Estate,“Do you need to sell soon?”,"“No rush — if it sells, great.”"
+4,Desire Priority,Mid (4–6),Real Estate,“Would it be ideal to close this season?”,"“We’d prefer it before winter, but we’re flexible.”"
+4,Desire Priority,High (7–10),Real Estate,“What happens if you don’t sell in 30–60 days?”,“Under contract on next home — we risk losing deposit and penalties.”

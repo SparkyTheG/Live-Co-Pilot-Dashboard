@@ -1,0 +1,22 @@
+,,
+,,
+Step,Description,Logic / Notes
+1,Raw Score (Per Indicator),1–10 for each of the 27 indicators
+2,Average Per Pillar,Average the indicator scores within each pillar
+3,Reverse Score: Price Sensitivity (P6),Reverse = 11 - Raw Score (e.g. 8 → 3)
+4,Weighted Pillar Score,Multiply each pillar by its weight:
+,,"P1 × 1.5, P2 × 1.0, P3 × 1.0, P4 × 1.5, P5 × 1.0, P6 × 1.0 (after reverse), P7 × 1.0"
+5,Total Score Before Penalties,Sum of all 7 weighted pillar scores (max = 90)
+6,Truth Index Penalties,Subtract penalty points for incoherence:
+,High Pain + Low Urgency (≤4),–15
+,High Desire + Low Decisiveness (≤4),–15
+,High Money Access + High Price Sensitivity (≥8),–10
+,Claims Authority + Reveals Need for Approval,–10
+,High Desire + Low Responsibility (≤5),–15
+7,Final Lubometer Score,Total Score – Penalties
+8,Readiness Zone,70–90 → ✅ Green: High Buy Probability
+,,"50–69 → ⚠️ Yellow: Moderate, needs coaching"
+,,30–49 → 🧊 Red: Risk or resistance
+,,<30 → ❌ No-Go: Do not close
+9,Close Blocker Rule 1,P1 ≤ 6 AND P2 ≤ 5 → ❌ Not enough pain or urgency
+10,Close Blocker Rule 2,P6 raw ≥ 7 AND P4 ≤ 5 → ❌ High price sensitivity + low money = don’t push

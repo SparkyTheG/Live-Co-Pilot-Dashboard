@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .glow-teal {
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.3), 0 0 40px rgba(6, 182, 212, 0.2);
+  }
+
+  .glow-teal-strong {
+    box-shadow: 0 0 30px rgba(20, 184, 166, 0.5), 0 0 60px rgba(6, 182, 212, 0.3);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+  }
+}
+
+@keyframes energyPulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes particleFloat {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-20px) translateX(10px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-energy-pulse {
+  animation: energyPulse 3s ease-in-out infinite;
+}
+
+.animate-particle-float {
+  animation: particleFloat 4s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+.hex-grid {
+  background-image:
+    linear-gradient(30deg, rgba(20, 184, 166, 0.03) 12%, transparent 12.5%, transparent 87%, rgba(20, 184, 166, 0.03) 87.5%, rgba(20, 184, 166, 0.03)),
+    linear-gradient(150deg, rgba(20, 184, 166, 0.03) 12%, transparent 12.5%, transparent 87%, rgba(20, 184, 166, 0.03) 87.5%, rgba(20, 184, 166, 0.03)),
+    linear-gradient(30deg, rgba(20, 184, 166, 0.03) 12%, transparent 12.5%, transparent 87%, rgba(20, 184, 166, 0.03) 87.5%, rgba(20, 184, 166, 0.03)),
+    linear-gradient(150deg, rgba(20, 184, 166, 0.03) 12%, transparent 12.5%, transparent 87%, rgba(20, 184, 166, 0.03) 87.5%, rgba(20, 184, 166, 0.03));
+  background-size: 80px 140px;
+  background-position: 0 0, 0 0, 40px 70px, 40px 70px;
+}
+
+/* Custom scrollbar styles for Hot Buttons and Objections sections */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.5);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(20, 184, 166, 0.4);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.6);
+}
+
+/* Line clamp for long quotes */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

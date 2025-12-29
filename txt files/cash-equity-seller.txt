@@ -1,0 +1,573 @@
+# Sales Discovery Framework - RAG Optimized
+
+## Framework Overview: 5 Core Questions
+
+### Question 1: Why are they talking now?
+**Context:** Life change (divorce, job loss, relocation), can no longer afford or maintain
+
+### Question 2: What pressure are they under?
+**Context:** Payment stress, maintenance burden, emotional attachment to failed dream
+
+### Question 3: What outcome do they want?
+**Context:** Clean exit, preserve credit, avoid foreclosure stigma
+
+### Question 4: What has failed already?
+**Context:** Tried listing, no qualified buyers, price too high for condition
+
+### Question 5: Are they open to non-traditional solutions?
+**Context:** Medium - scared of creative options, needs education and reassurance
+
+---
+
+## Discovery Phases (1-7)
+
+### Phase 1: Context & Control
+**Objective:** Establish timeline, decision authority, and why they're talking now
+
+**Key Questions:**
+- How long have you lived in the property?
+- What's changed that has you considering selling now?
+- Who else is involved in this decision?
+- What's your ideal timeline?
+- Have you spoken with anyone else about options?
+
+**Qualification Signals:**
+- Clear trigger event mentioned
+- Sense of urgency without panic
+- Decision authority present
+- Realistic timeline expectations
+
+**Warning Signs:**
+- Vague reasons for selling
+- Unrealistic price expectations
+- Multiple decision makers not present
+- No clear timeline or urgency
+
+---
+
+### Phase 2: Property & Loan Reality
+**Objective:** Understand property condition, loan structure, equity position, payment status
+
+**Key Questions:**
+- Tell me about the current mortgage - what's the balance?
+- What's your monthly payment including taxes and insurance?
+- Are you current on payments? If behind, how many months?
+- What condition is the property in? Any deferred maintenance?
+- What do you think it's worth in current condition?
+
+**Qualification Signals:**
+- Knows loan balance and payment
+- Honest about payment status
+- Realistic about property condition
+- Open about equity position
+
+**Warning Signs:**
+- Doesn't know basic loan info
+- Hiding payment status
+- Wildly inflated value opinion
+- Unwilling to discuss condition issues
+
+---
+
+### Phase 3: Pain & Motivation Dig
+**Objective:** Uncover emotional and financial pain driving the decision
+
+**Key Questions:**
+- What happens if you can't sell in your timeline?
+- What's the hardest part about your current situation?
+- How is this affecting you and your family?
+- What keeps you up at night about this property?
+- On a scale of 1-10, how motivated are you to solve this?
+
+**Qualification Signals:**
+- Articulates clear pain points
+- Emotional involvement visible
+- Consequences understood
+- High motivation score (7+)
+
+**Warning Signs:**
+- Casual or detached demeanor
+- No clear pain articulated
+- Low motivation score
+- Testing market, not serious
+
+---
+
+### Phase 4: Failed Solutions Check
+**Objective:** Discover what they've tried and why it failed
+
+**Key Questions:**
+- Have you listed with an agent? What happened?
+- Have you tried selling yourself? Any offers?
+- Have you talked to any investors or cash buyers?
+- What made those solutions not work for you?
+- What would need to be different for a solution to work?
+
+**Qualification Signals:**
+- Has genuinely tried traditional options
+- Understands why they failed
+- Open to new approaches
+- Learns from experience
+
+**Warning Signs:**
+- Haven't tried anything yet
+- Blaming others for failures
+- Closed to alternatives
+- Expecting same results with new approach
+
+---
+
+### Phase 5: Desired Outcome Clarity
+**Objective:** Define what success looks like and acceptable trade-offs
+
+**Key Questions:**
+- What does the ideal outcome look like for you?
+- What's more important: speed, price, or certainty?
+- What would you be willing to trade off to get what you need most?
+- What needs to happen for you to feel good about moving forward?
+- What's your plan once this property is handled?
+
+**Qualification Signals:**
+- Clear outcome definition
+- Willing to make trade-offs
+- Prioritizes needs over wants
+- Has thought through next steps
+
+**Warning Signs:**
+- Wants everything (speed + max price)
+- Unwilling to compromise
+- No clear vision of success
+- No plan for next step
+
+---
+
+### Phase 6: Openness to Creative Solutions
+**Objective:** Test willingness to consider non-traditional approaches
+
+**Key Questions:**
+- Would you be open to solutions beyond traditional listing?
+- Have you heard of creative financing in real estate?
+- What concerns would you have about a non-traditional sale?
+- If I could solve your main problem, would structure matter?
+- Are you more interested in the outcome or the method?
+
+**Qualification Signals:**
+- Open-minded to new approaches
+- Outcome-focused over method
+- Willing to learn
+- Trust is buildable
+
+**Warning Signs:**
+- Rigid in thinking
+- Skeptical of everything
+- Can't articulate concerns
+- Trust issues apparent
+
+---
+
+### Phase 7: Subject-To Positioning (High-Level Only)
+**Objective:** Introduce concept if appropriate, gauge reaction
+
+**Key Questions:**
+- Have you heard of someone taking over your payments?
+- What if there was a way to get relief without hurting your credit?
+- Would you be interested in a solution that works with your existing loan?
+- What questions would you have about that approach?
+
+**Qualification Signals:**
+- Curious, asks clarifying questions
+- Sees potential benefit
+- Willing to explore further
+- Doesn't shut down immediately
+
+**Warning Signs:**
+- Immediate rejection
+- Sounds too good to be true
+- Can't get past initial reaction
+- Wants to talk to spouse/attorney first
+
+---
+
+## Prospect Reality & Pressure
+
+### Time Pressure Indicators
+- Relocation date is fixed
+- Divorce decree has deadline
+- Can't afford much longer
+- Foreclosure timeline started
+
+### Financial Pressure Indicators
+- Bleeding cash monthly
+- Behind on payments
+- Savings depleted
+- Can't qualify for next place with current debt
+
+### Emotional Pressure Indicators
+- Failed dream home
+- Embarrassment about situation
+- Stress affecting family
+- Ready to move on emotionally
+
+### Authority Pressure Indicators
+- Both spouses must agree
+- Bank approval if short sale
+- May need family input
+- Attorney review expected
+
+---
+
+## Property & Loan Reality
+
+### Occupancy Status
+- Currently living in property
+- Recently moved out
+- About to move out
+
+### Condition Burden
+- Deferred maintenance visible
+- Needs cosmetic updates
+- Major repairs needed
+- Move-in ready but dated
+
+### Loan Presence
+- Conventional mortgage
+- FHA loan
+- Small equity position
+- Underwater or break-even
+
+### Payment Status
+- Current but struggling
+- 1-2 months behind
+- Forbearance ending
+
+### Structural Viability for Creative Finance
+- Good Subject-To candidate
+- Loan balance vs value ratio works
+- Payment is manageable
+
+---
+
+## Pain & Motivation Dig
+
+### Core Pain Statements
+- "Payment is crushing us financially"
+- "This house represents a failed chapter we need to close"
+- "The stress is affecting our marriage/health"
+- "We're trapped and can't move forward"
+
+### Deepening Questions
+- What does staying in this situation cost you beyond money?
+- How long can you keep going like this?
+- What would relief look like for you?
+- What's the cost of waiting?
+
+### Emotional Signals to Listen For
+- Voice cracks when discussing situation
+- Relief when discussing possible solution
+- Visible stress or exhaustion
+- Urgency in tone
+
+### Guidance Note
+Owner-occupied prospects are emotionally invested. Slow down, show empathy, build trust. This is their home, not just a property.
+
+---
+
+## Failed Solutions
+
+### What They Tried
+- Listed with agent - no qualified buyers
+- FSBO - couldn't generate interest
+- Loan modification - denied
+- Talked to family - can't help
+
+### Why It Failed
+- Price too high for condition
+- No equity for traditional sale
+- Buyers can't get financing
+- Timeline too aggressive
+
+### Remaining Hope Assessment
+Low - they've exhausted obvious options, need creative solution
+
+---
+
+## Desired Outcome Clarity
+
+### What Success Means to Them
+- Payment obligation gone
+- Credit protected or minimally impacted
+- Can move on with life
+- Some equity preserved if possible
+
+### Trade-offs (Speed vs Price vs Certainty)
+- Will trade maximum price for speed and certainty
+- Will consider creative terms for relief
+- Willing to walk away with little to nothing
+
+### What They Want Off Their Plate
+- Monthly payment burden
+- Maintenance responsibility
+- Emotional stress
+- Barrier to next chapter
+
+---
+
+## Openness to Creative Solutions
+
+### Permission-Based Bridge Questions
+- If I could solve your main problem, would how we do it matter?
+- Are you more interested in the destination or the journey?
+- Would you be willing to explore options you haven't heard of?
+- What would make you comfortable with a non-traditional approach?
+
+### If Openness is Low
+Return to pain and failed options. Contrast where they are vs where they want to be. Creative solutions become attractive when traditional options are exhausted.
+
+---
+
+## Likely Objections (Translated)
+
+### Objection: "I need to talk to my spouse first"
+**Protecting:** Authority, relationship harmony, avoiding sole decision responsibility
+**Risk Behind Objection:** Fear of making wrong decision alone
+**Control Question:** "Of course - what concerns do you think they'll have that we should address now?"
+
+### Objection: "This sounds too good to be true"
+**Protecting:** Self from being taken advantage of
+**Risk Behind Objection:** Scam awareness, learned skepticism
+**Control Question:** "I understand - what specifically concerns you? Let's address that."
+
+### Objection: "What about my credit?"
+**Protecting:** Financial future, ability to borrow again
+**Risk Behind Objection:** Long-term impact of decision
+**Control Question:** "Great question - how would this compare to foreclosure or short sale for you?"
+
+### Objection: "I need to think about it"
+**Protecting:** Need for control, fear of pressure
+**Risk Behind Objection:** Making decision too quickly
+**Control Question:** "Absolutely - what specifically do you need to think through? Let's talk it through now."
+
+---
+
+## Truth Index: Compliance Signals
+
+### Signal: Says yes but won't provide loan statement
+**Assessment:** Not truly committed, possibly hiding information
+
+### Signal: Agrees to everything without questions
+**Assessment:** Hasn't processed information, may ghost later
+
+### Signal: Excited about relief but vague on next steps
+**Assessment:** Emotional reaction, not logical commitment
+
+### Signal: Wants to move forward but spouse not involved
+**Assessment:** Authority issue will emerge later
+
+---
+
+## Truth Index: Red Flags
+
+### Red Flag: Can't provide basic loan information
+**Impact:** Deal will stall at due diligence
+
+### Red Flag: Wildly unrealistic price expectations
+**Impact:** Not grounded in reality, will be difficult to close
+
+### Red Flag: Blames everyone else for situation
+**Impact:** Victim mentality, high maintenance, likely to back out
+
+### Red Flag: No clear timeline or deadline
+**Impact:** Low urgency means low follow-through probability
+
+---
+
+## Decision-Making Styles
+
+### Analytical Decision Maker
+**What They Need:**
+- Data and comparisons
+- Time to research
+- Written information
+- Proof points
+
+**What Not To Do:**
+- Pressure tactics
+- Emotional appeals
+- Rush decisions
+
+### Emotional Decision Maker
+**What They Need:**
+- Empathy and understanding
+- Relief focus
+- Trust building
+- Vision of outcome
+
+**What Not To Do:**
+- Heavy data
+- Complex explanations
+- Rushing
+
+### Authority-Dependent Decision Maker
+**What They Need:**
+- Spouse/family involvement
+- Expert validation
+- Group consensus
+- Social proof
+
+**What Not To Do:**
+- Solo decisions
+- Pressure without buy-in
+
+---
+
+## False Beliefs & Limiting Stories
+
+### Belief: Listing fallback fantasy
+**Statement:** "If I just wait a little longer, a retail buyer will pay full price even with this condition..."
+
+### Belief: Refinance rescue hope
+**Statement:** "Maybe my credit will improve and I can refinance out of this... (despite no plan)"
+
+### Belief: Credit paralysis
+**Statement:** "If my credit is ruined I can never recover... (not comparing to foreclosure impact)"
+
+### Belief: Liability fear
+**Statement:** "If my name stays on loan, I'm at risk... (doesn't understand protections)"
+
+### Belief: Regret avoidance
+**Statement:** "What if I sell and then the market goes up? I'll feel like an idiot..."
+
+---
+
+## Deal Structure Matching
+
+### Structure: Subject-To
+**Best Fit:** Primary recommendation for owner-occupied with little/no equity
+**Primary Lever:** Immediate payment relief + credit protection
+**When NOT to Use:** Significant equity position where cash makes more sense
+
+### Structure: Cash
+**Best Fit:** If they have equity and need clean break
+**Primary Lever:** Speed and simplicity
+**When NOT to Use:** No equity, need to preserve credit score
+
+### Structure: Seller Finance
+**Best Fit:** Rare for owner-occupied, only if equity + want income
+**Primary Lever:** Monthly income stream
+**When NOT to Use:** They need full exit, not ongoing involvement
+
+---
+
+## Deal Structure Comparison
+
+**Cash Structure:**
+- Speed: Fast (7-14 days)
+- Bank Approval: Not required
+- Credit Impact: None
+- Seller Payments: None - lump sum
+- Flexibility: Low
+- Best Use Case: Urgent exit, equity position
+
+**Subject-To Structure:**
+- Speed: Fast (14-21 days)
+- Bank Approval: Not required
+- Credit Impact: Loan stays on credit
+- Seller Payments: We make mortgage
+- Flexibility: High
+- Best Use Case: Relief + equity preservation
+
+**Seller Finance Structure:**
+- Speed: Moderate (21-30 days)
+- Bank Approval: Not required
+- Credit Impact: Loan paid off
+- Seller Payments: Monthly installments
+- Flexibility: Very High
+- Best Use Case: Income stream desired
+
+**Hybrid Structure:**
+- Speed: Moderate (21-45 days)
+- Bank Approval: Sometimes
+- Credit Impact: Varies by structure
+- Seller Payments: Mixed
+- Flexibility: Maximum
+- Best Use Case: Complex situations
+
+---
+
+## Incentives & Protections
+
+### Servicing & Monitoring
+- Professional loan servicing
+- Payment tracking dashboard
+- Automated payment processing
+- Monthly statements
+
+### Insurance & Protection
+- Property insurance maintained
+- Title insurance protection
+- Liability coverage
+- Default protection clauses
+
+### Written Protections
+- Attorney-drafted agreements
+- Recorded documents
+- Performance guarantees
+- Default remedies defined
+
+### Seller Incentives
+- Immediate relief from payments
+- Credit protection options
+- Equity preservation strategies
+- Tax advantage consultation
+
+---
+
+## Core Transformation
+
+### FROM (Current State)
+- ✕ Drowning in payments they can't afford
+- ✕ Trapped in failed dream home
+- ✕ Fear of foreclosure and credit damage
+- ✕ Unable to move forward with life
+
+### TO (Desired State)
+- ✓ Payment obligation removed
+- ✓ Credit protected or minimally impacted
+- ✓ Emotional relief and closure
+- ✓ Free to start next chapter
+
+---
+
+## Common Closer Mistakes
+
+### Mistake: Explaining too early
+**Why:** Presenting structure before understanding pain removes leverage and creates confusion
+**Instead:** Complete discovery fully - earn the right to present solutions
+
+### Mistake: Leading with strategy
+**Why:** Prospects care about relief, not mechanisms. Strategy-first creates skepticism
+**Instead:** Lead with outcome transformation, explain structure only when asked
+
+### Mistake: Selling terms instead of relief
+**Why:** Terms are abstract. Relief is visceral. Wrong focus = low conversion
+**Instead:** Anchor to their pain point and desired outcome, terms are delivery vehicle
+
+### Mistake: Presenting Subject-To prematurely
+**Why:** Without proper framing, Subject-To sounds risky or too good to be true
+**Instead:** Build trust, demonstrate understanding, frame as proven solution
+
+---
+
+## Training Usage
+
+### Role-play by Prospect Type
+Use prospect type selector to practice different scenarios
+
+### Objection Translation Drills
+Study objection translations and practice control questions
+
+### Deal-Matching Exercises
+Practice matching prospect types to optimal deal structures
+
+### Confidence Calibration
+Review warning signs and red flags to improve qualification

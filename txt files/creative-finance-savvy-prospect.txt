@@ -1,0 +1,550 @@
+# Creative-Savvy Investor Discovery Framework - RAG Optimized
+
+## Framework Overview: 5 Core Questions
+
+### Question 1: Why are they talking now?
+**Context:** Sophisticated investor, knows creative finance, exploring opportunities
+
+### Question 2: What pressure are they under?
+**Context:** Low - opportunity-driven, not problem-driven
+
+### Question 3: What outcome do they want?
+**Context:** Optimize deal structure, maximize value, strategic positioning
+
+### Question 4: What has failed already?
+**Context:** Not applicable - proactive not reactive
+
+### Question 5: Are they open to non-traditional solutions?
+**Context:** Very High - speaks the language, wants to explore all options
+
+---
+
+## Discovery Phases (1-7)
+
+### Phase 1: Context & Control
+**Objective:** Understand their sophistication level and objectives
+
+**Key Questions:**
+- What's your experience with creative financing?
+- What deals have you done in the past?
+- What are you looking to accomplish?
+- What's your investment thesis?
+- What's your timeline and criteria?
+
+**Qualification Signals:**
+- Real experience with creative deals
+- Clear investment thesis
+- Knows what they want
+- Professional approach
+
+**Warning Signs:**
+- Claims expertise but doesn't have it
+- Unrealistic expectations
+- No clear criteria
+- Overconfident without knowledge
+
+---
+
+### Phase 2: Property & Loan Reality
+**Objective:** Understand deal specifics and structure preferences
+
+**Key Questions:**
+- Tell me about the property
+- What's the loan situation?
+- What's your equity position and goals?
+- What structure are you thinking?
+- What's your expected ROI?
+
+**Qualification Signals:**
+- Knows numbers cold
+- Has done analysis
+- Clear on structure options
+- Realistic expectations
+
+**Warning Signs:**
+- Vague on numbers
+- No analysis done
+- Unrealistic ROI expectations
+- Overconfident without data
+
+---
+
+### Phase 3: Pain & Motivation Dig
+**Objective:** Understand strategic objectives
+
+**Key Questions:**
+- What are you optimizing for?
+- What's your portfolio strategy?
+- What problem does this solve?
+- What's your exit strategy?
+- What's the opportunity cost of not doing this?
+
+**Qualification Signals:**
+- Clear strategy
+- Portfolio-level thinking
+- Understands opportunity cost
+- Has exit plan
+
+**Warning Signs:**
+- No clear strategy
+- Deal chasing
+- No exit plan
+- Short-term thinking
+
+---
+
+### Phase 4: Failed Solutions Check
+**Objective:** Understand why creative structure vs traditional
+
+**Key Questions:**
+- Why creative financing vs traditional?
+- What advantages do you see?
+- What risks are you managing for?
+- How does this fit your strategy?
+
+**Qualification Signals:**
+- Clear rationale
+- Understands advantages
+- Risk-aware
+- Strategic fit clear
+
+**Warning Signs:**
+- No clear reason
+- Chasing trends
+- Risk-unaware
+- No strategic fit
+
+---
+
+### Phase 5: Desired Outcome Clarity
+**Objective:** Define deal success criteria
+
+**Key Questions:**
+- What defines a successful deal for you?
+- What's your minimum required return?
+- What structure optimizes your goals?
+- What would make you walk away?
+
+**Qualification Signals:**
+- Clear success criteria
+- Knows required returns
+- Structure optimization clear
+- Has walk-away conditions
+
+**Warning Signs:**
+- No clear criteria
+- Unrealistic returns
+- Structure unclear
+- No boundaries
+
+---
+
+### Phase 6: Openness to Creative Solutions
+**Objective:** Explore structure options and variations
+
+**Key Questions:**
+- What structures have you considered?
+- What hybrid options interest you?
+- What creative solutions fit this situation?
+- What variations should we explore?
+
+**Qualification Signals:**
+- Familiar with options
+- Interested in variations
+- Thinks creatively
+- Sophisticated
+
+**Warning Signs:**
+- Knows one structure only
+- Rigid thinking
+- Not actually sophisticated
+- Buzzword user
+
+---
+
+### Phase 7: Subject-To Positioning (High-Level Only)
+**Objective:** Explore if Subject-To fits their strategy
+
+**Key Questions:**
+- How does Subject-To fit your goals?
+- What advantages do you see?
+- What concerns do you have?
+- How would you structure it?
+
+**Qualification Signals:**
+- Understands Subject-To
+- Sees strategic fit
+- Smart concerns
+- Can structure creatively
+
+**Warning Signs:**
+- Doesn't understand Subject-To
+- No strategic fit
+- Naive about risks
+- Can't think through structure
+
+---
+
+## Prospect Reality & Pressure
+
+### Time Pressure Indicators
+- Opportunity-driven
+- Strategic timeline
+- Portfolio planning
+- Market timing considerations
+
+### Financial Pressure Indicators
+- Optimizing returns
+- Capital deployment
+- Portfolio diversification
+- Risk-adjusted returns
+
+### Emotional Pressure Indicators
+- Strategic not emotional
+- Professional approach
+- Opportunity excitement
+- Portfolio optimization
+
+### Authority Pressure Indicators
+- Own decision authority
+- May have partners
+- Attorney and CPA involved
+- Professional team
+
+---
+
+## Property & Loan Reality
+
+### Occupancy Status
+- Varies by deal
+- Strategic consideration
+- Investment analysis
+
+### Condition Burden
+- Analyzed vs strategy
+- Value-add opportunity assessed
+- Renovation budget clear
+
+### Loan Presence
+- Understands loan structures
+- Analyzes terms
+- Considers options
+- Strategic leverage
+
+### Payment Status
+- Depends on deal
+- Analyzes situation
+- Understands implications
+
+### Structural Viability for Creative Finance
+- Assesses all options
+- Compares structures
+- Optimizes approach
+- Strategic fit
+
+---
+
+## Pain & Motivation Dig
+
+### Core Pain Statements
+- "Want to deploy capital efficiently"
+- "Seeking optimal structure"
+- "Building strategic portfolio"
+- "Maximizing risk-adjusted returns"
+
+### Deepening Questions
+- What does this deal do for your portfolio?
+- How does this compare to other opportunities?
+- What's the strategic value beyond ROI?
+- What would make this a home run for you?
+
+### Emotional Signals to Listen For
+- Professional and analytical
+- Excitement about opportunity
+- Strategic thinking visible
+- Confident but questions
+
+### Guidance Note
+Creative-savvy prospects are sophisticated partners. Speak their language. Focus on structure optimization and strategic value. Be consultative, not salesy.
+
+---
+
+## Failed Solutions
+
+### What They Tried
+- Not applicable
+- Proactive deal sourcing
+- Strategic opportunity
+
+### Why It Failed
+- Not applicable
+- Opportunity-driven not problem-driven
+
+### Remaining Hope Assessment
+N/A - opportunity focused
+
+---
+
+## Desired Outcome Clarity
+
+### What Success Means to Them
+- Optimal deal structure
+- Strategic portfolio fit
+- Risk-adjusted returns
+- Long-term value creation
+
+### Trade-offs (Speed vs Price vs Certainty)
+- Will trade for strategic advantage
+- Understands opportunity cost
+- Thinks long-term
+- Values structure optimization
+
+### What They Want Off Their Plate
+- Suboptimal structures
+- Missed opportunities
+- Inefficient capital deployment
+- Strategic misalignment
+
+---
+
+## Openness to Creative Solutions
+
+### Permission-Based Bridge Questions
+- What structure optimizes your objectives?
+- What creative variations should we explore?
+- How can we structure this for maximum advantage?
+- What would make this a perfect fit?
+
+### If Openness is Low
+Should not exist - if present, may not be actually sophisticated. Verify knowledge level.
+
+---
+
+## Likely Objections (Translated)
+
+### Objection: "What's the catch?"
+**Protecting:** Wants to understand all angles
+**Risk Behind Objection:** Hidden risks or costs
+**Control Question:** "Great question - let's walk through the entire structure and all considerations..."
+
+### Objection: "How do you make money?"
+**Protecting:** Wants transparent economics
+**Risk Behind Objection:** Being on wrong side of deal
+**Control Question:** "Happy to share - here's how this works for both sides..."
+
+### Objection: "What about [specific technical concern]?"
+**Protecting:** Due diligence
+**Risk Behind Objection:** Technical issues
+**Control Question:** "Excellent question - let me address that specifically..."
+
+### Objection: "Why this vs [alternative structure]?"
+**Protecting:** Optimization
+**Risk Behind Objection:** Suboptimal choice
+**Control Question:** "Great comparison - let's analyze both side by side..."
+
+---
+
+## Truth Index: Compliance Signals
+
+### Signal: Claims expertise but asks basic questions
+**Assessment:** May not be as sophisticated as claimed
+
+### Signal: Agrees without due diligence
+**Assessment:** Not actually sophisticated
+
+### Signal: Wants to move fast without analysis
+**Assessment:** Red flag - verify sophistication
+
+---
+
+## Truth Index: Red Flags
+
+### Red Flag: Claims expertise but lacks understanding
+**Impact:** Will have issues later
+
+### Red Flag: No clear investment criteria
+**Impact:** Deal chaser, not strategic
+
+### Red Flag: Unrealistic return expectations
+**Impact:** Not grounded in reality
+
+### Red Flag: No team (attorney, CPA)
+**Impact:** May not be as sophisticated as claimed
+
+---
+
+## Decision-Making Styles
+
+### Strategic Investor
+**What They Need:**
+- Complete analysis
+- Structure optimization
+- Team review
+- Due diligence
+- Strategic fit
+
+**What Not To Do:**
+- Sales tactics
+- Pressure
+- Incomplete data
+- Suboptimal structure
+
+### Deal Flow Professional
+**What They Need:**
+- Efficient process
+- Quick analysis
+- Clear terms
+- Speed when ready
+
+**What Not To Do:**
+- Waste of time
+- Inefficiency
+- Amateur approach
+
+---
+
+## False Beliefs & Limiting Stories
+
+### Belief: I can get better terms elsewhere
+**Statement:** "Someone will offer better... (without analyzing actual market)"
+
+### Belief: I know more than I do
+**Statement:** "I've got this figured out... (overconfidence)"
+
+### Belief: Speed is more important than strategy
+**Statement:** "I need to move fast... (ignoring due diligence)"
+
+---
+
+## Deal Structure Matching
+
+### Structure: Subject-To
+**Best Fit:** If loan terms and strategy align
+**Primary Lever:** Leverage + control + cash flow optimization
+**When NOT to Use:** If loan terms don't support strategy
+
+### Structure: Seller Finance
+**Best Fit:** If terms can be negotiated favorably
+**Primary Lever:** Creative structuring + favorable terms
+**When NOT to Use:** If seller won't carry favorable terms
+
+### Structure: Hybrid Structures
+**Best Fit:** Often preferred for sophistication
+**Primary Lever:** Maximum optimization and flexibility
+**When NOT to Use:** If complexity outweighs benefit
+
+---
+
+## Deal Structure Comparison
+
+**Cash Structure:**
+- Speed: Fast (7-14 days)
+- Bank Approval: Not required
+- Credit Impact: None
+- Seller Payments: None - lump sum
+- Flexibility: Low
+- Best Use Case: Urgent exit, equity position
+
+**Subject-To Structure:**
+- Speed: Fast (14-21 days)
+- Bank Approval: Not required
+- Credit Impact: Loan stays on credit
+- Seller Payments: We make mortgage
+- Flexibility: High
+- Best Use Case: Relief + equity preservation
+
+**Seller Finance Structure:**
+- Speed: Moderate (21-30 days)
+- Bank Approval: Not required
+- Credit Impact: Loan paid off
+- Seller Payments: Monthly installments
+- Flexibility: Very High
+- Best Use Case: Income stream desired
+
+**Hybrid Structure:**
+- Speed: Moderate (21-45 days)
+- Bank Approval: Sometimes
+- Credit Impact: Varies by structure
+- Seller Payments: Mixed
+- Flexibility: Maximum
+- Best Use Case: Complex situations
+
+---
+
+## Incentives & Protections
+
+### Servicing & Monitoring
+- Professional loan servicing
+- Payment tracking dashboard
+- Automated payment processing
+- Monthly statements
+
+### Insurance & Protection
+- Property insurance maintained
+- Title insurance protection
+- Liability coverage
+- Default protection clauses
+
+### Written Protections
+- Attorney-drafted agreements
+- Recorded documents
+- Performance guarantees
+- Default remedies defined
+
+### Seller Incentives
+- Immediate relief from payments
+- Credit protection options
+- Equity preservation strategies
+- Tax advantage consultation
+
+---
+
+## Core Transformation
+
+### FROM (Current State)
+- ✕ Seeking optimal deal structure
+- ✕ Exploring opportunities
+- ✕ Deploying capital strategically
+- ✕ Building portfolio
+
+### TO (Desired State)
+- ✓ Structured optimal deal
+- ✓ Strategic portfolio addition
+- ✓ Capital deployed efficiently
+- ✓ Value maximized
+
+---
+
+## Common Closer Mistakes
+
+### Mistake: Explaining too early
+**Why:** Presenting structure before understanding pain removes leverage and creates confusion
+**Instead:** Complete discovery fully - earn the right to present solutions
+
+### Mistake: Leading with strategy
+**Why:** Prospects care about relief, not mechanisms. Strategy-first creates skepticism
+**Instead:** Lead with outcome transformation, explain structure only when asked
+
+### Mistake: Selling terms instead of relief
+**Why:** Terms are abstract. Relief is visceral. Wrong focus = low conversion
+**Instead:** Anchor to their pain point and desired outcome, terms are delivery vehicle
+
+### Mistake: Presenting Subject-To prematurely
+**Why:** Without proper framing, Subject-To sounds risky or too good to be true
+**Instead:** Build trust, demonstrate understanding, frame as proven solution
+
+---
+
+## Training Usage
+
+### Role-play by Prospect Type
+Use prospect type selector to practice different scenarios
+
+### Objection Translation Drills
+Study objection translations and practice control questions
+
+### Deal-Matching Exercises
+Practice matching prospect types to optimal deal structures
+
+### Confidence Calibration
+Review warning signs and red flags to improve qualification

@@ -1,0 +1,10 @@
+,,,,
+,,,,
+Rule ID,Condition Description,Trigger Logic,Recommended Action,Notes
+C1,Green Zone,Final Lubometer Score ≥ 70,✅ Push to Close,High readiness and coherence
+C2,Yellow Zone,Final Score between 50–69,⚠️ Soft Close / Coach,Moderate readiness — clarify blockers
+C3,Red Zone,Final Score between 30–49,🧊 Delay or Nurture,Low coherence or hidden risks — slow down
+C4,No-Go Zone,Final Score < 30,❌ Do Not Close,System breakdown or major contradictions
+C5,Exception: No Pain + No Urgency,P1 ≤ 6 AND P2 ≤ 5,❌ Do Not Close,Not enough fuel or fire
+C6,Exception: High Price Sensitivity + Low Money Access,P6 raw ≥ 7 AND P4 ≤ 5,❌ Do Not Close,Buyer can’t justify or access investment
+C7,Exception: Truth Collapse,Any Truth Index penalty active and Lubometer Score drops zone,❌ Delay / Repair Trust,Repair inconsistency before presenting offer

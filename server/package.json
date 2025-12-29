@@ -1,0 +1,20 @@
+{
+  "name": "zero-stress-sales-backend",
+  "version": "1.0.0",
+  "description": "Backend server for Zero-Stress Sales real-time conversation analysis",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "openai": "^4.20.1",
+    "csv-parse": "^5.5.2",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5"
+  }
+}
+
