@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Save, Brain, User, AlertCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseAvailable } from '../lib/supabase';
 
 interface EightPillarDebriefPageProps {
   onBack: () => void;
@@ -118,10 +118,15 @@ export default function EightPillarDebriefPage({
   };
 
   const handleSave = async () => {
+    if (!isSupabaseAvailable()) {
+      alert('Supabase is not configured. Cannot save call debrief. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable this feature.');
+      return;
+    }
+    
     setSaving(true);
 
     try {
-      const { error } = await supabase.from('call_debriefs').insert({
+      const { error } = await supabase!.from('call_debriefs').insert({
         closer_id: 'demo-closer',
         prospect_type: initialData.prospectType,
         call_date: new Date().toISOString(),

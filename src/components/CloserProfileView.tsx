@@ -4,7 +4,7 @@ import { CloserProfile } from '../types';
 import CloserInputForm from './CloserInputForm';
 import IntroCallQuestions from './IntroCallQuestions';
 import CallDebrief from './CallDebrief';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseAvailable } from '../lib/supabase';
 
 interface CloserProfileViewProps {
   profile: CloserProfile;
@@ -26,8 +26,13 @@ export default function CloserProfileView({ profile: initialProfile, onBack }: C
   }, []);
 
   const loadProfileFromDB = async () => {
+    if (!isSupabaseAvailable()) {
+      console.warn('Supabase not configured, skipping profile load');
+      return;
+    }
+    
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('closer_profiles')
         .select('*')
         .eq('closer_id', 'marcus-reynolds')
@@ -68,9 +73,14 @@ export default function CloserProfileView({ profile: initialProfile, onBack }: C
   };
 
   const handleSave = async (updatedProfile: CloserProfile) => {
+    if (!isSupabaseAvailable()) {
+      alert('Supabase is not configured. Cannot save profile. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable this feature.');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const { data: existing } = await supabase
+      const { data: existing } = await supabase!
         .from('closer_profiles')
         .select('id')
         .eq('closer_id', 'marcus-reynolds')
@@ -99,14 +109,14 @@ export default function CloserProfileView({ profile: initialProfile, onBack }: C
       };
 
       if (existing) {
-        const { error } = await supabase
+        const { error } = await supabase!
           .from('closer_profiles')
           .update(profileData)
           .eq('id', existing.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await supabase!
           .from('closer_profiles')
           .insert(profileData);
 
