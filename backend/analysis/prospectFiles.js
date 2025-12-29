@@ -37,8 +37,8 @@ export function loadProspectFile(prospectType) {
   }
 
   try {
-    // Path to txt files folder (two levels up from server/analysis)
-    const txtFilesPath = path.join(__dirname, '../../txt files', fileName);
+    // Path to txt files folder (one level up from backend/analysis)
+    const txtFilesPath = path.join(__dirname, '../txt files', fileName);
     const content = fs.readFileSync(txtFilesPath, 'utf-8');
     
     // Cache the content
