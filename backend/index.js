@@ -50,15 +50,44 @@ const wss = new WebSocketServer({
 // Store active connections
 const connections = new Map();
 
-// Ping all connections every 15 seconds to keep them alive (reduced from 30s)
-const PING_INTERVAL = 15000;
-setInterval(() => {
+// Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
+const PING_INTERVAL = 10000;
+const CONNECTION_TIMEOUT = 35000; // Mark connection dead if no pong in 35 seconds
+
+const pingInterval = setInterval(() => {
+  const now = Date.now();
   wss.clients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
+      // Check if connection is dead (no pong received)
+      if (ws.isAlive === false) {
+        console.log(`[WS] Terminating unresponsive connection (no pong received)`);
+        return ws.terminate();
+      }
+      
+      // Check if connection has been inactive too long
+      if (ws.lastActivity && (now - ws.lastActivity) > CONNECTION_TIMEOUT) {
+        console.log(`[WS] Connection inactive for ${Math.round((now - ws.lastActivity) / 1000)}s, sending ping`);
+      }
+      
+      // Mark as not alive, will be set true on pong
+      ws.isAlive = false;
       ws.ping();
     }
   });
 }, PING_INTERVAL);
+
+// Clean up interval on server close
+process.on('SIGINT', () => {
+  clearInterval(pingInterval);
+  wss.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  clearInterval(pingInterval);
+  wss.close();
+  process.exit(0);
+});
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {

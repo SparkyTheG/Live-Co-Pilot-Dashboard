@@ -62,7 +62,8 @@ export class ConversationWebSocket {
   private onDisconnect?: () => void;
   private manuallyDisconnected = false; // Track if disconnect was intentional
   private lastMessageTime = Date.now();
-  private connectionCheckInterval: NodeJS.Timeout | null = null;
+  private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(url?: string) {
     // Use environment variable or default to localhost for development
@@ -87,19 +88,44 @@ export class ConversationWebSocket {
         return;
       }
       
-      // If no message received in 60 seconds and not manually disconnected, connection might be stale
+      // If no message received in 45 seconds and not manually disconnected, connection might be stale
       const timeSinceLastMessage = Date.now() - this.lastMessageTime;
-      if (timeSinceLastMessage > 60000 && !this.manuallyDisconnected) {
-        console.log('⚠️ WebSocket appears stale, no messages in 60s');
-        // The server should be sending pings, so if we haven't heard anything, try to reconnect
+      if (timeSinceLastMessage > 45000 && !this.manuallyDisconnected) {
+        console.log('⚠️ WebSocket appears stale, no messages in 45s, attempting reconnect...');
+        this.ws.close();
+        this.connect().catch(console.error);
       }
-    }, 30000);
+    }, 15000); // Check every 15 seconds
   }
   
   private stopConnectionCheck() {
     if (this.connectionCheckInterval) {
       clearInterval(this.connectionCheckInterval);
       this.connectionCheckInterval = null;
+    }
+  }
+  
+  // Send keepalive messages to prevent Railway proxy timeout
+  private startKeepalive() {
+    this.stopKeepalive();
+    // Send keepalive every 8 seconds (Railway proxy times out around 30s of inactivity)
+    this.keepaliveInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        // Send empty transcript as keepalive (backend ignores empty transcripts)
+        this.ws.send(JSON.stringify({
+          type: 'transcript',
+          text: '',
+          keepalive: true
+        }));
+        console.log('💓 Keepalive sent');
+      }
+    }, 8000);
+  }
+  
+  private stopKeepalive() {
+    if (this.keepaliveInterval) {
+      clearInterval(this.keepaliveInterval);
+      this.keepaliveInterval = null;
     }
   }
 
@@ -124,6 +150,7 @@ export class ConversationWebSocket {
           this.manuallyDisconnected = false; // Reset on successful connection
           this.lastMessageTime = Date.now();
           this.startConnectionCheck();
+          this.startKeepalive(); // Start sending keepalive messages
           if (this.onConnect) this.onConnect();
           resolve();
         };
@@ -164,6 +191,8 @@ export class ConversationWebSocket {
 
         this.ws.onclose = () => {
           console.log('WebSocket disconnected');
+          this.stopKeepalive(); // Stop keepalive on disconnect
+          this.stopConnectionCheck();
           if (this.onDisconnect) this.onDisconnect();
           
           // Only attempt to reconnect if disconnect was NOT intentional
@@ -250,6 +279,7 @@ export class ConversationWebSocket {
     console.log('🔌 WebSocket: Manual disconnect requested');
     this.manuallyDisconnected = true; // Mark as intentional disconnect
     this.stopConnectionCheck();
+    this.stopKeepalive(); // Stop sending keepalive messages
     if (this.ws) {
       this.ws.close();
       this.ws = null;
