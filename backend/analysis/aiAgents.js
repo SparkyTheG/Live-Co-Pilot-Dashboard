@@ -14,50 +14,24 @@
 
 import OpenAI from 'openai';
 
-// Use OpenRouter for AI models
+// OpenAI configuration - using GPT-4o-mini for all agents
 const openai = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1',
+  apiKey: process.env.OPENAI_API_KEY,
   timeout: 30000,
-  maxRetries: 2,
-  defaultHeaders: process.env.OPENROUTER_API_KEY ? {
-    'HTTP-Referer': 'http://localhost:3001',
-    'X-Title': 'Zero-Stress Sales CoPilot'
-  } : {}
+  maxRetries: 2
 });
 
-// Model configurations for different agents
-// Using faster models for simpler tasks, more capable for complex tasks
+// Model configuration - GPT-4o-mini for all agents (fast and cost-effective)
+const MODEL = 'gpt-4o-mini';
+
+// All agents use the same model
 const MODELS = {
-  // Complex analysis requiring understanding of context
-  PILLARS: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini',
-  
-  // Hot buttons need good quote extraction
-  HOT_BUTTONS: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini',
-  
-  // Objections need empathetic understanding
-  OBJECTIONS: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini',
-  
-  // Simple detection task
-  DIAGNOSTIC: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini',
-  
-  // Analysis task
-  TRUTH_INDEX: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini',
-  
-  // Summary task
-  INSIGHTS: process.env.OPENROUTER_API_KEY 
-    ? 'anthropic/claude-sonnet-4-20250514' 
-    : 'gpt-4o-mini'
+  PILLARS: MODEL,
+  HOT_BUTTONS: MODEL,
+  OBJECTIONS: MODEL,
+  DIAGNOSTIC: MODEL,
+  TRUTH_INDEX: MODEL,
+  INSIGHTS: MODEL
 };
 
 /**

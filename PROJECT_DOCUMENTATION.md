@@ -49,8 +49,8 @@ Help salespeople during live calls by providing real-time insights, suggested qu
 **Backend:**
 - Node.js + Express (HTTP server)
 - WebSocket Server (ws library)
-- OpenAI SDK (via OpenRouter)
-- Claude Sonnet 4.5 (via OpenRouter for AI analysis)
+- OpenAI SDK
+- GPT-4o-mini (for AI analysis)
 
 ### System Flow
 
@@ -69,7 +69,7 @@ Analysis Engine (analysis/engine.js)
     ↓
 ┌─────────────────────────────────────┐
 │ 1. Load Prospect Context (TXT)     │
-│ 2. AI Analysis (Claude Sonnet 4.5) │
+│ 2. AI Analysis (GPT-4o-mini)       │
 │ 3. Pillar Scoring (27 Indicators)   │
 │ 4. Lubometer Calculation           │
 │ 5. Truth Index Calculation         │
@@ -122,7 +122,7 @@ UI Updates in Real-Time
 **2. `server/analysis/engine.js`** - Core analysis orchestrator
 - Main function: `analyzeConversation(transcript, prospectType)`
 - Coordinates all analysis modules
-- Calls Claude Sonnet 4.5 via OpenRouter
+- Calls GPT-4o-mini via OpenAI
 - Implements caching (5 second TTL) and debouncing (2 second minimum interval)
 - Combines AI analysis with CSV-based calculations
 - Returns complete analysis object
@@ -190,7 +190,7 @@ UI Updates in Real-Time
 - WebSocket sends `{ type: 'transcript', text: '...', prospectType: '...' }`
 
 ### 2. AI Analysis Flow
-- Claude Sonnet 4.5 analyzes the transcript with:
+- GPT-4o-mini analyzes the transcript with:
   - CSV framework context (7 pillars, 27 indicators, formulas)
   - Prospect-specific TXT file content
   - Full conversation transcript
@@ -278,10 +278,10 @@ UI Updates in Real-Time
 ### 🟡 Moderate Issues
 
 **7. AI Response Speed**
-- **Problem**: Claude Sonnet 4.5 can be slow (up to 30 second timeout)
-- **Root Cause**: Model complexity, API latency, network conditions
-- **Impact**: Delayed real-time updates, slower than desired
-- **Status**: Using Claude Sonnet 4.5 (slower but higher quality than faster models)
+- **Problem**: AI models can have variable response times
+- **Root Cause**: API latency, network conditions
+- **Impact**: Occasional delayed real-time updates
+- **Status**: Using GPT-4o-mini (fast and cost-effective)
 
 **8. Two-Person Conversation Detection**
 - **Problem**: AI may not clearly distinguish between salesperson and prospect speech
@@ -317,10 +317,7 @@ UI Updates in Real-Time
 
 **Backend (`server/.env`):**
 ```env
-# Required: OpenRouter API Key for Claude Sonnet 4.5
-OPENROUTER_API_KEY=sk-or-v1-...
-
-# OR (fallback): OpenAI API Key
+# Required: OpenAI API Key
 OPENAI_API_KEY=sk-proj-...
 
 # Optional: Server ports (defaults shown)
@@ -440,7 +437,7 @@ Use these scripts to validate:
 3. **Single Conversation**: One active conversation per WebSocket connection
 4. **No Persistence**: Analysis not saved to database (only real-time)
 5. **Real-time Only**: No historical analysis review feature
-6. **API Dependency**: Requires OpenRouter API key (paid service)
+6. **API Dependency**: Requires OpenAI API key (paid service)
 7. **Speech Recognition Limits**: Web Speech API has timeout limitations
 8. **No Speaker Diarization**: Cannot automatically distinguish salesperson vs prospect
 
@@ -453,7 +450,7 @@ Use these scripts to validate:
 3. **Add Database Persistence**: Save analysis history for review
 4. **Improve Error Messages**: Show user-friendly error messages in UI
 5. **Add Validation**: Validate AI output (quote accuracy, score ranges)
-6. **Consider Hybrid Model**: Fast model for initial analysis, Claude for refinement
+6. **Consider Hybrid Model**: Fast model for initial analysis, GPT-4 for refinement
 7. **Add Unit Tests**: Test pillar/lubometer calculations independently
 8. **Implement Rate Limiting**: Prevent API abuse
 9. **Add Monitoring**: Track connection health, API usage, errors
@@ -481,7 +478,7 @@ npm install
 ```bash
 cd server
 # Create .env file
-echo "OPENROUTER_API_KEY=sk-or-v1-your-key-here" > .env
+echo "OPENAI_API_KEY=sk-your-key-here" > .env
 ```
 
 **3. Start Servers:**
@@ -507,7 +504,7 @@ npm run dev
 ### Troubleshooting
 
 **Backend won't start:**
-- Check `OPENROUTER_API_KEY` is set in `server/.env`
+- Check `OPENAI_API_KEY` is set in `server/.env`
 - Check ports 3001 and 3002 are not in use
 - Check Node.js version (requires Node 18+)
 
@@ -611,7 +608,7 @@ npm run dev
 
 1. **AI-Only Analysis**: The application has been refactored to use AI-only analysis with NO keyword fallbacks. If AI fails, empty analysis is returned.
 
-2. **Claude Sonnet 4.5**: Currently using Claude Sonnet 4.5 via OpenRouter for best quality analysis. This is slower than faster models but provides better accuracy.
+2. **GPT-4o-mini**: Currently using GPT-4o-mini via OpenAI for fast and cost-effective analysis.
 
 3. **Real-time Processing**: Analysis happens in real-time as conversation progresses. Transcripts are sent every 3 seconds (throttled).
 

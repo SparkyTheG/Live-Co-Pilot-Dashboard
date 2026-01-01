@@ -51,7 +51,7 @@ The backend will run on `http://localhost:3001`
 - Root Directory: `backend`
 - Start Command: `npm start`
 - Environment Variables:
-  - `OPENROUTER_API_KEY` or `OPENAI_API_KEY`
+  - `OPENAI_API_KEY` (required)
   - `PORT` (auto-set by Railway)
 
 ## Features

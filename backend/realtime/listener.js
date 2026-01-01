@@ -3,9 +3,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// For audio transcription, we still use OpenAI's Whisper API
-// (OpenRouter doesn't offer faster alternatives for audio)
-// The main text analysis uses OpenRouter with faster models - see engine.js
+// For audio transcription, we use OpenAI's Whisper API
+// The main text analysis uses GPT-4o-mini - see engine.js
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   timeout: 30000 // 30 second timeout for audio processing

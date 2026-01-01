@@ -67,7 +67,7 @@
 
 ### ✅ Working Correctly
 
-1. **AI Analysis**: Claude Sonnet 4.5 is correctly analyzing transcripts
+1. **AI Analysis**: GPT-4o-mini is correctly analyzing transcripts
 2. **Hot Button Detection**: Accurately detecting and extracting hot buttons with proper quotes
 3. **Lubometer Calculation**: Scoring correctly (74 for high-score script, within target range)
 4. **Truth Index Calculation**: Working correctly (76 for high-score script)
@@ -88,7 +88,7 @@
 - **Backend Port**: 3001
 - **Frontend Port**: 5173
 - **WebSocket Path**: `/ws`
-- **AI Model**: Claude Sonnet 4.5 (via OpenRouter)
+- **AI Model**: GPT-4o-mini (via OpenAI)
 - **Environment**: Development mode
 
 ---
