@@ -74,72 +74,108 @@ async function callAI(model, systemPrompt, userPrompt, agentName) {
 }
 
 // ============================================================================
-// AGENT 1: PILLARS AGENT - Scores 27 indicators
+// AGENT 1: PILLARS AGENT - Scores 27 indicators for Lubometer calculation
 // ============================================================================
 export async function runPillarsAgent(transcript, prospectType) {
   const systemPrompt = `You are a sales conversation analyst. Score the 27 indicators (1-10) based on what the PROSPECT says.
 
-SCORING CONTEXT - THE 7 PILLARS AND 27 INDICATORS:
+=== LUBOMETER FORMULA (How your scores are used) ===
 
-PILLAR 1: Perceived Spread (Pain & Desire Gap) - MOST IMPORTANT
+Step 1: Raw Score (Per Indicator) - You provide scores 1-10 for each indicator
+Step 2: Average Per Pillar - Indicator scores are averaged within each pillar
+Step 3: Reverse Score P6 - Price Sensitivity is reversed (11 - Raw Score)
+Step 4: Weighted Pillar Score:
+  - P1 (Pain & Desire) × 1.5 ← MOST IMPORTANT
+  - P2 (Urgency) × 1.0
+  - P3 (Decisiveness) × 1.0
+  - P4 (Money) × 1.5 ← MOST IMPORTANT
+  - P5 (Responsibility) × 1.0
+  - P6 (Price Sensitivity) × 1.0 (after reverse)
+  - P7 (Trust) × 1.0
+Step 5: Total Score = Sum of weighted pillars (max = 90)
+Step 6: Apply Truth Index Penalties for incoherence
+Step 7: Final Lubometer Score = Total - Penalties
+
+READINESS ZONES:
+  70-90 → ✅ GREEN: High Buy Probability - Push to close
+  50-69 → ⚠️ YELLOW: Moderate - Needs coaching
+  30-49 → 🧊 RED: Risk or resistance - Slow down
+  <30 → ❌ NO-GO: Do not close
+
+CLOSE BLOCKER RULES:
+  Rule 1: P1 ≤ 6 AND P2 ≤ 5 → ❌ Not enough pain or urgency
+  Rule 2: P6 raw ≥ 7 AND P4 ≤ 5 → ❌ High price sensitivity + low money
+
+TRUTH INDEX PENALTIES (deducted from score):
+  - High Pain (P1 ≥ 7) + Low Urgency (P2 ≤ 4) → -15 points
+  - High Desire + Low Decisiveness (P3 ≤ 4) → -15 points
+  - High Money (P4 ≥ 7) + High Price Sensitivity (P6 ≥ 8) → -10 points
+  - Claims Authority + Reveals Need for Approval → -10 points
+  - High Desire + Low Responsibility (P5 ≤ 5) → -15 points
+
+=== THE 7 PILLARS AND 27 INDICATORS ===
+
+PILLAR 1: Perceived Spread (Pain & Desire Gap) - WEIGHT 1.5x
   1. Pain Intensity: How severe is their pain? (1=minor, 10=overwhelming)
   2. Pain Awareness: Do they understand root cause? (1=unclear, 10=deep understanding)
   3. Desire Clarity: How specific is their desired outcome? (1=vague, 10=vivid vision)
   4. Desire Priority: How important is solving this? (1=not urgent, 10=top priority)
 
-PILLAR 2: Urgency
+PILLAR 2: Urgency - WEIGHT 1.0x
   5. Time Pressure: Real deadlines? (1=no deadline, 10=imminent deadline)
   6. Cost of Delay: What do they lose each month? (1=nothing, 10=major losses)
   7. Internal Timing: "Can't do this anymore" moment? (1=no shift, 10=strong activation)
   8. Environmental Availability: Do they have bandwidth? (1=overwhelmed, 10=available)
 
-PILLAR 3: Decisiveness
+PILLAR 3: Decisiveness - WEIGHT 1.0x
   9. Decision Authority: Are they the final decision maker? (1=needs approval, 10=full authority)
   10. Decision Style: How do they decide? (1=very slow, 10=fast intuitive)
   11. Commitment to Decide: Ready to commit today? (1=wants to wait, 10=ready now)
   12. Self-Permission: Can they give themselves permission? (1=overthinks, 10=trusts self)
 
-PILLAR 4: Available Money - MOST IMPORTANT
+PILLAR 4: Available Money - WEIGHT 1.5x
   13. Resource Access: Do they have funds available? (1=no funds, 10=readily available)
   14. Resource Fluidity: Can they move/reallocate funds? (1=tied up, 10=flexible)
   15. Investment Mindset: See it as investment vs cost? (1=cost mindset, 10=investment mindset)
   16. Resourcefulness: History of finding money when committed? (1=never, 10=always figures it out)
 
-PILLAR 5: Responsibility & Ownership
+PILLAR 5: Responsibility & Ownership - WEIGHT 1.0x
   17. Problem Recognition: Acknowledge their role? (1=blames others, 10=owns it)
   18. Solution Ownership: Taking responsibility to change? (1=waiting for rescue, 10=it's on me)
   19. Locus of Control: Believe they control outcomes? (1=external factors, 10=I control it)
   20. Integrity: Desire vs Action: Alignment between wants and actions? (1=no alignment, 10=strong alignment)
 
-PILLAR 6: Price Sensitivity (REVERSE SCORED - low is good)
+PILLAR 6: Price Sensitivity (REVERSE SCORED) - WEIGHT 1.0x
   21. Emotional Response to Spending: Anxiety about investment? (1=not anxious, 10=very anxious)
   22. Negotiation Reflex: Always negotiating? (1=accepts price, 10=always negotiates)
   23. Structural Rigidity: Needs control over terms? (1=flexible, 10=rigid)
+  NOTE: For P6, LOW scores (1-3) are GOOD (low sensitivity), HIGH scores (7-10) are BAD
 
-PILLAR 7: Trust
+PILLAR 7: Trust - WEIGHT 1.0x
   24. ROI Ownership: Understands ROI depends on their action? (1=expects guarantee, 10=owns ROI)
   25. External Trust: Trust in provider/offer? (1=skeptical, 10=trusts)
   26. Internal Trust: Trust in own follow-through? (1=doubts self, 10=trusts self)
   27. Risk Tolerance: Willing to take calculated risks? (1=plays safe, 10=takes risks)
 
-SCORING RULES:
-- ONLY score indicators that are CLEARLY present in the transcript
-- Score generously (7-9) when signals are clear
-- Skip indicators you can't confidently score (don't guess)
+=== SCORING RULES ===
+- Score generously (7-9) when signals are clearly present
+- P1 and P4 have 1.5x weight - score these carefully as they impact lubometer most
+- For P6 (Price Sensitivity): LOW scores are GOOD (they're not price sensitive)
 - Focus on PROSPECT statements, not salesperson
+- Score indicators you can clearly identify from the conversation
 
 Return ONLY valid JSON:
 {
   "indicatorSignals": { "1": 8, "5": 9, "13": 7, ... }
 }`;
 
-  const userPrompt = `Analyze this conversation and score the 27 indicators.
-ONLY score indicators where you can clearly identify the signal.
+  const userPrompt = `Analyze this conversation and score the 27 indicators for the Lubometer.
+Your scores directly determine the prospect's readiness zone (Green/Yellow/Red/No-Go).
 
 Transcript:
 "${transcript}"
 
-Return JSON with indicatorSignals only.`;
+Return JSON with indicatorSignals. Score generously for clear signals.`;
 
   return await callAI(MODELS.PILLARS, systemPrompt, userPrompt, 'PillarsAgent');
 }
