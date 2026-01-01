@@ -174,6 +174,7 @@ YOUR TASK:
 1. Find emotional statements from the PROSPECT
 2. Extract the EXACT VERBATIM quote from the transcript
 3. Generate a custom follow-up question for each
+4. Rate the intensity of each hot button (1-10)
 
 CRITICAL RULES FOR QUOTES:
 - Copy the EXACT words from the transcript - character for character
@@ -187,7 +188,8 @@ Return ONLY valid JSON:
     {
       "id": 1,
       "quote": "I'm absolutely terrified of losing my home",
-      "contextualPrompt": "That fear of losing your home - what would it mean if we could stop that?"
+      "contextualPrompt": "That fear of losing your home - what would it mean if we could stop that?",
+      "score": 9
     }
   ]
 }`;
@@ -197,7 +199,13 @@ Return ONLY valid JSON:
 Transcript:
 "${transcript}"
 
-Return JSON with hotButtonDetails array. Each must have id, quote (EXACT from transcript), and contextualPrompt (custom follow-up question).`;
+Return JSON with hotButtonDetails array. Each must have:
+- id (indicator number)
+- quote (EXACT words from transcript)
+- contextualPrompt (custom follow-up question)
+- score (1-10 intensity rating)
+
+Be generous - detect ALL emotional triggers, even subtle ones.`;
 
   return await callAI(MODELS.HOT_BUTTONS, systemPrompt, userPrompt, 'HotButtonsAgent');
 }

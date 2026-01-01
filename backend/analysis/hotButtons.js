@@ -123,21 +123,24 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
         continue;
       }
       
-      // Get score from AI's indicatorSignals
-      const indicatorScoreRaw = aiAnalysis.indicatorSignals?.[indicatorId] || 
-                                aiAnalysis.indicatorSignals?.[String(indicatorId)];
-      
-      // Skip if no score or score too low
-      if (!indicatorScoreRaw) {
-        console.log(`[HotButtons] Skipping indicator ${indicatorId} - no score in indicatorSignals`);
-        continue;
+      // Get score from hot button detail first (preferred), then fallback to indicatorSignals
+      let indicatorScore = detail.score;
+      if (indicatorScore === undefined || indicatorScore === null) {
+        // Fallback to indicatorSignals
+        const indicatorScoreRaw = aiAnalysis.indicatorSignals?.[indicatorId] || 
+                                  aiAnalysis.indicatorSignals?.[String(indicatorId)];
+        indicatorScore = indicatorScoreRaw;
       }
       
-      const indicatorScore = typeof indicatorScoreRaw === 'string' ? parseFloat(indicatorScoreRaw) : indicatorScoreRaw;
+      // Convert to number if string
+      if (typeof indicatorScore === 'string') {
+        indicatorScore = parseFloat(indicatorScore);
+      }
       
-      if (isNaN(indicatorScore) || indicatorScore < 6) {
-        console.log(`[HotButtons] Skipping indicator ${indicatorId} - score too low: ${indicatorScore}`);
-        continue;
+      // If still no score, use default of 7 (detected = significant)
+      if (indicatorScore === undefined || indicatorScore === null || isNaN(indicatorScore)) {
+        indicatorScore = 7; // Default score for detected hot buttons
+        console.log(`[HotButtons] Using default score 7 for indicator ${indicatorId}`);
       }
       
       // Get indicator name from CSV (ONLY thing from CSV)
@@ -166,7 +169,7 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
         id: indicatorId,
         name: indicatorName,  // ONLY from CSV
         quote: quote,         // AI-generated
-        score: indicatorScore, // AI-generated
+        score: indicatorScore, // AI-generated (from detail or indicatorSignals or default)
         prompt: prompt        // AI-generated
       });
       
