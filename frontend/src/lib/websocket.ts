@@ -163,9 +163,6 @@ export class ConversationWebSocket {
             const data = JSON.parse(event.data);
             
             if (data.type === 'analysis_update') {
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'websocket.ts:84',message:'Frontend received analysis_update',data:{hasData:!!data.data,hotButtonsLength:data.data?.hotButtons?.length||0,objectionsLength:data.data?.objections?.length||0,hotButtons:data.data?.hotButtons,objections:data.data?.objections,keys:data.data?Object.keys(data.data):null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-              // #endregion
               if (this.onAnalysisUpdate) {
                 this.onAnalysisUpdate(data.data);
               }

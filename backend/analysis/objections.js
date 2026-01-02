@@ -17,9 +17,6 @@ export function detectObjections(transcript, prospectType, aiAnalysis = null) {
     objectionsArray: aiAnalysis.objections,
     aiAnalysisKeys: Object.keys(aiAnalysis)
   });
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'objections.js:16',message:'detectObjections entry',data:{hasAiAnalysis:!!aiAnalysis,aiAnalysisKeys:aiAnalysis?Object.keys(aiAnalysis):null,objectionsArray:aiAnalysis?.objections},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
   
   // Check if AI detected objections in its analysis
   if (aiAnalysis.objections && Array.isArray(aiAnalysis.objections)) {
@@ -46,9 +43,6 @@ export function detectObjections(transcript, prospectType, aiAnalysis = null) {
     .slice(0, 5);
   
   console.log(`[Objections] Final result: ${sorted.length} objections detected`);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'objections.js:36',message:'detectObjections exit',data:{sortedLength:sorted.length,sorted:sorted},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
   
   return sorted;
 }

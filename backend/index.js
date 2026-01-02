@@ -265,9 +265,6 @@ async function startRealtimeListening(connectionId, config) {
             hotButtonsSample: analysis.hotButtons?.slice(0, 2),
             objectionsSample: analysis.objections?.slice(0, 2)
           });
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.js:171', message: 'Before sending to frontend', data: { connectionId, hotButtonsLength: analysis.hotButtons?.length || 0, objectionsLength: analysis.objections?.length || 0, hotButtons: analysis.hotButtons, objections: analysis.objections }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'C' }) }).catch(() => { });
-          // #endregion
 
           // DEFENSIVE: Ensure arrays before sending to prevent frontend crashes
           const safeAnalysis = {
