@@ -184,64 +184,82 @@ Return JSON with indicatorSignals. Score generously for clear signals.`;
 // AGENT 2: HOT BUTTONS AGENT - Extracts emotional triggers with quotes
 // ============================================================================
 export async function runHotButtonsAgent(transcript, prospectType) {
-  const systemPrompt = `You are a sales conversation analyst specializing in detecting "hot buttons" - emotional triggers that indicate prospect motivation.
+  const systemPrompt = `You are a sales conversation analyst detecting "hot buttons" - emotional triggers from prospects.
 
-HOT BUTTON INDICATORS (only these can be hot buttons):
-1. Pain Awareness - "I'm done", "exhausted", "can't take it anymore"
-2. Desire Clarity - "I want", "I need", "looking for"
-3. Desire Priority - "Top priority", "most important thing"
-5. Time Pressure - "auction in X days", "deadline coming"
-6. Cost of Delay - "losing money every month", "costing me"
-7. Internal Timing - "woke up and realized", "something changed"
-11. Commitment to Decide - "ready to move forward", "let's do this"
-12. Self-Permission - "I deserve this", "I'm worth it"
-15. Investment Mindset - "worth it if it works", "good investment"
-16. Resourcefulness - "I'll figure it out", "always find a way"
-17. Problem Recognition - "I know I've been avoiding this"
-18. Solution Ownership - "It's on me to fix this"
-19. Locus of Control - "I control this", "up to me"
-20. Desire vs Action - "Can't keep saying I want it but doing nothing"
-24. ROI Ownership - "If I follow through, this will work"
-25. External Trust - "I trust you", "believe in your offer"
-26. Internal Trust - "I can do this", "I won't let myself down"
-27. Risk Tolerance - "Worth the risk", "played it safe too long"
+ALL 27 INDICATORS CAN BE HOT BUTTONS:
+P1 - Pain & Desire:
+  1. Pain Awareness - fear, worry, stress, concern, frustrated
+  2. Desire Clarity - want, need, looking for, hope to
+  3. Desire Priority - most important, top priority, main goal
+  4. Duration - been dealing with, for months/years, ongoing
+P2 - Urgency:
+  5. Time Pressure - deadline, auction, days left, running out
+  6. Cost of Delay - losing money, costing me, wasting
+  7. Internal Timing - realized, woke up, decided, had enough
+  8. Environmental - market, economy, situation changed
+P3 - Decisiveness:
+  9. Decision Authority - I decide, my choice, up to me
+  10. Decision Style - think about it, need time, research
+  11. Commitment - ready, let's do it, want to move forward
+  12. Self-Permission - deserve this, worth it, allowed to
+P4 - Money:
+  13. Resource Access - have funds, can get money, financing
+  14. Resource Fluidity - flexible, can move money, liquid
+  15. Investment Mindset - worth it, good investment, ROI
+  16. Resourcefulness - figure it out, find a way, make it work
+P5 - Responsibility:
+  17. Problem Recognition - know I have a problem, see the issue
+  18. Solution Ownership - need to fix this, my responsibility
+  19. Locus of Control - I control this, it's on me
+  20. Desire vs Action - can't keep saying, need to act
+P6 - Price Sensitivity:
+  21. Emotional Spending - worried about cost, feels expensive
+  22. Negotiation - price too high, need discount, can you lower
+  23. Structural Rigidity - budget set, can't go higher
+P7 - Trust:
+  24. ROI Ownership - if I do this, it will work
+  25. External Trust - trust you, believe in this
+  26. Internal Trust - I can do this, believe in myself
+  27. Risk Tolerance - worth the risk, tired of playing safe
 
-YOUR TASK:
-1. Find emotional statements from the PROSPECT
-2. Extract the EXACT VERBATIM quote from the transcript
-3. Generate a custom follow-up question for each
-4. Rate the intensity of each hot button (1-10)
+DETECT GENEROUSLY - even short phrases count!
+Examples of valid hot buttons from short speech:
+- "worried" → Pain Awareness (1)
+- "need help" → Desire Clarity (2)
+- "deadline" → Time Pressure (5)
+- "expensive" → Emotional Spending (21)
+- "can't afford" → Resource Access (13)
+- "scared" → Pain Awareness (1)
 
-CRITICAL RULES FOR QUOTES:
-- Copy the EXACT words from the transcript - character for character
-- DO NOT paraphrase, summarize, or change words
-- DO NOT use descriptions like "The prospect expressed..."
-- Keep quotes short (10-30 words) but exact
+QUOTE RULES:
+- Use words that appear in the transcript
+- Short quotes (3-20 words) are fine
+- Capture the emotional content
 
 Return ONLY valid JSON:
 {
   "hotButtonDetails": [
     {
       "id": 1,
-      "quote": "I'm absolutely terrified of losing my home",
-      "contextualPrompt": "That fear of losing your home - what would it mean if we could stop that?",
-      "score": 9
+      "quote": "I'm worried about",
+      "contextualPrompt": "What specifically worries you most?",
+      "score": 7
     }
   ]
 }`;
 
-  const userPrompt = `Find hot buttons in this conversation. Extract EXACT quotes from the prospect.
+  const userPrompt = `Detect ALL emotional triggers in this transcript. Be generous - short phrases count!
 
 Transcript:
 "${transcript}"
 
-Return JSON with hotButtonDetails array. Each must have:
-- id (indicator number)
-- quote (EXACT words from transcript)
-- contextualPrompt (custom follow-up question)
-- score (1-10 intensity rating)
+Return JSON with hotButtonDetails array. Each hot button needs:
+- id (indicator number 1-27)
+- quote (words from transcript, even short phrases)
+- contextualPrompt (follow-up question)
+- score (intensity 1-10)
 
-Be generous - detect ALL emotional triggers, even subtle ones.`;
+Even single emotional words like "worried", "scared", "need", "can't" should trigger detection.`;
 
   return await callAI(MODELS.HOT_BUTTONS, systemPrompt, userPrompt, 'HotButtonsAgent');
 }
@@ -250,42 +268,46 @@ Be generous - detect ALL emotional triggers, even subtle ones.`;
 // AGENT 3: OBJECTIONS AGENT - Detects objections and generates rebuttals
 // ============================================================================
 export async function runObjectionsAgent(transcript, prospectType) {
-  const systemPrompt = `You are a sales conversation analyst specializing in detecting objections, hesitations, and concerns from prospects.
+  const systemPrompt = `You are a sales conversation analyst detecting objections, hesitations, and concerns.
 
-OBJECTION PATTERNS TO LOOK FOR:
-- Price concerns: "too expensive", "can't afford", "need discount"
-- Trust concerns: "sounds too good", "how do I know", "prove it"
-- Timing concerns: "need to think", "too fast", "not ready"
-- Authority concerns: "need to ask spouse", "partner decides"
-- Value concerns: "not sure it's worth it", "what if it doesn't work"
-- Fear concerns: "scared", "worried", "what if"
+DETECT ANY OF THESE PATTERNS (even single words count!):
+- PRICE: expensive, cost, afford, money, budget, price, pay
+- TRUST: sure, trust, believe, guarantee, proof, skeptical
+- TIMING: think, wait, later, soon, time, rush, fast
+- AUTHORITY: spouse, partner, wife, husband, boss, ask
+- VALUE: worth, work, benefit, help, sure, certain
+- FEAR: scared, worried, afraid, nervous, concerned, what if
+- HESITATION: maybe, perhaps, not sure, don't know, hesitant
 
-FOR EACH OBJECTION PROVIDE:
-1. objectionText: The exact concern they raised (from transcript)
-2. fear: The underlying emotional fear driving this objection
-3. whisper: A 1-sentence insight about what they really need
-4. rebuttalScript: A 2-3 sentence response to address the concern
-5. probability: How confident you are (0.65-0.95)
+GENERATE OBJECTIONS GENEROUSLY:
+Even short statements like "it's expensive" or "I'm worried" or "need to think" are objections!
+
+FOR EACH OBJECTION:
+1. objectionText: What they said (from transcript)
+2. fear: The underlying emotional fear
+3. whisper: Quick insight about what they need
+4. rebuttalScript: 2-3 sentence response
+5. probability: Confidence (0.65-0.95)
 
 Return ONLY valid JSON:
 {
   "objections": [
     {
-      "objectionText": "I need to think about it",
-      "fear": "Fear of making the wrong decision",
-      "whisper": "They need permission to trust their gut",
-      "rebuttalScript": "I understand wanting to be sure. Most of my clients felt the same way. What specifically would you need to feel confident moving forward today?",
-      "probability": 0.85
+      "objectionText": "expensive",
+      "fear": "Fear of wasting money",
+      "whisper": "They need to see value",
+      "rebuttalScript": "I understand cost is a concern. Let me show you how this pays for itself.",
+      "probability": 0.75
     }
   ]
 }`;
 
-  const userPrompt = `Detect objections, hesitations, and concerns from the PROSPECT in this conversation.
+  const userPrompt = `Detect ALL objections, concerns, and hesitations. Be generous - even single words count!
 
 Transcript:
 "${transcript}"
 
-Return JSON with objections array. Include ALL hesitations, even subtle ones.`;
+Return JSON with objections array. Every concern, worry, or hesitation should be captured.`;
 
   return await callAI(MODELS.OBJECTIONS, systemPrompt, userPrompt, 'ObjectionsAgent');
 }

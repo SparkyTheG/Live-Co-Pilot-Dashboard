@@ -39,16 +39,18 @@ function validateAndFixQuote(quote, transcript) {
   
   const matchRatio = matchedWords.length / quoteWords.length;
   
-  if (matchRatio >= 0.8) {
-    // Most words match - likely just spacing/punctuation differences
+  if (matchRatio >= 0.5) {
+    // At least half words match - accept it (more lenient for speech-to-text)
     console.log(`[HotButtons] ✓ Quote validated (${Math.round(matchRatio * 100)}% word match): "${trimmedQuote.substring(0, 60)}..."`);
     return trimmedQuote;
+  } else if (matchRatio >= 0.3) {
+    // Partial match - still accept but log
+    console.log(`[HotButtons] ✓ Quote accepted with partial match (${Math.round(matchRatio * 100)}%): "${trimmedQuote.substring(0, 60)}..."`);
+    return trimmedQuote;
   } else {
-    // Significant mismatch - log warning but still return original
-    console.warn(`[HotButtons] ⚠ Quote may not match transcript (${Math.round(matchRatio * 100)}% word match): "${trimmedQuote.substring(0, 60)}..."`);
-    console.warn(`[HotButtons]   Looking for words: ${quoteWords.slice(0, 5).join(', ')}...`);
-    console.warn(`[HotButtons]   Transcript preview: "${transcript.substring(0, 200)}..."`);
-    return trimmedQuote; // Return original - let it through, but logged for debugging
+    // Low match - still return to avoid losing hot buttons, but log warning
+    console.warn(`[HotButtons] ⚠ Low quote match (${Math.round(matchRatio * 100)}%) but accepting: "${trimmedQuote.substring(0, 60)}..."`);
+    return trimmedQuote; // Accept anyway - better to show imperfect hot button than none
   }
 }
 
@@ -83,8 +85,9 @@ const INDICATOR_NAMES = {
   27: 'Risk Tolerance'
 };
 
-// Which indicators are considered "hot buttons" (emotional triggers)
-const HOT_BUTTON_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 11, 12, 15, 16, 17, 18, 19, 20, 24, 25, 26, 27]);
+// ALL 27 indicators can be hot buttons (emotional triggers detected from conversation)
+// Previously only 19 were allowed - now we allow all 27 for better detection
+const HOT_BUTTON_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]);
 
 /**
  * Extract all hot buttons from conversation based on AI analysis
