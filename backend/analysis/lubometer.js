@@ -102,8 +102,8 @@ export function calculateLubometer(pillarScores, customWeights = null) {
   const finalScore = Math.max(0, Math.min(maxScore, totalBeforePenalties - penalties));
   console.log(`[Lubometer] Final score: ${finalScore.toFixed(2)} (${totalBeforePenalties.toFixed(2)} - ${penalties})`);
 
-  // #region agent log - Hypothesis D: Track lubometer calculation
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lubometer.js:calculate',message:'Lubometer calculated',data:{finalScore:Math.round(finalScore),maxScore,totalBeforePenalties:Math.round(totalBeforePenalties),penalties,pillarScoresNull:!pillarScores||!pillarScores.pillars},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+  // #region agent log - Hypothesis D: Track lubometer calculation with full details
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lubometer.js:calculate',message:'Lubometer Full Calculation',data:{finalScore:Math.round(finalScore),maxScore,totalBeforePenalties:Math.round(totalBeforePenalties),penalties,pillar_inputs:{P1:pillarScores.pillars?.P1?.average,P2:pillarScores.pillars?.P2?.average,P3:pillarScores.pillars?.P3?.average,P4:pillarScores.pillars?.P4?.average,P5:pillarScores.pillars?.P5?.average,P6_raw:p6Raw,P6_reversed:p6Reversed,P7:pillarScores.pillars?.P7?.average},weighted_scores:weightedScores,weights_used:PILLAR_WEIGHTS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LUBOMETER_CALC'})}).catch(()=>{});
   // #endregion
 
   // Step 8: Determine Readiness Zone

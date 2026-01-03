@@ -286,6 +286,10 @@ export async function runAllPillarAgents(transcript) {
   console.log(`[Lubometer] All 7 pillar agents done in ${Date.now() - startTime}ms`);
   console.log(`[Lubometer] Scored ${Object.keys(indicatorSignals).length} indicators`);
 
+  // #region agent log - DEBUG: Track all 7 pillar agent outputs
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:runAllPillarAgents',message:'7 Pillar Agents Complete',data:{p1_scores:p1,p2_scores:p2,p3_scores:p3,p4_scores:p4,p5_scores:p5,p6_scores:p6,p7_scores:p7,combined_indicators:indicatorSignals,total_indicators:Object.keys(indicatorSignals).length,duration_ms:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PILLAR_AGENTS'})}).catch(()=>{});
+  // #endregion
+
   return {
     indicatorSignals,
     pillarErrors: {
