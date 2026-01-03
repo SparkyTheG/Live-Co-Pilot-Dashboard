@@ -33,9 +33,12 @@ let lastAnalysisTime = 0;
 const MIN_ANALYSIS_INTERVAL = 2000; // Minimum 2 seconds between AI analyses
 
 /**
- * Main analysis function - orchestrates 6 parallel AI agents
+ * Main analysis function - orchestrates parallel AI agents
+ * @param {string} transcript - The conversation transcript
+ * @param {string|null} prospectTypeOverride - Override the detected prospect type
+ * @param {string} customScriptPrompt - Custom prompt from admin settings for rebuttal scripts
  */
-export async function analyzeConversation(transcript, prospectTypeOverride = null) {
+export async function analyzeConversation(transcript, prospectTypeOverride = null, customScriptPrompt = '') {
   const startTime = Date.now();
 
   if (!transcript || transcript.trim().length === 0) {
@@ -78,7 +81,7 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
   let aiAnalysis;
   try {
     aiAnalysis = await Promise.race([
-      runAllAgents(cleanedTranscript, prospectType),
+      runAllAgents(cleanedTranscript, prospectType, customScriptPrompt),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Multi-agent timeout')), 45000))
     ]);
   } catch (error) {

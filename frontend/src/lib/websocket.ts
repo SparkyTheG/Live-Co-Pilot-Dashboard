@@ -230,7 +230,7 @@ export class ConversationWebSocket {
     }));
   }
 
-  sendTranscript(text: string, prospectType?: string) {
+  sendTranscript(text: string, prospectType?: string, customScriptPrompt?: string) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket is not connected, cannot send transcript');
       return;
@@ -239,7 +239,8 @@ export class ConversationWebSocket {
     this.ws.send(JSON.stringify({
       type: 'transcript',
       text: text,
-      prospectType: prospectType
+      prospectType: prospectType,
+      customScriptPrompt: customScriptPrompt || ''
     }));
   }
 

@@ -189,9 +189,6 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
   detectedHotButtons.sort((a, b) => b.score - a.score);
   
   console.log(`[HotButtons] Final result: ${detectedHotButtons.length} hot buttons extracted`);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'hotButtons.js:exit',message:'extractHotButtons returning',data:{count:detectedHotButtons.length,hotButtons:detectedHotButtons.slice(0,3)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   
   return detectedHotButtons;
 }
