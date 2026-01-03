@@ -65,7 +65,17 @@ export default function ConversationSummaryPage({ onBack }: ConversationSummaryP
         .order('updated_at', { ascending: false })
         .limit(50);
 
-      if (summariesError) throw summariesError;
+      if (summariesError) {
+        // Check if table doesn't exist
+        if (summariesError.message.includes('schema cache') || 
+            summariesError.message.includes('does not exist') ||
+            summariesError.code === '42P01') {
+          setError('TABLE_NOT_FOUND');
+          setLoading(false);
+          return;
+        }
+        throw summariesError;
+      }
 
       // Load associated sessions
       const sessionIds = summariesData?.map(s => s.session_id) || [];
@@ -148,12 +158,53 @@ export default function ConversationSummaryPage({ onBack }: ConversationSummaryP
       </nav>
 
       <div className="max-w-[1400px] mx-auto px-8 py-8">
-        {error && (
+        {error === 'TABLE_NOT_FOUND' ? (
+          <div className="mb-6 backdrop-blur-xl bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-400" />
+              <h3 className="text-lg font-bold text-amber-300">Database Setup Required</h3>
+            </div>
+            <p className="text-gray-300 mb-4">
+              The <code className="bg-gray-800 px-2 py-1 rounded text-cyan-400">call_summaries</code> table doesn't exist yet. 
+              Please run this SQL in your Supabase SQL Editor:
+            </p>
+            <pre className="bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm text-gray-300 overflow-x-auto mb-4">
+{`create table if not exists public.call_summaries (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null unique,
+  user_id uuid not null,
+  user_email text not null,
+  prospect_type text not null default '',
+  summary_json jsonb not null,
+  is_final boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.call_summaries enable row level security;
+
+create policy "call_summaries_select_own" on public.call_summaries
+  for select to authenticated using (auth.uid() = user_id);
+
+create policy "call_summaries_insert_own" on public.call_summaries
+  for insert to authenticated with check (auth.uid() = user_id);
+
+create policy "call_summaries_update_own" on public.call_summaries
+  for update to authenticated using (auth.uid() = user_id);`}
+            </pre>
+            <button
+              onClick={loadSummaries}
+              className="px-4 py-2 bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/50 rounded-lg transition-all text-amber-300 text-sm font-medium"
+            >
+              I've run the SQL - Refresh
+            </button>
+          </div>
+        ) : error ? (
           <div className="mb-6 flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span>{error}</span>
           </div>
-        )}
+        ) : null}
 
         {summaries.length === 0 ? (
           <div className="backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-12 text-center">

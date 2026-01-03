@@ -6,12 +6,13 @@
   - One summary per session (upserted)
   - summary_json contains the full AI analysis
   - is_final indicates if this is the final summary (true) or progressive (false)
+  - Removed foreign key constraints to avoid dependency issues
 */
 
 create table if not exists public.call_summaries (
   id uuid primary key default gen_random_uuid(),
-  session_id uuid not null unique references public.call_sessions(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  session_id uuid not null unique,
+  user_id uuid not null,
   user_email text not null,
   prospect_type text not null default '',
   summary_json jsonb not null,
@@ -41,7 +42,7 @@ create policy "call_summaries_insert_own"
 on public.call_summaries
 for insert
 to authenticated
-with check (auth.uid() = user_id AND auth.email() = user_email);
+with check (auth.uid() = user_id);
 
 drop policy if exists "call_summaries_update_own" on public.call_summaries;
 create policy "call_summaries_update_own"
@@ -49,4 +50,4 @@ on public.call_summaries
 for update
 to authenticated
 using (auth.uid() = user_id)
-with check (auth.uid() = user_id AND auth.email() = user_email);
+with check (auth.uid() = user_id);
