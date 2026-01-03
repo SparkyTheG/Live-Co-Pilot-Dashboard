@@ -214,14 +214,23 @@ export class ConversationWebSocket {
     });
   }
 
+  // Store prospect type locally for use in startListening
+  private currentProspectType: string = '';
+
   startListening(config?: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
     }
 
+    // Include prospectType in config for session creation
+    const configWithProspect = {
+      ...(config || {}),
+      prospectType: this.currentProspectType
+    };
+
     this.ws.send(JSON.stringify({
       type: 'start_listening',
-      config: config || {},
+      config: configWithProspect,
       authToken: this.authToken
     }));
   }
@@ -231,8 +240,10 @@ export class ConversationWebSocket {
       return;
     }
 
+    // Include prospectType so backend can use it for final summary
     this.ws.send(JSON.stringify({
-      type: 'stop_listening'
+      type: 'stop_listening',
+      prospectType: this.currentProspectType
     }));
   }
 
@@ -259,8 +270,11 @@ export class ConversationWebSocket {
   }
 
   setProspectType(prospectType: string) {
+    // Always store locally so it's available for startListening
+    this.currentProspectType = prospectType;
+
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket is not connected, cannot set prospect type');
+      // Store locally even if not connected - will be used when startListening is called
       return;
     }
 

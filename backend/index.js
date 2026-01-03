@@ -161,18 +161,20 @@ wss.on('connection', (ws, req) => {
             meta.userId = userId;
             meta.userEmail = userEmail;
             if (userId) {
-              // IMPORTANT: Store userId and userEmail in meta for later use by summary agent
+              // IMPORTANT: Store userId, userEmail, and prospectType in meta for later use by summary agent
               meta.userId = userId;
               meta.userEmail = userEmail;
+              meta.prospectType = data.config?.prospectType || '';
+              meta.sessionStartTime = Date.now(); // Store start time for duration calculation
               connectionPersistence.set(connectionId, meta);
-              console.log(`[WS] Stored userId=${userId}, userEmail=${userEmail} in connection meta`);
+              console.log(`[WS] Stored userId=${userId}, userEmail=${userEmail}, prospectType=${meta.prospectType} in connection meta`);
 
               const { data: sessionRow, error } = await supabase
                 .from('call_sessions')
                 .insert({
                   user_id: userId,
                   user_email: userEmail || '',
-                  prospect_type: data.config?.prospectType || '',
+                  prospect_type: meta.prospectType,
                   connection_id: connectionId
                 })
                 .select('id')
@@ -198,28 +200,38 @@ wss.on('connection', (ws, req) => {
         if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
           const supabase = createUserSupabaseClient(meta.authToken);
           if (supabase) {
-            // Update session end time
+            // Use prospect type from meta (most reliable) or from stop_listening message
+            const finalProspectType = meta.prospectType || data.prospectType || '';
+            console.log(`[${connectionId}] Stopping session with prospectType: ${finalProspectType}`);
+
+            // Update session end time and prospect type
             void supabase
               .from('call_sessions')
-              .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .update({ 
+                ended_at: new Date().toISOString(), 
+                updated_at: new Date().toISOString(),
+                prospect_type: finalProspectType // Ensure prospect type is saved
+              })
               .eq('id', meta.sessionId)
               .eq('user_id', meta.userId)
-              .then(() => {})
+              .then(({ error }) => {
+                if (error) console.warn(`[WS] Failed to update session ended_at: ${error.message}`);
+                else console.log(`[${connectionId}] Session marked as ended`);
+              })
               .catch(() => {});
 
             // Generate FINAL summary of entire conversation
             const formattedTranscript = meta.conversationHistory || '';
             if (formattedTranscript.length > 100) {
-              const prospectType = data.prospectType || '';
-              console.log(`[${connectionId}] Generating FINAL conversation summary...`);
-              runConversationSummaryAgent(formattedTranscript, prospectType, true)
+              console.log(`[${connectionId}] Generating FINAL conversation summary with prospectType: ${finalProspectType}`);
+              runConversationSummaryAgent(formattedTranscript, finalProspectType, true)
                 .then((summaryResult) => {
                   if (summaryResult && !summaryResult.error) {
                     const summaryData = {
                       session_id: meta.sessionId,
                       user_id: meta.userId,
                       user_email: meta.userEmail || '',
-                      prospect_type: prospectType,
+                      prospect_type: finalProspectType,
                       summary_json: summaryResult,
                       is_final: true,
                       updated_at: new Date().toISOString()
@@ -354,7 +366,14 @@ wss.on('connection', (ws, req) => {
         }
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change
-        // Store prospect type for this connection
+        // Store prospect type in connection meta for summaries
+        const meta = connectionPersistence.get(connectionId);
+        if (meta) {
+          meta.prospectType = data.prospectType || '';
+          connectionPersistence.set(connectionId, meta);
+          console.log(`[WS] Prospect type updated to: ${meta.prospectType}`);
+        }
+        // Also update the realtime connection
         const realtimeConnection = realtimeConnections.get(connectionId);
         if (realtimeConnection) {
           realtimeConnection.currentProspectType = data.prospectType;
@@ -377,58 +396,58 @@ wss.on('connection', (ws, req) => {
     if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
       const supabase = createUserSupabaseClient(meta.authToken);
       if (supabase) {
+        // Use prospect type from meta (set during session)
+        const closeProspectType = meta.prospectType || '';
+        console.log(`[${connectionId}] WebSocket closing, saving final state with prospectType: ${closeProspectType}`);
+
         // Update session end time
         void supabase
           .from('call_sessions')
-          .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .update({ 
+            ended_at: new Date().toISOString(), 
+            updated_at: new Date().toISOString(),
+            prospect_type: closeProspectType // Ensure it's saved
+          })
           .eq('id', meta.sessionId)
           .eq('user_id', meta.userId)
-          .then(() => {})
+          .then(({ error }) => {
+            if (error) console.warn(`[WS] Failed to update session on close: ${error.message}`);
+          })
           .catch(() => {});
 
         // Generate FINAL summary of entire conversation
         const formattedTranscript = meta.conversationHistory || '';
         if (formattedTranscript.length > 100) {
-          // Get prospect type from session
-          supabase
-            .from('call_sessions')
-            .select('prospect_type')
-            .eq('id', meta.sessionId)
-            .single()
-            .then(({ data: sessionData }) => {
-              const prospectType = sessionData?.prospect_type || '';
-              console.log(`[${connectionId}] Generating FINAL conversation summary on close...`);
-              runConversationSummaryAgent(formattedTranscript, prospectType, true)
-                .then((summaryResult) => {
-                  if (summaryResult && !summaryResult.error) {
-                    const summaryData = {
-                      session_id: meta.sessionId,
-                      user_id: meta.userId,
-                      user_email: meta.userEmail || '',
-                      prospect_type: prospectType,
-                      summary_json: summaryResult,
-                      is_final: true,
-                      updated_at: new Date().toISOString()
-                    };
+          console.log(`[${connectionId}] Generating FINAL conversation summary on close with prospectType: ${closeProspectType}`);
+          runConversationSummaryAgent(formattedTranscript, closeProspectType, true)
+            .then((summaryResult) => {
+              if (summaryResult && !summaryResult.error) {
+                const summaryData = {
+                  session_id: meta.sessionId,
+                  user_id: meta.userId,
+                  user_email: meta.userEmail || '',
+                  prospect_type: closeProspectType,
+                  summary_json: summaryResult,
+                  is_final: true,
+                  updated_at: new Date().toISOString()
+                };
 
-                    void supabase
-                      .from('call_summaries')
-                      .upsert(summaryData, { onConflict: 'session_id' })
-                      .then(({ error }) => {
-                        if (error) {
-                          console.warn(`[WS] Final summary upsert failed: ${error.message}`);
-                        } else {
-                          console.log(`[${connectionId}] Final summary generated and saved on close`);
-                        }
-                      })
-                      .catch(() => {});
-                  }
-                })
-                .catch((err) => {
-                  console.warn(`[${connectionId}] Final summary generation error: ${err.message}`);
-                });
+                void supabase
+                  .from('call_summaries')
+                  .upsert(summaryData, { onConflict: 'session_id' })
+                  .then(({ error }) => {
+                    if (error) {
+                      console.warn(`[WS] Final summary upsert failed: ${error.message}`);
+                    } else {
+                      console.log(`[${connectionId}] Final summary generated and saved on close`);
+                    }
+                  })
+                  .catch(() => {});
+              }
             })
-            .catch(() => {});
+            .catch((err) => {
+              console.warn(`[${connectionId}] Final summary generation error: ${err.message}`);
+            });
         }
       }
     }
@@ -527,9 +546,11 @@ async function startRealtimeListening(connectionId, config) {
               
               // Run summary analysis in background (non-blocking)
               const formattedTranscript = meta.conversationHistory || '';
+              // Use prospect type from meta (set during start_listening) or current transcript message
+              const summaryProspectType = meta.prospectType || prospectType || '';
               if (formattedTranscript.length > 50) { // Reduced from 100 for testing
-                console.log(`[${connectionId}] Running conversation summary agent...`);
-                runConversationSummaryAgent(formattedTranscript, prospectType, false)
+                console.log(`[${connectionId}] Running conversation summary agent with prospectType: ${summaryProspectType}`);
+                runConversationSummaryAgent(formattedTranscript, summaryProspectType, false)
                   .then((summaryResult) => {
                     console.log(`[${connectionId}] Summary agent result:`, summaryResult ? 'success' : 'null', summaryResult?.error || '');
                     if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
@@ -539,7 +560,7 @@ async function startRealtimeListening(connectionId, config) {
                           session_id: meta.sessionId,
                           user_id: meta.userId,
                           user_email: meta.userEmail || '',
-                          prospect_type: prospectType || '',
+                          prospect_type: summaryProspectType,
                           summary_json: summaryResult,
                           is_final: false,
                           updated_at: new Date().toISOString()
