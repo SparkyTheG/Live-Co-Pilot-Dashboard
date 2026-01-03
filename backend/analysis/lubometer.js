@@ -102,6 +102,10 @@ export function calculateLubometer(pillarScores, customWeights = null) {
   const finalScore = Math.max(0, Math.min(maxScore, totalBeforePenalties - penalties));
   console.log(`[Lubometer] Final score: ${finalScore.toFixed(2)} (${totalBeforePenalties.toFixed(2)} - ${penalties})`);
 
+  // #region agent log - Hypothesis D: Track lubometer calculation
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lubometer.js:calculate',message:'Lubometer calculated',data:{finalScore:Math.round(finalScore),maxScore,totalBeforePenalties:Math.round(totalBeforePenalties),penalties,pillarScoresNull:!pillarScores||!pillarScores.pillars},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
+
   // Step 8: Determine Readiness Zone
   let level, interpretation, action;
   

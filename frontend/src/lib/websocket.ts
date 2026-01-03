@@ -163,6 +163,9 @@ export class ConversationWebSocket {
             const data = JSON.parse(event.data);
             
             if (data.type === 'analysis_update') {
+              // #region agent log - Hypothesis A: Track each analysis update from WS
+              fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'websocket.ts:onmessage',message:'WS analysis update received',data:{lubometerScore:data.data?.lubometer?.score,hasLubometer:!!data.data?.lubometer,hotButtonsCount:data.data?.hotButtons?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
               if (this.onAnalysisUpdate) {
                 this.onAnalysisUpdate(data.data);
               }

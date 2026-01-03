@@ -106,6 +106,10 @@ export default function LiveCoPilotDashboard() {
       truthIndex: analysis.truthIndex?.score
     });
 
+    // #region agent log - Hypothesis A,D: Track lubometer data on each update
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:handleAnalysisUpdate',message:'Analysis update received',data:{lubometerScore:analysis.lubometer?.score,lubometerLevel:analysis.lubometer?.level,lubometerNull:analysis.lubometer===null||analysis.lubometer===undefined,hotButtonsCount:analysis.hotButtons?.length||0,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+    // #endregion
+
     setAnalysisData(analysis);
 
     const now = Date.now();
@@ -136,7 +140,13 @@ export default function LiveCoPilotDashboard() {
           }
         }
         // Sort by timestamp (newest first) then by score
-        return merged.sort((a, b) => b.timestamp - a.timestamp || b.score - a.score);
+        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.score - a.score);
+        
+        // #region agent log - Hypothesis E,F: Track hot buttons order
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:hotButtonsMerge',message:'Hot buttons merged and sorted',data:{prevCount:prev.length,newItemsCount:newItems.length,finalCount:sorted.length,topThreeIds:sorted.slice(0,3).map(h=>h.id),topThreeTimestamps:sorted.slice(0,3).map(h=>h.timestamp),allSameTimestamp:sorted.length>1&&sorted.every(h=>h.timestamp===sorted[0].timestamp)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E,F'})}).catch(()=>{});
+        // #endregion
+        
+        return sorted;
       });
     }
 

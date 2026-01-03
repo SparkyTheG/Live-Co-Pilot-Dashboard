@@ -19,6 +19,10 @@ export default function RecordingButton({
   const customScriptPrompt = settings.customScriptPrompt || '';
   // Extract pillar weights for Lubometer calculation
   const pillarWeights = settings.pillarWeights.map(p => ({ id: p.id, weight: p.weight }));
+  
+  // #region agent log - Hypothesis B: Track pillarWeights on component render
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:render',message:'PillarWeights on render',data:{pillarWeightsCount:pillarWeights?.length||0,pillarWeightsNull:!pillarWeights,firstWeight:pillarWeights?.[0]?.weight},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   const [isRecording, setIsRecording] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +191,9 @@ export default function RecordingButton({
               // Send accumulated transcript
               if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
                 console.log('📤 Sending transcript to backend:', accumulatedTranscriptRef.current.substring(0, 100));
+                // #region agent log - Hypothesis B: Track pillarWeights when sending
+                fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:sendTranscript',message:'Sending transcript with weights',data:{pillarWeightsCount:pillarWeights?.length||0,pillarWeightsNull:!pillarWeights,transcriptLen:accumulatedTranscriptRef.current.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
                 wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
                 lastSendTimeRef.current = now;
                 accumulatedTranscriptRef.current = '';
