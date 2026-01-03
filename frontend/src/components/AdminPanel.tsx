@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn } from 'lucide-react';
+import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn, FileText } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+
+interface AdminPanelProps {
+  onBack: () => void;
+  onViewSummaries?: () => void;
+}
 
 // Full-page login/signup screen
 function AuthScreen({ 
@@ -310,11 +315,7 @@ function VerificationPendingScreen({
   );
 }
 
-interface AdminPanelProps {
-  onBack: () => void;
-}
-
-export default function AdminPanel({ onBack }: AdminPanelProps) {
+export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps) {
   const { settings, updatePillarWeight, updateCustomPrompt, resetToDefaults, saveToSupabase, saving, lastSaved } = useSettings();
   const { user, loading, signOut } = useAuth();
 
@@ -395,6 +396,15 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
               <div className="text-sm text-gray-300">
                 <span className="text-gray-400">Signed in as</span> {user.email}
               </div>
+              {onViewSummaries && (
+                <button
+                  onClick={onViewSummaries}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 border border-purple-500/50 rounded-lg transition-all text-purple-300 text-sm font-medium"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Conversation Summaries</span>
+                </button>
+              )}
               <button
                 onClick={handleSave}
                 disabled={saving}

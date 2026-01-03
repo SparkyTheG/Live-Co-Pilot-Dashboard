@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
-import { runSpeakerDetectionAgent } from './analysis/aiAgents.js';
+import { runSpeakerDetectionAgent, runConversationSummaryAgent } from './analysis/aiAgents.js';
 
 dotenv.config();
 
@@ -52,7 +52,7 @@ const wss = new WebSocketServer({
 // Store active connections
 const connections = new Map();
 // Store per-connection persistence metadata
-const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs, conversationHistory }
+const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs, conversationHistory, lastSummaryMs, summaryId }
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -97,7 +97,7 @@ process.on('SIGTERM', () => {
 wss.on('connection', (ws, req) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
-  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0, conversationHistory: '' });
+  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0, conversationHistory: '', lastSummaryMs: 0, summaryId: null });
 
   // Track last activity time
   ws.isAlive = true;
@@ -178,11 +178,12 @@ wss.on('connection', (ws, req) => {
       } else if (data.type === 'stop_listening') {
         // Stop listening
         stopListening(connectionId);
-        // Mark session ended
+        // Mark session ended and generate final summary
         const meta = connectionPersistence.get(connectionId);
         if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
           const supabase = createUserSupabaseClient(meta.authToken);
           if (supabase) {
+            // Update session end time
             void supabase
               .from('call_sessions')
               .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -190,6 +191,42 @@ wss.on('connection', (ws, req) => {
               .eq('user_id', meta.userId)
               .then(() => {})
               .catch(() => {});
+
+            // Generate FINAL summary of entire conversation
+            const formattedTranscript = meta.conversationHistory || '';
+            if (formattedTranscript.length > 100) {
+              const prospectType = data.prospectType || '';
+              console.log(`[${connectionId}] Generating FINAL conversation summary...`);
+              runConversationSummaryAgent(formattedTranscript, prospectType, true)
+                .then((summaryResult) => {
+                  if (summaryResult && !summaryResult.error) {
+                    const summaryData = {
+                      session_id: meta.sessionId,
+                      user_id: meta.userId,
+                      user_email: meta.userEmail || '',
+                      prospect_type: prospectType,
+                      summary_json: summaryResult,
+                      is_final: true,
+                      updated_at: new Date().toISOString()
+                    };
+
+                    void supabase
+                      .from('call_summaries')
+                      .upsert(summaryData, { onConflict: 'session_id' })
+                      .then(({ error }) => {
+                        if (error) {
+                          console.warn(`[WS] Final summary upsert failed: ${error.message}`);
+                        } else {
+                          console.log(`[${connectionId}] Final summary generated and saved`);
+                        }
+                      })
+                      .catch(() => {});
+                  }
+                })
+                .catch((err) => {
+                  console.warn(`[${connectionId}] Final summary generation error: ${err.message}`);
+                });
+            }
           }
         }
       } else if (data.type === 'transcript') {
@@ -320,11 +357,12 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
     connections.delete(connectionId);
-    // Mark session ended if we have one
+    // Mark session ended and generate final summary if we have one
     const meta = connectionPersistence.get(connectionId);
     if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
       const supabase = createUserSupabaseClient(meta.authToken);
       if (supabase) {
+        // Update session end time
         void supabase
           .from('call_sessions')
           .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -332,6 +370,51 @@ wss.on('connection', (ws, req) => {
           .eq('user_id', meta.userId)
           .then(() => {})
           .catch(() => {});
+
+        // Generate FINAL summary of entire conversation
+        const formattedTranscript = meta.conversationHistory || '';
+        if (formattedTranscript.length > 100) {
+          // Get prospect type from session
+          supabase
+            .from('call_sessions')
+            .select('prospect_type')
+            .eq('id', meta.sessionId)
+            .single()
+            .then(({ data: sessionData }) => {
+              const prospectType = sessionData?.prospect_type || '';
+              console.log(`[${connectionId}] Generating FINAL conversation summary on close...`);
+              runConversationSummaryAgent(formattedTranscript, prospectType, true)
+                .then((summaryResult) => {
+                  if (summaryResult && !summaryResult.error) {
+                    const summaryData = {
+                      session_id: meta.sessionId,
+                      user_id: meta.userId,
+                      user_email: meta.userEmail || '',
+                      prospect_type: prospectType,
+                      summary_json: summaryResult,
+                      is_final: true,
+                      updated_at: new Date().toISOString()
+                    };
+
+                    void supabase
+                      .from('call_summaries')
+                      .upsert(summaryData, { onConflict: 'session_id' })
+                      .then(({ error }) => {
+                        if (error) {
+                          console.warn(`[WS] Final summary upsert failed: ${error.message}`);
+                        } else {
+                          console.log(`[${connectionId}] Final summary generated and saved on close`);
+                        }
+                      })
+                      .catch(() => {});
+                  }
+                })
+                .catch((err) => {
+                  console.warn(`[${connectionId}] Final summary generation error: ${err.message}`);
+                });
+            })
+            .catch(() => {});
+        }
       }
     }
     connectionPersistence.delete(connectionId);
@@ -414,6 +497,52 @@ async function startRealtimeListening(connectionId, config) {
                     if (error) console.warn(`[WS] Supabase call_sessions transcript update failed: ${error.message}`);
                   })
                   .catch(() => {});
+              }
+            }
+
+            // CONVERSATION SUMMARY: Continuously analyze and update summary (every 30 seconds)
+            // This runs in parallel with the main analysis, non-blocking
+            const SUMMARY_INTERVAL_MS = 30000; // 30 seconds
+            if (!meta.lastSummaryMs || (now - meta.lastSummaryMs) > SUMMARY_INTERVAL_MS) {
+              meta.lastSummaryMs = now;
+              connectionPersistence.set(connectionId, meta);
+              
+              // Run summary analysis in background (non-blocking)
+              const formattedTranscript = meta.conversationHistory || '';
+              if (formattedTranscript.length > 100) { // Only analyze if there's meaningful content
+                runConversationSummaryAgent(formattedTranscript, prospectType, false)
+                  .then((summaryResult) => {
+                    if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
+                      const supabase = createUserSupabaseClient(meta.authToken);
+                      if (supabase) {
+                        const summaryData = {
+                          session_id: meta.sessionId,
+                          user_id: meta.userId,
+                          user_email: meta.userEmail || '',
+                          prospect_type: prospectType || '',
+                          summary_json: summaryResult,
+                          is_final: false,
+                          updated_at: new Date().toISOString()
+                        };
+
+                        // Upsert summary (update if exists, insert if new)
+                        void supabase
+                          .from('call_summaries')
+                          .upsert(summaryData, { onConflict: 'session_id' })
+                          .then(({ error }) => {
+                            if (error) {
+                              console.warn(`[WS] Supabase summary upsert failed: ${error.message}`);
+                            } else {
+                              console.log(`[${connectionId}] Summary updated (progressive)`);
+                            }
+                          })
+                          .catch(() => {});
+                      }
+                    }
+                  })
+                  .catch((err) => {
+                    console.warn(`[${connectionId}] Summary analysis error: ${err.message}`);
+                  });
               }
             }
           }

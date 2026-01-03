@@ -669,6 +669,69 @@ Return: {"summary":"...","keyMotivators":["..."],"concerns":["..."],"recommendat
 }
 
 // ============================================================================
+// AGENT 8: CONVERSATION SUMMARY AGENT
+// Analyzes the entire conversation (even hour-long) and provides comprehensive summary
+// This agent runs continuously during the call and provides final summary when call ends
+// ============================================================================
+export async function runConversationSummaryAgent(fullTranscript, prospectType, isFinal = false) {
+  // For very long conversations, we'll use the full transcript but with a focused prompt
+  // GPT-4o-mini can handle up to ~128k tokens, so even hour-long conversations should fit
+  
+  const appContext = `This is a real estate sales conversation analysis system. 
+The conversation is between a CLOSER (salesperson) and a PROSPECT (potential seller).
+The transcript is formatted with CLOSER: and PROSPECT: labels.`;
+
+  const systemPrompt = `${appContext}
+
+Analyze the ENTIRE conversation and provide a comprehensive summary.
+
+${isFinal ? 'FINAL SUMMARY (call ended):' : 'PROGRESSIVE SUMMARY (call in progress):'}
+
+OUTPUT FORMAT:
+{
+  "executiveSummary": "2-3 sentence high-level overview of the entire conversation",
+  "prospectSituation": "Detailed description of prospect's situation, problems, and context",
+  "keyPoints": [
+    "Important point 1",
+    "Important point 2",
+    "Important point 3"
+  ],
+  "objectionsRaised": [
+    "Objection 1 with context",
+    "Objection 2 with context"
+  ],
+  "objectionsResolved": [
+    "How objection 1 was handled",
+    "How objection 2 was handled"
+  ],
+  "nextSteps": [
+    "Action item 1",
+    "Action item 2"
+  ],
+  "closerPerformance": "Brief assessment of closer's approach and effectiveness",
+  "prospectReadiness": "Assessment of prospect's readiness to move forward (ready/almost/not_ready)",
+  "recommendations": "Specific recommendations for follow-up or closing"
+}
+
+Be comprehensive but concise. Focus on actionable insights.`;
+
+  // Truncate transcript if extremely long (safety measure, but GPT-4o-mini can handle ~100k chars)
+  const MAX_TRANSCRIPT_LENGTH = 100000; // ~100k chars should be enough for hour-long calls
+  const transcriptToAnalyze = fullTranscript.length > MAX_TRANSCRIPT_LENGTH
+    ? fullTranscript.slice(-MAX_TRANSCRIPT_LENGTH) + '\n\n[Note: Transcript truncated - showing most recent portion]'
+    : fullTranscript;
+
+  const userPrompt = `Prospect Type: ${prospectType || 'unknown'}
+
+FULL CONVERSATION TRANSCRIPT:
+${transcriptToAnalyze}
+
+${isFinal ? 'Provide the FINAL comprehensive summary of this completed conversation.' : 'Provide a progressive summary of the conversation so far (call still in progress).'}`;
+
+  return await callAI(systemPrompt, userPrompt, 'ConversationSummaryAgent', 2000);
+}
+
+// ============================================================================
 // MAIN: Run all agents in parallel
 // ============================================================================
 export async function runAllAgents(transcript, prospectType, customScriptPrompt = '') {

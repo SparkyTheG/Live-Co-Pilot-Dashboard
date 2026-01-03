@@ -9,6 +9,7 @@ import CreativeCloserScreen from './components/CreativeCloserScreen';
 import EightPillarDebriefPage from './components/EightPillarDebriefPage';
 import LiveCoPilotDashboard from './components/LiveCoPilotDashboard';
 import AdminPanel from './components/AdminPanel';
+import ConversationSummaryPage from './components/ConversationSummaryPage';
 import {
   CUSTOMER_NAME,
   customerProfile,
@@ -16,7 +17,7 @@ import {
 import { salesManagerProfile } from './data/managerData';
 
 function App() {
-  const [view, setView] = useState<'copilot' | 'profile' | 'manager-dashboard' | 'creative-closer' | 'debrief' | 'live-dashboard' | 'admin'>('live-dashboard');
+  const [view, setView] = useState<'copilot' | 'profile' | 'manager-dashboard' | 'creative-closer' | 'debrief' | 'live-dashboard' | 'admin' | 'summaries'>('live-dashboard');
   const [showPricing, setShowPricing] = useState(false);
   const [showFoundingMember, setShowFoundingMember] = useState(false);
   const [debriefData, setDebriefData] = useState<{
@@ -61,7 +62,12 @@ function App() {
 
   // Admin Panel view
   if (view === 'admin') {
-    return <AdminPanel onBack={() => setView('live-dashboard')} />;
+    return <AdminPanel onBack={() => setView('live-dashboard')} onViewSummaries={() => setView('summaries')} />;
+  }
+
+  // Conversation Summaries view
+  if (view === 'summaries') {
+    return <ConversationSummaryPage onBack={() => setView('admin')} />;
   }
 
   if (view === 'debrief' && debriefData) {
