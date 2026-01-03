@@ -141,6 +141,9 @@ wss.on('connection', (ws, req) => {
           console.log(`[WS] Received keepalive ping from ${connectionId}`);
           return;
         }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:transcript',message:'Transcript received from frontend',data:{connectionId,textLength:data.text?.length,textPreview:data.text?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         console.log(`[WS] Received transcript message from ${connectionId}: "${data.text?.substring(0, 100)}..."`);
         let realtimeConnection = realtimeConnections.get(connectionId);
 
@@ -281,6 +284,9 @@ async function startRealtimeListening(connectionId, config) {
             console.error(`[${connectionId}] WARNING: Fixed objections type before sending (was ${typeof analysis.objections})`);
           }
 
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:sendAnalysis',message:'Sending analysis to frontend',data:{connectionId,hotButtonsCount:safeAnalysis.hotButtons?.length,objectionsCount:safeAnalysis.objections?.length,lubometerScore:safeAnalysis.lubometer?.score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           // Send analysis to frontend
           sendToClient(connectionId, {
             type: 'analysis_update',

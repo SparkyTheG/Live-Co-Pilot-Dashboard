@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Star, FileText, Activity } from 'lucide-react';
+import { Users, FileText, Activity, Settings } from 'lucide-react';
 import CustomerProfile from './components/CustomerProfile';
 import SalesManagerDashboard from './components/SalesManagerDashboard';
 import PricingPage from './components/PricingPage';
@@ -8,6 +8,7 @@ import CreativeCloserCoPilotScreen from './components/CreativeCloserCoPilotScree
 import CreativeCloserScreen from './components/CreativeCloserScreen';
 import EightPillarDebriefPage from './components/EightPillarDebriefPage';
 import LiveCoPilotDashboard from './components/LiveCoPilotDashboard';
+import AdminPanel from './components/AdminPanel';
 import {
   CUSTOMER_NAME,
   customerProfile,
@@ -15,7 +16,7 @@ import {
 import { salesManagerProfile } from './data/managerData';
 
 function App() {
-  const [view, setView] = useState<'copilot' | 'profile' | 'manager-dashboard' | 'creative-closer' | 'debrief' | 'live-dashboard'>('live-dashboard');
+  const [view, setView] = useState<'copilot' | 'profile' | 'manager-dashboard' | 'creative-closer' | 'debrief' | 'live-dashboard' | 'admin'>('live-dashboard');
   const [showPricing, setShowPricing] = useState(false);
   const [showFoundingMember, setShowFoundingMember] = useState(false);
   const [debriefData, setDebriefData] = useState<{
@@ -57,6 +58,11 @@ function App() {
     setDebriefData(data);
     setView('debrief');
   };
+
+  // Admin Panel view
+  if (view === 'admin') {
+    return <AdminPanel onBack={() => setView('live-dashboard')} />;
+  }
 
   if (view === 'debrief' && debriefData) {
     return (
@@ -113,6 +119,13 @@ function App() {
               </div>
               <div className="flex items-center gap-4">
                 <button
+                  onClick={() => setView('admin')}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 border border-purple-500/50 rounded-lg transition-all group"
+                >
+                  <Settings className="w-4 h-4 text-purple-400" />
+                  <span className="text-purple-300 text-sm font-medium">Admin</span>
+                </button>
+                <button
                   onClick={() => setView('copilot')}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 rounded-lg transition-all group"
                 >
@@ -160,6 +173,13 @@ function App() {
               <div className="text-sm text-gray-400">Creative Closer Co-Pilot</div>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => setView('admin')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 border border-purple-500/50 rounded-lg transition-all group"
+              >
+                <Settings className="w-4 h-4 text-purple-400" />
+                <span className="text-purple-300 text-sm font-medium">Admin</span>
+              </button>
               <button
                 onClick={() => setView('live-dashboard')}
                 className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-500/20 to-cyan-500/20 hover:from-teal-500/30 hover:to-cyan-500/30 border border-teal-500/50 rounded-lg transition-all group"

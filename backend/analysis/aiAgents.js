@@ -512,6 +512,9 @@ export async function runAllAgents(transcript, prospectType) {
   ]);
   
   console.log(`[MultiAgent] All agents completed in ${Date.now() - startTime}ms`);
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:runAllAgents',message:'All agents completed',data:{pillarsError:pillarsResult.error||null,hotButtonsCount:hotButtonsResult.hotButtonDetails?.length||0,hotButtonsError:hotButtonsResult.error||null,objectionsCount:objectionsResult.objections?.length||0,objectionsError:objectionsResult.error||null,durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   
   // Combine results
   return {

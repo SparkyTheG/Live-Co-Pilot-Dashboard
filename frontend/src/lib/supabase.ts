@@ -14,13 +14,32 @@ const isSupabaseConfigured = () => {
 };
 
 // Only create Supabase client if properly configured
-export const supabase: SupabaseClient | null = isSupabaseConfigured()
+// For auth features, we need a real client or a mock that won't crash
+export const supabase: SupabaseClient<any> = isSupabaseConfigured()
   ? createClient(supabaseUrl!, supabaseAnonKey!)
-  : null;
+  : ({
+      from: (table: string) => ({
+        select: () => Promise.resolve({ data: null, error: null }),
+        insert: () => Promise.resolve({ data: null, error: null }),
+        update: () => Promise.resolve({ data: null, error: null }),
+        delete: () => Promise.resolve({ data: null, error: null }),
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        upsert: () => Promise.resolve({ data: null, error: null }),
+        eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+      }),
+      auth: {
+        getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        signInWithPassword: () => Promise.resolve({ data: { user: null, session: null }, error: null }),
+        signUp: () => Promise.resolve({ data: { user: null, session: null }, error: null }),
+        signOut: () => Promise.resolve({ error: null }),
+      },
+    } as any);
 
 // Helper function to check if Supabase is available
-export const isSupabaseAvailable = () => supabase !== null;
+export const isSupabaseAvailable = () => isSupabaseConfigured();
 
-if (!supabase) {
-  console.warn('⚠️ Supabase not configured. Features requiring Supabase (closer profiles, call debriefs) will be disabled.');
+if (!isSupabaseConfigured()) {
+  console.warn('⚠️ Supabase not configured. Features requiring Supabase (auth, settings sync) will use local storage only.');
 }

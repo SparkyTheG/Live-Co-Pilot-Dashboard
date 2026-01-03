@@ -98,6 +98,9 @@ export default function LiveCoPilotDashboard() {
 
   // Extract analysis update handler so it can be reused
   const handleAnalysisUpdate = useCallback((analysis: any) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:handleAnalysisUpdate',message:'Frontend received analysis',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,lubometerScore:analysis.lubometer?.score,hasAnalysis:!!analysis},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     // Update state with real-time analysis from backend
     console.log('✅ Frontend: Analysis update received:', {
       hotButtons: analysis.hotButtons?.length || 0,

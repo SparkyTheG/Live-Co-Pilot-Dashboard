@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { AuthProvider } from './contexts/AuthContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 // Error boundary for production
 window.addEventListener('error', (event) => {
@@ -19,6 +21,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <AuthProvider>
+      <SettingsProvider>
+        <App />
+      </SettingsProvider>
+    </AuthProvider>
   </StrictMode>
 );
