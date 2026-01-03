@@ -210,17 +210,14 @@ wss.on('connection', (ws, req) => {
         const conversationHistory = meta?.conversationHistory || '';
         
         // AI SPEAKER DETECTION: Analyze who is speaking using AI agent
-        // (runs in parallel with analysis, but we need it for Supabase persistence)
         let detectedSpeaker = 'unknown';
-        let speakerConfidence = 0;
         
         try {
           console.log(`[WS] Running Speaker Detection AI on "${chunkText.substring(0, 50)}..."`);
           const speakerResult = await runSpeakerDetectionAgent(chunkText, conversationHistory);
           if (speakerResult && !speakerResult.error) {
             detectedSpeaker = speakerResult.speaker || 'unknown';
-            speakerConfidence = speakerResult.confidence || 0;
-            console.log(`[WS] AI detected speaker: ${detectedSpeaker} (confidence: ${speakerConfidence})`);
+            console.log(`[WS] AI detected speaker: ${detectedSpeaker}`);
           } else {
             console.warn(`[WS] Speaker detection returned error or empty result`);
           }
@@ -228,10 +225,13 @@ wss.on('connection', (ws, req) => {
           console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
         }
         
-        // Update conversation history (cap at 8000 chars for next detection)
+        // Format speaker label for transcript
+        const speakerLabel = detectedSpeaker === 'closer' ? 'CLOSER' : detectedSpeaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
+        
+        // Update conversation history with formatted speaker labels (cap at 8000 chars)
         const MAX_HISTORY_CHARS = 8000;
-        const prefix = detectedSpeaker === 'closer' ? '[CLOSER]: ' : detectedSpeaker === 'prospect' ? '[PROSPECT]: ' : '[?]: ';
-        const newHistory = (conversationHistory + '\n' + prefix + chunkText).trim();
+        const formattedLine = `${speakerLabel}: ${chunkText}`;
+        const newHistory = conversationHistory ? conversationHistory + '\n\n' + formattedLine : formattedLine;
         if (meta) {
           meta.conversationHistory = newHistory.length > MAX_HISTORY_CHARS 
             ? newHistory.slice(-MAX_HISTORY_CHARS) 
@@ -250,7 +250,6 @@ wss.on('connection', (ws, req) => {
                 user_id: meta.userId,
                 user_email: meta.userEmail || '',
                 speaker_role: detectedSpeaker,
-                speaker_confidence: speakerConfidence,
                 chunk_text: chunkText,
                 chunk_char_count: chunkCharCount,
                 client_ts_ms: clientTsMs
@@ -260,10 +259,16 @@ wss.on('connection', (ws, req) => {
               })
               .catch(() => {});
 
-            // Touch session updated_at (also non-blocking)
+            // Update session with formatted transcript paragraph
+            // Format: CLOSER: text\n\nPROSPECT: text\n\n...
             void supabase
               .from('call_sessions')
-              .update({ updated_at: new Date().toISOString(), ...(prospectType ? { prospect_type: prospectType } : {}) })
+              .update({ 
+                updated_at: new Date().toISOString(), 
+                transcript_text: meta.conversationHistory || '',
+                transcript_char_count: (meta.conversationHistory || '').length,
+                ...(prospectType ? { prospect_type: prospectType } : {}) 
+              })
               .eq('id', meta.sessionId)
               .eq('user_id', meta.userId)
               .then(() => {})
@@ -382,8 +387,8 @@ async function startRealtimeListening(connectionId, config) {
           // Analyze the conversation in real-time with prospect type, custom script prompt, and pillar weights
           const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
 
-          // Persist a readable "paragraph" snapshot of the conversation on the session row (best-effort).
-          // This stores the capped rolling transcript, so you can read it easily in Supabase.
+          // Persist a readable "paragraph" snapshot with CLOSER:/PROSPECT: labels on the session row.
+          // Uses the formatted conversationHistory which has speaker labels.
           const meta = connectionPersistence.get(connectionId);
           if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
             const now = Date.now();
@@ -393,13 +398,15 @@ async function startRealtimeListening(connectionId, config) {
               connectionPersistence.set(connectionId, meta);
               const supabase = createUserSupabaseClient(meta.authToken);
               if (supabase) {
+                // Use the formatted conversation history with speaker labels
+                const formattedTranscript = meta.conversationHistory || '';
                 void supabase
                   .from('call_sessions')
                   .update({
                     updated_at: new Date().toISOString(),
                     prospect_type: prospectType || '',
-                    transcript_text: transcript || '',
-                    transcript_char_count: (transcript || '').length
+                    transcript_text: formattedTranscript,
+                    transcript_char_count: formattedTranscript.length
                   })
                   .eq('id', meta.sessionId)
                   .eq('user_id', meta.userId)

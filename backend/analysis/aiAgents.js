@@ -623,9 +623,7 @@ Return: {
 // ============================================================================
 export async function runSpeakerDetectionAgent(newChunk, conversationHistory) {
   // Provide context about what this app is for
-  const appContext = `This is a real estate sales conversation analysis app. 
-A "closer" (salesperson) is asking questions and presenting solutions.
-A "prospect" (potential seller) is sharing their situation, problems, objections.`;
+  const appContext = `Real estate sales conversation. CLOSER = salesperson asking questions. PROSPECT = seller sharing problems.`;
 
   // Limit history to last 8000 chars for context
   const maxHistoryChars = 8000;
@@ -635,36 +633,18 @@ A "prospect" (potential seller) is sharing their situation, problems, objections
 
   const systemPrompt = `${appContext}
 
-Your task: Classify WHO is speaking in the NEW TEXT below.
+Classify WHO is speaking:
 
-CLOSER (salesperson) patterns:
-- Asks questions: "How many months behind?", "What's your timeline?", "Have you considered..."
-- Presents solutions: "We can help", "Here's what we do", "I have an option for you"
-- Professional tone: "Let me explain", "Based on what you said", "I understand"
-- Follow-up/clarifying: "Can you tell me more?", "What do you mean by that?"
-- Empathy statements: "That sounds difficult", "I hear you"
+CLOSER: asks questions, presents solutions, professional tone, empathy
+PROSPECT: shares problems, personal info, objections, answers questions, emotional
 
-PROSPECT (seller) patterns:
-- Shares problems: "I'm behind on payments", "I can't afford", "I'm stressed"
-- Gives personal info: "My wife", "We've been", "I have 3 kids"
-- Objections/hesitation: "I'm not sure", "That's expensive", "I need to think"
-- Answers questions: responds to what closer asked
-- Emotional language: "worried", "scared", "frustrated", "can't take it"
+If closer just asked a question, next text is likely prospect answering.
 
-Use the CONVERSATION HISTORY for context - if closer just asked a question, 
-the next text is likely the prospect answering.
+Return ONLY: {"speaker":"closer"} or {"speaker":"prospect"}`;
 
-Return ONLY: {"speaker":"closer"|"prospect","confidence":0.6-1.0,"reason":"brief reason"}`;
+  const userPrompt = `HISTORY:\n${trimmedHistory}\n\nNEW TEXT: "${newChunk}"`;
 
-  const userPrompt = `CONVERSATION HISTORY (for context):
-"${trimmedHistory}"
-
-NEW TEXT TO CLASSIFY:
-"${newChunk}"
-
-Who is speaking in the NEW TEXT?`;
-
-  return await callAI(systemPrompt, userPrompt, 'SpeakerDetectionAgent', 150);
+  return await callAI(systemPrompt, userPrompt, 'SpeakerDetectionAgent', 50);
 }
 
 // ============================================================================

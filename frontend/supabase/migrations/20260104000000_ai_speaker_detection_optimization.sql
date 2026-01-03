@@ -1,24 +1,26 @@
 /*
-  # AI Speaker Detection Optimization
+  # AI Speaker Detection - Simplified Schema
   
-  This migration optimizes the schema for AI-detected speaker roles:
-  1. Adds speaker_confidence column to track AI certainty
-  2. Adds index for efficient speaker-based queries
-  3. Updates constraint to ensure valid AI speaker values
+  Changes:
+  1. Removes speaker_confidence column (not needed, slows down AI)
+  2. Adds indexes for speaker-based queries
+  3. Updates constraint for AI detection values
   
-  Notes:
-  - speaker_role is now AI-detected (closer/prospect/unknown)
-  - speaker_confidence stores the AI's confidence (0.0-1.0)
-  - conversationHistory is managed server-side, not persisted per-row
+  The transcript_text on call_sessions will be formatted as:
+  
+  CLOSER: how many months behind are you on payments
+  
+  PROSPECT: i think about maybe 3 months
+  
+  CLOSER: what happened that caused you to fall behind
 */
 
--- Add speaker_confidence column for AI detection confidence
+-- Drop speaker_confidence column if it exists (we don't need it)
 alter table public.call_transcript_chunks
-  add column if not exists speaker_confidence numeric(3,2) default 0.0;
+  drop column if exists speaker_confidence;
 
 -- Add comment for documentation
 comment on column public.call_transcript_chunks.speaker_role is 'AI-detected speaker: closer, prospect, or unknown';
-comment on column public.call_transcript_chunks.speaker_confidence is 'AI confidence in speaker detection (0.0-1.0)';
 
 -- Drop old constraint if exists (might have old values)
 alter table public.call_transcript_chunks
