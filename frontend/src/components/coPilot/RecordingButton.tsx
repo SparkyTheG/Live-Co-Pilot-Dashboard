@@ -6,12 +6,14 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface RecordingButtonProps {
   prospectType: string;
+  speakerRole?: 'closer' | 'prospect';
   onTranscriptUpdate?: (transcript: string) => void;
   onAnalysisUpdate?: (analysis: any) => void;
 }
 
 export default function RecordingButton({
   prospectType,
+  speakerRole = 'closer',
   onTranscriptUpdate,
   onAnalysisUpdate
 }: RecordingButtonProps) {
@@ -157,31 +159,39 @@ export default function RecordingButton({
         }
 
         recognition.onresult = (event: any) => {
-          let transcript = '';
-          let isFinal = false;
+          // IMPORTANT:
+          // - Do NOT persist interim (non-final) speech results; they cause repeated "are", "are you", etc.
+          // - Only accumulate and send FINAL results to backend (clean transcript chunks)
+          let interimTranscript = '';
+          const finalSegments: string[] = [];
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript + ' ';
+            const t = String(event.results[i][0].transcript || '').trim();
+            if (!t) continue;
             if (event.results[i].isFinal) {
-              isFinal = true;
+              finalSegments.push(t);
+            } else {
+              interimTranscript += t + ' ';
             }
           }
 
-          if (transcript.trim()) {
-            // Update UI immediately
-            if (onTranscriptUpdate) {
-              onTranscriptUpdate(transcript);
-            }
+          // Optional UI preview: show interim as live text, but don't store it
+          if (onTranscriptUpdate) {
+            const preview = [...finalSegments, interimTranscript.trim()].filter(Boolean).join(' ').trim();
+            if (preview) onTranscriptUpdate(preview);
+          }
 
-            // Accumulate transcript
-            accumulatedTranscriptRef.current += ' ' + transcript;
+          // Only persist/send final segments
+          const finalText = finalSegments.join(' ').trim();
+          if (finalText) {
+            accumulatedTranscriptRef.current += (accumulatedTranscriptRef.current ? ' ' : '') + finalText;
 
-            // Throttle sending to backend
+            // Throttle sending to backend (final-only)
             const now = Date.now();
             const timeSinceLastSend = now - lastSendTimeRef.current;
 
-            // Send immediately if final result OR enough time has passed
-            if (isFinal || timeSinceLastSend >= MIN_SEND_INTERVAL) {
+            // Send immediately if enough time has passed; otherwise batch final segments
+            if (timeSinceLastSend >= MIN_SEND_INTERVAL) {
               // Clear any pending timeout
               if (sendTimeoutRef.current) {
                 clearTimeout(sendTimeoutRef.current);
@@ -191,7 +201,13 @@ export default function RecordingButton({
               // Send accumulated transcript
               if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
                 console.log('📤 Sending transcript to backend:', accumulatedTranscriptRef.current.substring(0, 100));
-                wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
+                wsRef.current.sendTranscript(
+                  accumulatedTranscriptRef.current.trim(),
+                  prospectType,
+                  customScriptPrompt,
+                  pillarWeights,
+                  speakerRole
+                );
                 lastSendTimeRef.current = now;
                 accumulatedTranscriptRef.current = '';
               }
@@ -201,7 +217,13 @@ export default function RecordingButton({
                 sendTimeoutRef.current = setTimeout(() => {
                   if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
                     console.log('📤 Sending accumulated transcript:', accumulatedTranscriptRef.current.substring(0, 100));
-                    wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
+                    wsRef.current.sendTranscript(
+                      accumulatedTranscriptRef.current.trim(),
+                      prospectType,
+                      customScriptPrompt,
+                      pillarWeights,
+                      speakerRole
+                    );
                     lastSendTimeRef.current = Date.now();
                     accumulatedTranscriptRef.current = '';
                   }
@@ -209,7 +231,7 @@ export default function RecordingButton({
                 }, MIN_SEND_INTERVAL - timeSinceLastSend);
               }
             }
-          }
+          } // end finalText
         };
 
         recognition.onerror = (event: any) => {

@@ -56,6 +56,7 @@ const getStorageKey = (userId: string | null) => userId ? `zss_settings_${userId
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const userEmail = user?.email ?? null;
   const prevUserIdRef = useRef<string | null>(null);
 
   const mergeWithDefaults = useMemo(() => {
@@ -106,7 +107,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         console.log('[settings] Fetching settings for user:', userId);
         const { data, error } = await supabase
           .from('user_settings')
-          .select('settings')
+          .select('settings, user_email, updated_by_email, updated_at')
           .eq('user_id', userId)
           .maybeSingle();
         
@@ -159,6 +160,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const payload = {
         user_id: userId,
+        user_email: userEmail || '',
+        updated_by_email: userEmail || '',
         settings,
         updated_at: new Date().toISOString(),
       };

@@ -51,7 +51,7 @@ const wss = new WebSocketServer({
 // Store active connections
 const connections = new Map();
 // Store per-connection persistence metadata
-const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId }
+const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs }
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -96,7 +96,7 @@ process.on('SIGTERM', () => {
 wss.on('connection', (ws, req) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
-  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null });
+  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0 });
 
   // Track last activity time
   ws.isAlive = true;
@@ -150,12 +150,15 @@ wss.on('connection', (ws, req) => {
             // Resolve user id from token so RLS inserts work with explicit user_id
             const { data: userData } = await supabase.auth.getUser();
             const userId = userData?.user?.id || null;
+            const userEmail = userData?.user?.email || null;
             meta.userId = userId;
+            meta.userEmail = userEmail;
             if (userId) {
               const { data: sessionRow, error } = await supabase
                 .from('call_sessions')
                 .insert({
                   user_id: userId,
+                  user_email: userEmail || '',
                   prospect_type: data.config?.prospectType || '',
                   connection_id: connectionId
                 })
@@ -203,6 +206,7 @@ wss.on('connection', (ws, req) => {
           const chunkCharCount = chunkText.length;
           const clientTsMs = typeof data.clientTsMs === 'number' ? data.clientTsMs : null;
           const prospectType = typeof data.prospectType === 'string' ? data.prospectType : '';
+          const speakerRole = typeof data.speakerRole === 'string' ? data.speakerRole : 'unknown';
           const supabase = createUserSupabaseClient(meta.authToken);
           if (supabase) {
             void supabase
@@ -210,6 +214,8 @@ wss.on('connection', (ws, req) => {
               .insert({
                 session_id: meta.sessionId,
                 user_id: meta.userId,
+                user_email: meta.userEmail || '',
+                speaker_role: speakerRole,
                 chunk_text: chunkText,
                 chunk_char_count: chunkCharCount,
                 client_ts_ms: clientTsMs
@@ -340,6 +346,35 @@ async function startRealtimeListening(connectionId, config) {
           }
           // Analyze the conversation in real-time with prospect type, custom script prompt, and pillar weights
           const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
+
+          // Persist a readable "paragraph" snapshot of the conversation on the session row (best-effort).
+          // This stores the capped rolling transcript, so you can read it easily in Supabase.
+          const meta = connectionPersistence.get(connectionId);
+          if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+            const now = Date.now();
+            // Limit update frequency to reduce DB writes during rapid updates
+            if (!meta.lastTranscriptPersistMs || (now - meta.lastTranscriptPersistMs) > 5000) {
+              meta.lastTranscriptPersistMs = now;
+              connectionPersistence.set(connectionId, meta);
+              const supabase = createUserSupabaseClient(meta.authToken);
+              if (supabase) {
+                void supabase
+                  .from('call_sessions')
+                  .update({
+                    updated_at: new Date().toISOString(),
+                    prospect_type: prospectType || '',
+                    transcript_text: transcript || '',
+                    transcript_char_count: (transcript || '').length
+                  })
+                  .eq('id', meta.sessionId)
+                  .eq('user_id', meta.userId)
+                  .then(({ error }) => {
+                    if (error) console.warn(`[WS] Supabase call_sessions transcript update failed: ${error.message}`);
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
 
           // PERSISTENCE LOGIC: If new analysis has 0 score but we have a previous good score,
           // preserve the previous score to prevent the UI from "dropping to zero".
