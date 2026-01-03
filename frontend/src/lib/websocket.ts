@@ -240,8 +240,7 @@ export class ConversationWebSocket {
     text: string, 
     prospectType?: string, 
     customScriptPrompt?: string,
-    pillarWeights?: { id: string; weight: number }[],
-    speakerRole?: 'closer' | 'prospect'
+    pillarWeights?: { id: string; weight: number }[]
   ) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket is not connected, cannot send transcript');
@@ -254,7 +253,6 @@ export class ConversationWebSocket {
       prospectType: prospectType,
       customScriptPrompt: customScriptPrompt || '',
       pillarWeights: pillarWeights || null,
-      speakerRole: speakerRole || 'unknown',
       authToken: this.authToken,
       clientTsMs: Date.now()
     }));

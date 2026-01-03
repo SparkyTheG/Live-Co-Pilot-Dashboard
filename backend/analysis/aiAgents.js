@@ -617,7 +617,58 @@ Return: {
 }
 
 // ============================================================================
-// AGENT 6: INSIGHTS AGENT
+// AGENT 6: SPEAKER DETECTION AGENT
+// Analyzes transcript to determine who is speaking (closer vs prospect)
+// Uses conversation context to classify each new chunk
+// ============================================================================
+export async function runSpeakerDetectionAgent(newChunk, conversationHistory) {
+  // Provide context about what this app is for
+  const appContext = `This is a real estate sales conversation analysis app. 
+A "closer" (salesperson) is asking questions and presenting solutions.
+A "prospect" (potential seller) is sharing their situation, problems, objections.`;
+
+  // Limit history to last 8000 chars for context
+  const maxHistoryChars = 8000;
+  const trimmedHistory = conversationHistory.length > maxHistoryChars 
+    ? conversationHistory.slice(-maxHistoryChars) 
+    : conversationHistory;
+
+  const systemPrompt = `${appContext}
+
+Your task: Classify WHO is speaking in the NEW TEXT below.
+
+CLOSER (salesperson) patterns:
+- Asks questions: "How many months behind?", "What's your timeline?", "Have you considered..."
+- Presents solutions: "We can help", "Here's what we do", "I have an option for you"
+- Professional tone: "Let me explain", "Based on what you said", "I understand"
+- Follow-up/clarifying: "Can you tell me more?", "What do you mean by that?"
+- Empathy statements: "That sounds difficult", "I hear you"
+
+PROSPECT (seller) patterns:
+- Shares problems: "I'm behind on payments", "I can't afford", "I'm stressed"
+- Gives personal info: "My wife", "We've been", "I have 3 kids"
+- Objections/hesitation: "I'm not sure", "That's expensive", "I need to think"
+- Answers questions: responds to what closer asked
+- Emotional language: "worried", "scared", "frustrated", "can't take it"
+
+Use the CONVERSATION HISTORY for context - if closer just asked a question, 
+the next text is likely the prospect answering.
+
+Return ONLY: {"speaker":"closer"|"prospect","confidence":0.6-1.0,"reason":"brief reason"}`;
+
+  const userPrompt = `CONVERSATION HISTORY (for context):
+"${trimmedHistory}"
+
+NEW TEXT TO CLASSIFY:
+"${newChunk}"
+
+Who is speaking in the NEW TEXT?`;
+
+  return await callAI(systemPrompt, userPrompt, 'SpeakerDetectionAgent', 150);
+}
+
+// ============================================================================
+// AGENT 7: INSIGHTS AGENT
 // Output: summary, keyMotivators, concerns, recommendation, closingReadiness
 // ============================================================================
 export async function runInsightsAgent(transcript, prospectType) {

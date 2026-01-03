@@ -56,7 +56,6 @@ export default function LiveCoPilotDashboard() {
   const [prospectType, setProspectType] = useState<ProspectType>('foreclosure');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [questionStates, setQuestionStates] = useState<Record<number, { asked: boolean }>>({});
-  const [speakerRole, setSpeakerRole] = useState<'closer' | 'prospect'>('closer');
 
   // Accumulated history for hot buttons and objections (persists across updates)
   const [hotButtonsHistory, setHotButtonsHistory] = useState<Array<{
@@ -394,18 +393,7 @@ export default function LiveCoPilotDashboard() {
               <RecordingButton
                 prospectType={prospectType}
                 onAnalysisUpdate={handleAnalysisUpdate}
-                speakerRole={speakerRole}
               />
-
-              <select
-                value={speakerRole}
-                onChange={(e) => setSpeakerRole(e.target.value as 'closer' | 'prospect')}
-                className="bg-gray-800 text-white px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm font-medium"
-                title="Who is speaking into the mic right now?"
-              >
-                <option value="closer">Closer speaking</option>
-                <option value="prospect">Prospect speaking</option>
-              </select>
 
               {/* Truth Index Display */}
               <div className="flex items-center gap-3 px-5 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">

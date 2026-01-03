@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
+import { runSpeakerDetectionAgent } from './analysis/aiAgents.js';
 
 dotenv.config();
 
@@ -51,7 +52,7 @@ const wss = new WebSocketServer({
 // Store active connections
 const connections = new Map();
 // Store per-connection persistence metadata
-const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs }
+const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs, conversationHistory }
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -96,7 +97,7 @@ process.on('SIGTERM', () => {
 wss.on('connection', (ws, req) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
-  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0 });
+  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0, conversationHistory: '' });
 
   // Track last activity time
   ws.isAlive = true;
@@ -199,14 +200,47 @@ wss.on('connection', (ws, req) => {
           return;
         }
 
-        // Persist transcript chunk to Supabase during the call (non-blocking)
+        const chunkText = String(data.text || '').trim();
+        const chunkCharCount = chunkText.length;
+        const clientTsMs = typeof data.clientTsMs === 'number' ? data.clientTsMs : null;
+        const prospectType = typeof data.prospectType === 'string' ? data.prospectType : '';
+        
+        // Get connection metadata
         const meta = connectionPersistence.get(connectionId);
+        const conversationHistory = meta?.conversationHistory || '';
+        
+        // AI SPEAKER DETECTION: Analyze who is speaking using AI agent
+        // (runs in parallel with analysis, but we need it for Supabase persistence)
+        let detectedSpeaker = 'unknown';
+        let speakerConfidence = 0;
+        
+        try {
+          console.log(`[WS] Running Speaker Detection AI on "${chunkText.substring(0, 50)}..."`);
+          const speakerResult = await runSpeakerDetectionAgent(chunkText, conversationHistory);
+          if (speakerResult && !speakerResult.error) {
+            detectedSpeaker = speakerResult.speaker || 'unknown';
+            speakerConfidence = speakerResult.confidence || 0;
+            console.log(`[WS] AI detected speaker: ${detectedSpeaker} (confidence: ${speakerConfidence})`);
+          } else {
+            console.warn(`[WS] Speaker detection returned error or empty result`);
+          }
+        } catch (speakerErr) {
+          console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
+        }
+        
+        // Update conversation history (cap at 8000 chars for next detection)
+        const MAX_HISTORY_CHARS = 8000;
+        const prefix = detectedSpeaker === 'closer' ? '[CLOSER]: ' : detectedSpeaker === 'prospect' ? '[PROSPECT]: ' : '[?]: ';
+        const newHistory = (conversationHistory + '\n' + prefix + chunkText).trim();
+        if (meta) {
+          meta.conversationHistory = newHistory.length > MAX_HISTORY_CHARS 
+            ? newHistory.slice(-MAX_HISTORY_CHARS) 
+            : newHistory;
+          connectionPersistence.set(connectionId, meta);
+        }
+
+        // Persist transcript chunk to Supabase with AI-detected speaker role
         if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
-          const chunkText = String(data.text || '');
-          const chunkCharCount = chunkText.length;
-          const clientTsMs = typeof data.clientTsMs === 'number' ? data.clientTsMs : null;
-          const prospectType = typeof data.prospectType === 'string' ? data.prospectType : '';
-          const speakerRole = typeof data.speakerRole === 'string' ? data.speakerRole : 'unknown';
           const supabase = createUserSupabaseClient(meta.authToken);
           if (supabase) {
             void supabase
@@ -215,7 +249,8 @@ wss.on('connection', (ws, req) => {
                 session_id: meta.sessionId,
                 user_id: meta.userId,
                 user_email: meta.userEmail || '',
-                speaker_role: speakerRole,
+                speaker_role: detectedSpeaker,
+                speaker_confidence: speakerConfidence,
                 chunk_text: chunkText,
                 chunk_char_count: chunkCharCount,
                 client_ts_ms: clientTsMs

@@ -6,14 +6,12 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface RecordingButtonProps {
   prospectType: string;
-  speakerRole?: 'closer' | 'prospect';
   onTranscriptUpdate?: (transcript: string) => void;
   onAnalysisUpdate?: (analysis: any) => void;
 }
 
 export default function RecordingButton({
   prospectType,
-  speakerRole = 'closer',
   onTranscriptUpdate,
   onAnalysisUpdate
 }: RecordingButtonProps) {
@@ -205,8 +203,7 @@ export default function RecordingButton({
                   accumulatedTranscriptRef.current.trim(),
                   prospectType,
                   customScriptPrompt,
-                  pillarWeights,
-                  speakerRole
+                  pillarWeights
                 );
                 lastSendTimeRef.current = now;
                 accumulatedTranscriptRef.current = '';
@@ -221,8 +218,7 @@ export default function RecordingButton({
                       accumulatedTranscriptRef.current.trim(),
                       prospectType,
                       customScriptPrompt,
-                      pillarWeights,
-                      speakerRole
+                      pillarWeights
                     );
                     lastSendTimeRef.current = Date.now();
                     accumulatedTranscriptRef.current = '';
