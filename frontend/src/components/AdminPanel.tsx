@@ -1,72 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Settings, DollarSign, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn } from 'lucide-react';
+import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-
-// Separate component for price tier input with local state for smooth editing
-function PriceTierInput({ 
-  index, 
-  label, 
-  price, 
-  onUpdate 
-}: { 
-  index: number; 
-  label: string; 
-  price: number; 
-  onUpdate: (index: number, price: number, label?: string) => void;
-}) {
-  const [localLabel, setLocalLabel] = useState(label);
-  const [localPrice, setLocalPrice] = useState(String(price));
-
-  // Sync from parent when props change (e.g., reset to defaults)
-  useEffect(() => {
-    setLocalLabel(label);
-    setLocalPrice(String(price));
-  }, [label, price]);
-
-  const handleLabelBlur = () => {
-    onUpdate(index, price, localLabel);
-  };
-
-  const handlePriceBlur = () => {
-    const parsed = parseInt(localPrice) || 0;
-    setLocalPrice(String(parsed)); // Normalize display
-    onUpdate(index, parsed, undefined);
-  };
-
-  return (
-    <div className="p-4 bg-gray-800/40 border border-gray-700/40 rounded-xl">
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <label className="block text-sm text-gray-400 mb-1">Label</label>
-          <input
-            type="text"
-            value={localLabel}
-            onChange={(e) => setLocalLabel(e.target.value)}
-            onBlur={handleLabelBlur}
-            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-emerald-500 focus:outline-none"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm text-gray-400 mb-1">Price ($)</label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={localPrice}
-            onChange={(e) => setLocalPrice(e.target.value.replace(/[^0-9]/g, ''))}
-            onBlur={handlePriceBlur}
-            className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white font-mono focus:border-emerald-500 focus:outline-none"
-          />
-        </div>
-      </div>
-      <div className="mt-3 text-right">
-        <span className="text-emerald-400 font-bold text-lg">
-          ${(parseInt(localPrice) || 0).toLocaleString()}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 // Full-page login/signup screen
 function AuthScreen({ 
@@ -380,7 +315,7 @@ interface AdminPanelProps {
 }
 
 export default function AdminPanel({ onBack }: AdminPanelProps) {
-  const { settings, updatePillarWeight, updatePriceTier, updateCustomPrompt, resetToDefaults, saveToSupabase, saving, lastSaved } = useSettings();
+  const { settings, updatePillarWeight, updateCustomPrompt, resetToDefaults, saveToSupabase, saving, lastSaved } = useSettings();
   const { user, loading, signOut } = useAuth();
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -561,34 +496,8 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
             </div>
           </div>
 
-          {/* Price Tiers Section */}
-          <div className="backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="relative">
-                <DollarSign className="w-7 h-7 text-emerald-400" />
-                <div className="absolute inset-0 blur-md bg-emerald-400/30" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Price Tiers</h2>
-                <p className="text-sm text-gray-400">Configure your Lubometer price tiers</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {settings.priceTiers.map((tier, index) => (
-                <PriceTierInput
-                  key={index}
-                  index={index}
-                  label={tier.label}
-                  price={tier.price}
-                  onUpdate={updatePriceTier}
-                />
-              ))}
-            </div>
-          </div>
-
           {/* Custom Script Prompt Section */}
-          <div className="lg:col-span-2 backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-6">
+          <div className="backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="relative">
                 <MessageSquare className="w-7 h-7 text-amber-400" />
@@ -642,17 +551,11 @@ export default function AdminPanel({ onBack }: AdminPanelProps) {
               </span>
             )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-gray-800/40 rounded-xl">
               <div className="text-sm text-gray-400 mb-1">Pillar Weights</div>
               <div className="text-white font-mono text-sm">
                 {settings.pillarWeights.map(p => `${p.id}:${p.weight}`).join(' | ')}
-              </div>
-            </div>
-            <div className="p-4 bg-gray-800/40 rounded-xl">
-              <div className="text-sm text-gray-400 mb-1">Price Tiers</div>
-              <div className="text-emerald-400 font-mono text-sm">
-                {settings.priceTiers.map(t => `$${t.price.toLocaleString()}`).join(' | ')}
               </div>
             </div>
             <div className="p-4 bg-gray-800/40 rounded-xl">
