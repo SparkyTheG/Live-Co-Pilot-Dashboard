@@ -145,16 +145,28 @@ wss.on('connection', (ws, req) => {
 
         // Create a call session in Supabase (if configured + authed)
         const meta = connectionPersistence.get(connectionId);
+        console.log(`[WS] Creating session - authToken: ${meta?.authToken ? 'present' : 'MISSING'}, supabase: ${isSupabaseConfigured() ? 'configured' : 'NOT CONFIGURED'}`);
         if (meta?.authToken && isSupabaseConfigured()) {
           const supabase = createUserSupabaseClient(meta.authToken);
           if (supabase) {
             // Resolve user id from token so RLS inserts work with explicit user_id
-            const { data: userData } = await supabase.auth.getUser();
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            if (userError) {
+              console.warn(`[WS] Auth getUser error: ${userError.message}`);
+            }
             const userId = userData?.user?.id || null;
             const userEmail = userData?.user?.email || null;
+            console.log(`[WS] Resolved user: ${userEmail || 'NO EMAIL'}, userId: ${userId || 'NO ID'}`);
+            
             meta.userId = userId;
             meta.userEmail = userEmail;
             if (userId) {
+              // IMPORTANT: Store userId and userEmail in meta for later use by summary agent
+              meta.userId = userId;
+              meta.userEmail = userEmail;
+              connectionPersistence.set(connectionId, meta);
+              console.log(`[WS] Stored userId=${userId}, userEmail=${userEmail} in connection meta`);
+
               const { data: sessionRow, error } = await supabase
                 .from('call_sessions')
                 .insert({
@@ -170,8 +182,11 @@ wss.on('connection', (ws, req) => {
               } else {
                 meta.sessionId = sessionRow?.id || null;
                 connectionPersistence.set(connectionId, meta);
+                console.log(`[WS] Session created: sessionId=${meta.sessionId}, ready for summaries`);
                 sendToClient(connectionId, { type: 'session_started', sessionId: meta.sessionId });
               }
+            } else {
+              console.warn(`[WS] No userId resolved from auth token - summaries will not work`);
             }
           }
         }
@@ -500,18 +515,23 @@ async function startRealtimeListening(connectionId, config) {
               }
             }
 
-            // CONVERSATION SUMMARY: Continuously analyze and update summary (every 30 seconds)
+            // CONVERSATION SUMMARY: Continuously analyze and update summary (every 15 seconds for faster testing)
             // This runs in parallel with the main analysis, non-blocking
-            const SUMMARY_INTERVAL_MS = 30000; // 30 seconds
-            if (!meta.lastSummaryMs || (now - meta.lastSummaryMs) > SUMMARY_INTERVAL_MS) {
+            const SUMMARY_INTERVAL_MS = 15000; // 15 seconds (reduced from 30s for faster testing)
+            const timeSinceLastSummary = meta.lastSummaryMs ? (now - meta.lastSummaryMs) : SUMMARY_INTERVAL_MS + 1;
+            console.log(`[${connectionId}] Summary check: timeSince=${timeSinceLastSummary}ms, transcriptLen=${(meta.conversationHistory || '').length}, sessionId=${meta.sessionId}`);
+            
+            if (timeSinceLastSummary > SUMMARY_INTERVAL_MS) {
               meta.lastSummaryMs = now;
               connectionPersistence.set(connectionId, meta);
               
               // Run summary analysis in background (non-blocking)
               const formattedTranscript = meta.conversationHistory || '';
-              if (formattedTranscript.length > 100) { // Only analyze if there's meaningful content
+              if (formattedTranscript.length > 50) { // Reduced from 100 for testing
+                console.log(`[${connectionId}] Running conversation summary agent...`);
                 runConversationSummaryAgent(formattedTranscript, prospectType, false)
                   .then((summaryResult) => {
+                    console.log(`[${connectionId}] Summary agent result:`, summaryResult ? 'success' : 'null', summaryResult?.error || '');
                     if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
                       const supabase = createUserSupabaseClient(meta.authToken);
                       if (supabase) {
@@ -526,17 +546,18 @@ async function startRealtimeListening(connectionId, config) {
                         };
 
                         // Upsert summary (update if exists, insert if new)
+                        console.log(`[${connectionId}] Upserting summary to Supabase...`, { session_id: summaryData.session_id, user_id: summaryData.user_id });
                         void supabase
                           .from('call_summaries')
                           .upsert(summaryData, { onConflict: 'session_id' })
-                          .then(({ error }) => {
+                          .then(({ error, data: upsertData }) => {
                             if (error) {
-                              console.warn(`[WS] Supabase summary upsert failed: ${error.message}`);
+                              console.error(`[WS] Supabase summary upsert failed: ${error.message}`, error);
                             } else {
-                              console.log(`[${connectionId}] Summary updated (progressive)`);
+                              console.log(`[${connectionId}] Summary upserted successfully to Supabase`);
                             }
                           })
-                          .catch(() => {});
+                          .catch((err) => { console.error(`[WS] Summary upsert exception:`, err); });
                       }
                     }
                   })
