@@ -4,6 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // #region agent log
+console.log('[DEBUG supabase.ts] Raw env values:', {supabaseUrl, supabaseAnonKeyLength: supabaseAnonKey?.length, supabaseAnonKeyStart: supabaseAnonKey?.substring(0,20)});
 fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabase.ts:6',message:'Raw env values',data:{supabaseUrl:supabaseUrl,supabaseAnonKeyLength:supabaseAnonKey?.length,supabaseAnonKeyStart:supabaseAnonKey?.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
 // #endregion
 
@@ -19,6 +20,7 @@ const isSupabaseConfigured = () => {
   };
   const result = checks.hasUrl && checks.hasKey && checks.notPlaceholderUrl && checks.notPlaceholderKey && checks.startsWithHttps && checks.includesSupabaseCo;
   // #region agent log
+  console.log('[DEBUG supabase.ts] Config check results:', {checks, result});
   fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabase.ts:isSupabaseConfigured',message:'Config check results',data:{checks,result},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
   // #endregion
   return result;
