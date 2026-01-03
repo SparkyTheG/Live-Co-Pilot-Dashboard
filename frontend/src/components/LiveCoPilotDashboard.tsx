@@ -83,6 +83,9 @@ export default function LiveCoPilotDashboard() {
   // Track best lubometer and truth index scores for stability (prevents wild fluctuations)
   const [bestLubometerScore, setBestLubometerScore] = useState<number>(0);
   const [bestTruthIndexScore, setBestTruthIndexScore] = useState<number>(0);
+  // Prevent unbounded growth during long sessions
+  const MAX_HOT_BUTTONS_HISTORY = 25;
+  const MAX_OBJECTIONS_HISTORY = 25;
 
   // Reset asked questions and best scores when prospect type changes (different questions for different types)
   useEffect(() => {
@@ -138,8 +141,6 @@ export default function LiveCoPilotDashboard() {
       return Math.max(smoothed, newTruthIndexScore);
     });
 
-    setAnalysisData(analysis);
-
     const now = Date.now();
 
     // Accumulate hot buttons (avoid duplicates by ID, keep most recent)
@@ -169,12 +170,26 @@ export default function LiveCoPilotDashboard() {
         }
         // Sort by timestamp (newest first) then by score
         const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.score - a.score);
+        const capped = sorted.slice(0, MAX_HOT_BUTTONS_HISTORY);
         
         // #region agent log - Hypothesis E,F: Track hot buttons order
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:hotButtonsMerge',message:'Hot buttons merged and sorted',data:{prevCount:prev.length,newItemsCount:newItems.length,finalCount:sorted.length,topThreeIds:sorted.slice(0,3).map(h=>h.id),topThreeTimestamps:sorted.slice(0,3).map(h=>h.timestamp),allSameTimestamp:sorted.length>1&&sorted.every(h=>h.timestamp===sorted[0].timestamp)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E,F'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:hotButtonsMerge',message:'Hot buttons merged and sorted',data:{prevCount:prev.length,newItemsCount:newItems.length,finalCount:capped.length,topThreeIds:capped.slice(0,3).map(h=>h.id),topThreeTimestamps:capped.slice(0,3).map(h=>h.timestamp),allSameTimestamp:capped.length>1&&capped.every(h=>h.timestamp===capped[0].timestamp)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E,F'})}).catch(()=>{});
         // #endregion
         
-        return sorted;
+        // Avoid unnecessary state updates if top order + scores didn't change
+        if (prev.length === capped.length) {
+          let same = true;
+          for (let i = 0; i < capped.length; i++) {
+            const a = prev[i];
+            const b = capped[i];
+            if (!a || !b || a.id !== b.id || a.score !== b.score || a.quote !== b.quote) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return prev;
+        }
+        return capped;
       });
     }
 
@@ -201,7 +216,9 @@ export default function LiveCoPilotDashboard() {
           }
         }
         // Sort by timestamp (newest first) then by probability
-        return merged.sort((a, b) => b.timestamp - a.timestamp || b.probability - a.probability);
+        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.probability - a.probability);
+        const capped = sorted.slice(0, MAX_OBJECTIONS_HISTORY);
+        return capped;
       });
     }
 

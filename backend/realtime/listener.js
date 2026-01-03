@@ -14,6 +14,8 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
   let conversationHistory = '';
   let isConnected = true;
   let audioBuffer = Buffer.alloc(0);
+  // Cap history so long sessions don't grow prompt size unbounded (prevents slowdown)
+  const MAX_HISTORY_CHARS = Number(process.env.MAX_TRANSCRIPT_CHARS || 8000);
 
   try {
     // OpenAI Realtime API integration
@@ -44,6 +46,10 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
         if (!text || text.trim().length === 0) return;
         
         conversationHistory += text + ' ';
+        // Trim from the left if history exceeds cap (keep most recent context)
+        if (conversationHistory.length > MAX_HISTORY_CHARS) {
+          conversationHistory = conversationHistory.slice(conversationHistory.length - MAX_HISTORY_CHARS);
+        }
         console.log(`[Realtime] Received transcript chunk: "${text.trim()}" (total history: ${conversationHistory.length} chars)`);
         
         // Trigger analysis on transcript updates
