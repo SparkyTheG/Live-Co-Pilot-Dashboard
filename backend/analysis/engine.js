@@ -101,16 +101,15 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
   // 3. Calculate Pillars from AI indicator scores
   const pillarScores = await analyzePillars(lowerTranscript, prospectType, aiAnalysis);
 
-  // 4. Calculate Truth Index (uses pillar scores for penalty calculation)
-  const truthIndex = calculateTruthIndex(pillarScores, lowerTranscript);
-  
-  // Enhance truth index with AI coherence analysis
-  if (aiAnalysis.coherenceSignals && aiAnalysis.coherenceSignals.length > 0) {
-    truthIndex.signals = [...truthIndex.signals, ...aiAnalysis.coherenceSignals];
-  }
-  if (aiAnalysis.incoherenceFlags && aiAnalysis.incoherenceFlags.length > 0) {
-    truthIndex.redFlags = [...truthIndex.redFlags, ...aiAnalysis.incoherenceFlags];
-  }
+  // 4. Calculate Truth Index (uses pillar scores + AI-detected rules)
+  // Pass AI Truth Index result so it can detect T4 (Claims Authority + Reveals Need for Approval)
+  // which requires conversation analysis, not just indicator scores
+  const aiTruthIndexResult = {
+    detectedRules: aiAnalysis.detectedRules || [],
+    coherenceSignals: aiAnalysis.coherenceSignals || [],
+    overallCoherence: aiAnalysis.overallCoherence || 'medium'
+  };
+  const truthIndex = calculateTruthIndex(pillarScores, lowerTranscript, aiTruthIndexResult);
 
   // 5. Calculate Lubometer (uses pillar scores + truth index penalties)
   const lubometer = calculateLubometer(pillarScores);

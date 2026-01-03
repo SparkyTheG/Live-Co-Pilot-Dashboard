@@ -345,28 +345,60 @@ Return: {"askedQuestions":[0,2,5]} (indices of questions asked)`;
 
 // ============================================================================
 // AGENT 5: TRUTH INDEX AGENT
-// Output: coherenceSignals, incoherenceFlags, overallCoherence
+// Detects the 5 specific incoherence rules from Truth Index CSV
+// Output: detectedRules (T1-T5 with evidence), coherenceSignals, overallCoherence
 // ============================================================================
 export async function runTruthIndexAgent(transcript) {
-  const systemPrompt = `Detect if prospect's statements ALIGN or CONTRADICT each other.
+  const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
-CONTRADICTIONS (red flags):
-- High pain + no urgency to act
-- Wants change + avoids decisions  
-- Has money + resists price
-- Claims authority + needs spouse approval
-- Wants results + blames external factors
+INCOHERENCE RULES TO DETECT:
 
-ALIGNMENT (positive):
-- Pain matches urgency
-- Desire matches decisiveness
-- Takes ownership
+T1: HIGH PAIN + LOW URGENCY (-15 pts)
+- Says things like "this is killing me", "can't take it anymore", "so stressed"
+- BUT shows no urgency: no deadline, no rush, "whenever", "no hurry"
+- Contradiction: Claims suffering but not motivated to act NOW
 
-Return: {"coherenceSignals":["Pain aligned with urgency"],"incoherenceFlags":["Claims authority but needs approval"],"overallCoherence":"high|medium|low"}`;
+T2: HIGH DESIRE + LOW DECISIVENESS (-15 pts)  
+- Expresses strong desire: "I really want this", "need to change", "desperate"
+- BUT avoids decisions: "need to think", "not sure", "maybe later"
+- Contradiction: Wants change but won't commit to decision
 
-  const userPrompt = `Check coherence:\n"${transcript}"`;
+T3: HIGH MONEY + HIGH PRICE SENSITIVITY (-10 pts)
+- Indicates money available: "I have the funds", "can afford it", "money isn't issue"
+- BUT resists price: "too expensive", "can you lower price", "need discount"
+- Contradiction: Has money but still negotiating hard
 
-  return await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 400);
+T4: CLAIMS AUTHORITY + REVEALS NEED FOR APPROVAL (-10 pts)
+- First claims: "I make the decisions", "it's my choice", "I'm the decision maker"
+- THEN reveals: "need to ask spouse/partner", "boss needs to approve", "have to check with..."
+- Contradiction: Says they decide but actually needs permission
+
+T5: HIGH DESIRE + LOW RESPONSIBILITY (-15 pts)
+- Wants results: "I want success", "need this to work", "looking for solution"
+- BUT blames others: "it's not my fault", "the market did this", "they made me"
+- Contradiction: Wants outcome but doesn't own the problem
+
+For each detected rule, provide:
+- ruleId: T1, T2, T3, T4, or T5
+- evidence: exact quotes or paraphrased evidence from transcript
+- confidence: 0.6-1.0
+
+Also detect POSITIVE coherence:
+- Pain + urgency aligned
+- Desire + commitment aligned
+- Takes full ownership
+
+Return: {
+  "detectedRules": [
+    {"ruleId": "T4", "evidence": "Said 'I decide' but later 'need to ask my wife'", "confidence": 0.9}
+  ],
+  "coherenceSignals": ["Pain aligns with urgency - motivated to act"],
+  "overallCoherence": "high|medium|low"
+}`;
+
+  const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
+
+  return await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 600);
 }
 
 // ============================================================================
@@ -415,15 +447,18 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   ]);
   
   console.log(`[MultiAgent] All done in ${Date.now() - startTime}ms`);
+  console.log(`[MultiAgent] Truth Index: ${(truthIndexResult.detectedRules || []).length} incoherence rules detected`);
   
   return {
     indicatorSignals: pillarsResult.indicatorSignals || {},
     hotButtonDetails: hotButtonsResult.hotButtonDetails || [],
     objections: objectionsResult.objections || [],
     askedQuestions: diagnosticResult.askedQuestions || [],
+    // Truth Index: AI-detected T1-T5 rules + coherence signals
+    detectedRules: truthIndexResult.detectedRules || [],
     coherenceSignals: truthIndexResult.coherenceSignals || [],
-    incoherenceFlags: truthIndexResult.incoherenceFlags || [],
     overallCoherence: truthIndexResult.overallCoherence || 'medium',
+    // Insights
     insights: insightsResult.summary || '',
     keyMotivators: insightsResult.keyMotivators || [],
     concerns: insightsResult.concerns || [],
