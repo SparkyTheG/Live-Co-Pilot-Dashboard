@@ -230,7 +230,12 @@ export class ConversationWebSocket {
     }));
   }
 
-  sendTranscript(text: string, prospectType?: string, customScriptPrompt?: string) {
+  sendTranscript(
+    text: string, 
+    prospectType?: string, 
+    customScriptPrompt?: string,
+    pillarWeights?: { id: string; weight: number }[]
+  ) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket is not connected, cannot send transcript');
       return;
@@ -240,7 +245,8 @@ export class ConversationWebSocket {
       type: 'transcript',
       text: text,
       prospectType: prospectType,
-      customScriptPrompt: customScriptPrompt || ''
+      customScriptPrompt: customScriptPrompt || '',
+      pillarWeights: pillarWeights || null
     }));
   }
 

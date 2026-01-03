@@ -152,8 +152,8 @@ wss.on('connection', (ws, req) => {
         }
 
         if (realtimeConnection) {
-          // Pass customScriptPrompt from frontend settings
-          await realtimeConnection.sendTranscript(data.text, data.prospectType, data.customScriptPrompt);
+          // Pass customScriptPrompt and pillarWeights from frontend settings
+          await realtimeConnection.sendTranscript(data.text, data.prospectType, data.customScriptPrompt, data.pillarWeights);
         } else {
           console.error(`[WS] Failed to create realtime connection for ${connectionId}`);
         }
@@ -227,11 +227,14 @@ async function startRealtimeListening(connectionId, config) {
     });
 
     const realtimeConnection = await createRealtimeConnection({
-      onTranscript: async (transcript, prospectType, customScriptPrompt) => {
+      onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
         try {
           console.log(`[${connectionId}] Analyzing transcript (${transcript.length} chars), prospectType: ${prospectType}`);
-          // Analyze the conversation in real-time with prospect type and custom script prompt
-          const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt);
+          if (pillarWeights) {
+            console.log(`[${connectionId}] Using custom pillar weights from Admin Panel`);
+          }
+          // Analyze the conversation in real-time with prospect type, custom script prompt, and pillar weights
+          const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
 
           // PERSISTENCE LOGIC: If new analysis has 0 score but we have a previous good score,
           // preserve the previous score to prevent the UI from "dropping to zero".

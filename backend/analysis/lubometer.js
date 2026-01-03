@@ -9,17 +9,37 @@
  * 7. Final Lubometer Score: Total Score – Penalties
  */
 
-const PILLAR_WEIGHTS = {
-  P1: 1.5, // Perceived Spread
+// Default weights - matching frontend Admin Panel defaults for consistency
+// Note: Total weights = 9.0, so max score = 90 when all pillars score 10
+const DEFAULT_PILLAR_WEIGHTS = {
+  P1: 1.5, // Perceived Spread (Pain & Desire)
   P2: 1.0, // Urgency
   P3: 1.0, // Decisiveness
   P4: 1.5, // Available Money
   P5: 1.0, // Responsibility & Ownership
-  P6: 1.0, // Price Sensitivity (Reverse Scored)
-  P7: 1.0  // Trust
+  P6: 1.5, // Price Sensitivity (Reverse Scored)
+  P7: 1.5  // Trust
 };
 
-export function calculateLubometer(pillarScores) {
+/**
+ * Calculate Lubometer score
+ * @param {Object} pillarScores - Pillar scores from AI analysis
+ * @param {Array|null} customWeights - Custom pillar weights from Admin Panel [{id: 'P1', weight: 1.5}, ...]
+ */
+export function calculateLubometer(pillarScores, customWeights = null) {
+  // Convert custom weights array to object, or use defaults
+  let PILLAR_WEIGHTS = { ...DEFAULT_PILLAR_WEIGHTS };
+  
+  if (customWeights && Array.isArray(customWeights) && customWeights.length > 0) {
+    console.log(`[Lubometer] Using custom weights from Admin Panel:`, customWeights);
+    customWeights.forEach(cw => {
+      if (cw.id && typeof cw.weight === 'number') {
+        PILLAR_WEIGHTS[cw.id] = cw.weight;
+      }
+    });
+  } else {
+    console.log(`[Lubometer] Using default weights:`, DEFAULT_PILLAR_WEIGHTS);
+  }
   if (!pillarScores || !pillarScores.pillars) {
     return {
       score: 0,
@@ -67,9 +87,11 @@ export function calculateLubometer(pillarScores) {
     P7: weightedScores.P7.toFixed(2)
   });
 
-  // Step 5: Total score before penalties (max = 90)
+  // Step 5: Total score before penalties
+  // Max score depends on the sum of weights (e.g., default weights sum to 9.0, so max = 90)
   const totalBeforePenalties = Object.values(weightedScores).reduce((sum, score) => sum + score, 0);
-  console.log(`[Lubometer] Total before penalties: ${totalBeforePenalties.toFixed(2)} (max: 90)`);
+  const maxScore = Object.values(PILLAR_WEIGHTS).reduce((sum, w) => sum + w, 0) * 10;
+  console.log(`[Lubometer] Total before penalties: ${totalBeforePenalties.toFixed(2)} (max: ${maxScore})`);
 
   // Step 6: Apply Truth Index penalties (calculated separately, passed in)
   // Penalties are applied in truthIndex.js and subtracted here
@@ -77,7 +99,7 @@ export function calculateLubometer(pillarScores) {
   console.log(`[Lubometer] Truth Index penalties: ${penalties}`);
   
   // Step 7: Final Lubometer Score
-  const finalScore = Math.max(0, Math.min(90, totalBeforePenalties - penalties));
+  const finalScore = Math.max(0, Math.min(maxScore, totalBeforePenalties - penalties));
   console.log(`[Lubometer] Final score: ${finalScore.toFixed(2)} (${totalBeforePenalties.toFixed(2)} - ${penalties})`);
 
   // Step 8: Determine Readiness Zone
@@ -123,10 +145,22 @@ export function calculateLubometer(pillarScores) {
 
   return {
     score: Math.round(finalScore),
+    maxScore: Math.round(maxScore),
     level,
     interpretation,
     action,
     weightedScores,
+    pillarScores: {
+      P1: pillarScores.pillars.P1?.average || 5,
+      P2: pillarScores.pillars.P2?.average || 5,
+      P3: pillarScores.pillars.P3?.average || 5,
+      P4: pillarScores.pillars.P4?.average || 5,
+      P5: pillarScores.pillars.P5?.average || 5,
+      P6: p6Raw,
+      P6_reversed: p6Reversed,
+      P7: pillarScores.pillars.P7?.average || 5
+    },
+    weightsUsed: PILLAR_WEIGHTS,
     totalBeforePenalties: Math.round(totalBeforePenalties),
     penalties
   };

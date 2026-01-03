@@ -37,8 +37,9 @@ const MIN_ANALYSIS_INTERVAL = 2000; // Minimum 2 seconds between AI analyses
  * @param {string} transcript - The conversation transcript
  * @param {string|null} prospectTypeOverride - Override the detected prospect type
  * @param {string} customScriptPrompt - Custom prompt from admin settings for rebuttal scripts
+ * @param {Array|null} pillarWeights - Custom pillar weights from Admin Panel [{id: 'P1', weight: 1.5}, ...]
  */
-export async function analyzeConversation(transcript, prospectTypeOverride = null, customScriptPrompt = '') {
+export async function analyzeConversation(transcript, prospectTypeOverride = null, customScriptPrompt = '', pillarWeights = null) {
   const startTime = Date.now();
 
   if (!transcript || transcript.trim().length === 0) {
@@ -52,8 +53,9 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
   // 1. Detect or use provided prospect type
   const prospectType = prospectTypeOverride || detectProspectType(lowerTranscript);
 
-  // Create cache key from transcript hash + prospect type
-  const cacheKey = `${prospectType}:${simpleHash(cleanedTranscript)}`;
+  // Create cache key from transcript hash + prospect type + pillar weights hash
+  const weightsHash = pillarWeights ? simpleHash(JSON.stringify(pillarWeights)) : 'default';
+  const cacheKey = `${prospectType}:${weightsHash}:${simpleHash(cleanedTranscript)}`;
 
   // Check cache first (avoid duplicate API calls for same content)
   const cached = analysisCache.get(cacheKey);
@@ -111,8 +113,8 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
   };
   const truthIndex = calculateTruthIndex(pillarScores, lowerTranscript, aiTruthIndexResult);
 
-  // 5. Calculate Lubometer (uses pillar scores + truth index penalties)
-  const lubometer = calculateLubometer(pillarScores);
+  // 5. Calculate Lubometer (uses pillar scores + truth index penalties + custom weights)
+  const lubometer = calculateLubometer(pillarScores, pillarWeights);
 
   // 6. Extract Hot Buttons (uses AI hot button details)
   let hotButtons = extractHotButtons(lowerTranscript, prospectType, aiAnalysis, pillarScores);
@@ -134,9 +136,15 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
     prospectType,
     lubometer: {
       score: lubometer.score,
+      maxScore: lubometer.maxScore || 90,
       level: lubometer.level,
       interpretation: lubometer.interpretation,
-      action: lubometer.action
+      action: lubometer.action,
+      pillarScores: lubometer.pillarScores,
+      weightsUsed: lubometer.weightsUsed,
+      weightedScores: lubometer.weightedScores,
+      totalBeforePenalties: lubometer.totalBeforePenalties,
+      penalties: lubometer.penalties
     },
     truthIndex: {
       score: truthIndex.score,

@@ -14,9 +14,11 @@ export default function RecordingButton({
   onTranscriptUpdate,
   onAnalysisUpdate
 }: RecordingButtonProps) {
-  // Get custom script prompt from admin settings
+  // Get admin settings (custom script prompt + pillar weights)
   const { settings } = useSettings();
   const customScriptPrompt = settings.customScriptPrompt || '';
+  // Extract pillar weights for Lubometer calculation
+  const pillarWeights = settings.pillarWeights.map(p => ({ id: p.id, weight: p.weight }));
   const [isRecording, setIsRecording] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,10 +74,10 @@ export default function RecordingButton({
         console.log('💓 Sending WebSocket keepalive ping');
         // Send an empty transcript as keepalive (backend will ignore empty transcripts)
         // This keeps the connection alive
-        wsRef.current.sendTranscript('', prospectType, customScriptPrompt);
+        wsRef.current.sendTranscript('', prospectType, customScriptPrompt, pillarWeights);
       }
     }, 15000); // 15 seconds (reduced from 30s)
-  }, [prospectType, customScriptPrompt]);
+  }, [prospectType, customScriptPrompt, pillarWeights]);
 
   // Stop keepalive
   const stopKeepalive = useCallback(() => {
@@ -185,7 +187,7 @@ export default function RecordingButton({
               // Send accumulated transcript
               if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
                 console.log('📤 Sending transcript to backend:', accumulatedTranscriptRef.current.substring(0, 100));
-                wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt);
+                wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
                 lastSendTimeRef.current = now;
                 accumulatedTranscriptRef.current = '';
               }
@@ -195,7 +197,7 @@ export default function RecordingButton({
                 sendTimeoutRef.current = setTimeout(() => {
                   if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
                     console.log('📤 Sending accumulated transcript:', accumulatedTranscriptRef.current.substring(0, 100));
-                    wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt);
+                    wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
                     lastSendTimeRef.current = Date.now();
                     accumulatedTranscriptRef.current = '';
                   }
@@ -340,7 +342,7 @@ export default function RecordingButton({
     // Send any remaining accumulated transcript before disconnecting
     if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
       console.log('📤 Sending final accumulated transcript');
-      wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt);
+      wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
       accumulatedTranscriptRef.current = '';
     }
 

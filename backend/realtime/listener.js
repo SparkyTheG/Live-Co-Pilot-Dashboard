@@ -40,7 +40,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       },
       
       // Send text transcript (from frontend or transcription)
-      sendTranscript: async (text, prospectType = null, customScriptPrompt = '') => {
+      sendTranscript: async (text, prospectType = null, customScriptPrompt = '', pillarWeights = null) => {
         if (!text || text.trim().length === 0) return;
         
         conversationHistory += text + ' ';
@@ -49,7 +49,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
         // Trigger analysis on transcript updates
         if (onTranscript && isConnected) {
           try {
-            await onTranscript(conversationHistory, prospectType, customScriptPrompt);
+            await onTranscript(conversationHistory, prospectType, customScriptPrompt, pillarWeights);
           } catch (error) {
             console.error('[Realtime] Transcript analysis error:', error);
             if (onError) onError(error);
