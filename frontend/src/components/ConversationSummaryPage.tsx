@@ -66,11 +66,17 @@ export default function ConversationSummaryPage({ onBack }: ConversationSummaryP
         .limit(50);
 
       if (summariesError) {
-        // Check if table doesn't exist
-        if (summariesError.message.includes('schema cache') || 
-            summariesError.message.includes('does not exist') ||
-            summariesError.code === '42P01') {
+        // Check if table doesn't exist (code 42P01) - but NOT schema cache errors
+        // Schema cache errors usually resolve on retry
+        if (summariesError.code === '42P01' || 
+            (summariesError.message.includes('does not exist') && !summariesError.message.includes('schema cache'))) {
           setError('TABLE_NOT_FOUND');
+          setLoading(false);
+          return;
+        }
+        // For schema cache errors, show a different message
+        if (summariesError.message.includes('schema cache')) {
+          setError('SCHEMA_CACHE');
           setLoading(false);
           return;
         }
@@ -158,7 +164,23 @@ export default function ConversationSummaryPage({ onBack }: ConversationSummaryP
       </nav>
 
       <div className="max-w-[1400px] mx-auto px-8 py-8">
-        {error === 'TABLE_NOT_FOUND' ? (
+        {error === 'SCHEMA_CACHE' ? (
+          <div className="mb-6 backdrop-blur-xl bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-400" />
+              <h3 className="text-lg font-bold text-amber-300">Schema Cache Updating</h3>
+            </div>
+            <p className="text-gray-300 mb-4">
+              Supabase is updating its schema cache. This usually resolves within a few seconds.
+            </p>
+            <button
+              onClick={loadSummaries}
+              className="px-4 py-2 bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/50 rounded-lg transition-all text-amber-300 text-sm font-medium"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : error === 'TABLE_NOT_FOUND' ? (
           <div className="mb-6 backdrop-blur-xl bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-400" />
