@@ -229,14 +229,28 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
     // Don't fall back to indicatorSignals alone - we need the AI to provide quotes
   }
   
-  // Sort by score (highest first)
+  // FINAL DEDUPLICATION: Remove any duplicates that slipped through (keep first occurrence = highest score after sort)
+  const finalSeenIds = new Set();
+  const dedupedHotButtons = [];
+  
+  // First sort by score (highest first)
   detectedHotButtons.sort((a, b) => b.score - a.score);
   
-  console.log(`[HotButtons] Final result: ${detectedHotButtons.length} hot buttons extracted`);
+  // Then deduplicate - keeping only first occurrence (which has highest score)
+  for (const hb of detectedHotButtons) {
+    if (!finalSeenIds.has(hb.id)) {
+      finalSeenIds.add(hb.id);
+      dedupedHotButtons.push(hb);
+    } else {
+      console.log(`[HotButtons] FINAL DEDUP: Removing duplicate ID ${hb.id}`);
+    }
+  }
+  
+  console.log(`[HotButtons] Final result: ${dedupedHotButtons.length} hot buttons (removed ${detectedHotButtons.length - dedupedHotButtons.length} duplicates)`);
 
   // #region agent log - Hypothesis F,G: Track backend hot buttons order
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'hotButtons.js:extract',message:'Hot buttons extracted from backend',data:{count:detectedHotButtons.length,idsInOrder:detectedHotButtons.map(h=>h.id),scoresInOrder:detectedHotButtons.map(h=>h.score)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F,G'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'hotButtons.js:extract',message:'Hot buttons extracted from backend',data:{count:dedupedHotButtons.length,idsInOrder:dedupedHotButtons.map(h=>h.id),scoresInOrder:dedupedHotButtons.map(h=>h.score)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F,G'})}).catch(()=>{});
   // #endregion
   
-  return detectedHotButtons;
+  return dedupedHotButtons;
 }

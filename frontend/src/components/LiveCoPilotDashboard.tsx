@@ -79,13 +79,20 @@ export default function LiveCoPilotDashboard() {
   const [askedQuestionsHistory, setAskedQuestionsHistory] = useState<Set<number>>(new Set());
   // Use ref to track latest value (avoids stale closure issues)
   const askedQuestionsRef = useRef<Set<number>>(new Set());
+  
+  // Track best lubometer and truth index scores for stability (prevents wild fluctuations)
+  const [bestLubometerScore, setBestLubometerScore] = useState<number>(0);
+  const [bestTruthIndexScore, setBestTruthIndexScore] = useState<number>(0);
 
-  // Reset asked questions when prospect type changes (different questions for different types)
+  // Reset asked questions and best scores when prospect type changes (different questions for different types)
   useEffect(() => {
     const newSet = new Set<number>();
     setAskedQuestionsHistory(newSet);
     askedQuestionsRef.current = newSet;
     setQuestionStates({});
+    // Reset best scores when prospect type changes
+    setBestLubometerScore(0);
+    setBestTruthIndexScore(0);
   }, [prospectType]);
 
   // Sync ref with state whenever state changes
@@ -107,8 +114,29 @@ export default function LiveCoPilotDashboard() {
     });
 
     // #region agent log - Hypothesis A,D: Track lubometer data on each update
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:handleAnalysisUpdate',message:'Analysis update received',data:{lubometerScore:analysis.lubometer?.score,lubometerLevel:analysis.lubometer?.level,lubometerNull:analysis.lubometer===null||analysis.lubometer===undefined,hotButtonsCount:analysis.hotButtons?.length||0,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:handleAnalysisUpdate',message:'Analysis update received',data:{lubometerScore:analysis.lubometer?.score,lubometerLevel:analysis.lubometer?.level,truthIndexScore:analysis.truthIndex?.score,lubometerNull:analysis.lubometer===null||analysis.lubometer===undefined,hotButtonsCount:analysis.hotButtons?.length||0,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
     // #endregion
+
+    // STABILITY: Track best lubometer score (allows increases, gradual decreases)
+    const newLubometerScore = analysis.lubometer?.score ?? 0;
+    setBestLubometerScore(prev => {
+      if (newLubometerScore >= prev) {
+        return newLubometerScore; // New score is higher or equal - use it
+      }
+      // Score decreased - use weighted average to smooth transition (70% old, 30% new)
+      const smoothed = Math.round(prev * 0.7 + newLubometerScore * 0.3);
+      return Math.max(smoothed, newLubometerScore); // Never go below actual new score
+    });
+    
+    // STABILITY: Track best truth index score
+    const newTruthIndexScore = analysis.truthIndex?.score ?? 0;
+    setBestTruthIndexScore(prev => {
+      if (newTruthIndexScore >= prev) {
+        return newTruthIndexScore;
+      }
+      const smoothed = Math.round(prev * 0.7 + newTruthIndexScore * 0.3);
+      return Math.max(smoothed, newTruthIndexScore);
+    });
 
     setAnalysisData(analysis);
 
@@ -258,13 +286,15 @@ export default function LiveCoPilotDashboard() {
   // Use real analysis data only - no mock/calculated fallbacks
 
   // Only use real lubometer score from analysis
+  // Use dynamic maxScore from backend (defaults to 90 if not provided)
+  const lubometerMaxScore = analysisData?.lubometer?.maxScore || 90;
   const lubometerScoreRaw = analysisData?.lubometer?.score ?? 0;
   const completionPercentage = lubometerScoreRaw > 0
-    ? Math.round((lubometerScoreRaw / 90) * 100)
+    ? Math.round((lubometerScoreRaw / lubometerMaxScore) * 100)
     : 0;
 
-  // Use real truth index from analysis only
-  const truthScore = analysisData?.truthIndex?.score ?? 0;
+  // Use stabilized truth index score for display (prevents wild fluctuations)
+  const truthScore = bestTruthIndexScore > 0 ? bestTruthIndexScore : (analysisData?.truthIndex?.score ?? 0);
 
   // Calculate Lubometer level - use real analysis data only
   const getLubometerLevel = () => {
@@ -300,7 +330,8 @@ export default function LiveCoPilotDashboard() {
   const lubometerLevel = getLubometerLevel();
   const lubometerText = getLubometerText();
   const lubometerColor = getLubometerColor();
-  const lubometerScore = analysisData?.lubometer?.score ?? 0;
+  // Use stabilized score for display (prevents wild fluctuations)
+  const lubometerScore = bestLubometerScore > 0 ? bestLubometerScore : (analysisData?.lubometer?.score ?? 0);
 
   // Truth Index helpers for header display - only use real data
   const getTruthIndexColor = () => {
@@ -538,7 +569,7 @@ export default function LiveCoPilotDashboard() {
               <div className="w-full bg-gray-800/50 rounded-full h-4 overflow-hidden mb-6">
                 <div
                   className={`h-full bg-gradient-to-r ${lubometerColor.bar} transition-all duration-500`}
-                  style={{ width: `${Math.min(100, (lubometerScore / 90) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (lubometerScore / lubometerMaxScore) * 100)}%` }}
                 ></div>
               </div>
 
