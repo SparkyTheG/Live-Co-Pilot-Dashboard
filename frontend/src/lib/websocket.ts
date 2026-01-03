@@ -64,6 +64,7 @@ export class ConversationWebSocket {
   private lastMessageTime = Date.now();
   private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
+  private authToken: string | null = null;
 
   constructor(url?: string) {
     // Use environment variable or default to localhost for development
@@ -76,6 +77,10 @@ export class ConversationWebSocket {
     if (!this.url) {
       console.warn('⚠️ No WebSocket URL configured. Set VITE_WS_URL environment variable for production.');
     }
+  }
+
+  setAuthToken(token: string | null) {
+    this.authToken = token || null;
   }
   
   // Start connection health check - monitors for stale connections
@@ -163,9 +168,6 @@ export class ConversationWebSocket {
             const data = JSON.parse(event.data);
             
             if (data.type === 'analysis_update') {
-              // #region agent log - Hypothesis A: Track each analysis update from WS
-              fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'websocket.ts:onmessage',message:'WS analysis update received',data:{lubometerScore:data.data?.lubometer?.score,hasLubometer:!!data.data?.lubometer,hotButtonsCount:data.data?.hotButtons?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-              // #endregion
               if (this.onAnalysisUpdate) {
                 this.onAnalysisUpdate(data.data);
               }
@@ -219,7 +221,8 @@ export class ConversationWebSocket {
 
     this.ws.send(JSON.stringify({
       type: 'start_listening',
-      config: config || {}
+      config: config || {},
+      authToken: this.authToken
     }));
   }
 
@@ -249,7 +252,9 @@ export class ConversationWebSocket {
       text: text,
       prospectType: prospectType,
       customScriptPrompt: customScriptPrompt || '',
-      pillarWeights: pillarWeights || null
+      pillarWeights: pillarWeights || null,
+      authToken: this.authToken,
+      clientTsMs: Date.now()
     }));
   }
 

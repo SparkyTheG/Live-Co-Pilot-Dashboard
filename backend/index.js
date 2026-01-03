@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation } from './analysis/engine.js';
+import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
 
 dotenv.config();
 
@@ -49,6 +50,8 @@ const wss = new WebSocketServer({
 
 // Store active connections
 const connections = new Map();
+// Store per-connection persistence metadata
+const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId }
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -93,6 +96,7 @@ process.on('SIGTERM', () => {
 wss.on('connection', (ws, req) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
+  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null });
 
   // Track last activity time
   ws.isAlive = true;
@@ -117,6 +121,12 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'start_listening') {
         // Start real-time conversation listening
         console.log(`[WS] Received start_listening from ${connectionId}`);
+        // Capture auth token (if present) for Supabase persistence under RLS
+        if (data.authToken && typeof data.authToken === 'string') {
+          const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
+          meta.authToken = data.authToken;
+          connectionPersistence.set(connectionId, meta);
+        }
 
         // Clean up any existing realtime connection first (in case of restart)
         const existingConnection = realtimeConnections.get(connectionId);
@@ -131,9 +141,53 @@ wss.on('connection', (ws, req) => {
         }
 
         await startRealtimeListening(connectionId, data.config);
+
+        // Create a call session in Supabase (if configured + authed)
+        const meta = connectionPersistence.get(connectionId);
+        if (meta?.authToken && isSupabaseConfigured()) {
+          const supabase = createUserSupabaseClient(meta.authToken);
+          if (supabase) {
+            // Resolve user id from token so RLS inserts work with explicit user_id
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData?.user?.id || null;
+            meta.userId = userId;
+            if (userId) {
+              const { data: sessionRow, error } = await supabase
+                .from('call_sessions')
+                .insert({
+                  user_id: userId,
+                  prospect_type: data.config?.prospectType || '',
+                  connection_id: connectionId
+                })
+                .select('id')
+                .single();
+              if (error) {
+                console.warn(`[WS] Supabase call_sessions insert failed: ${error.message}`);
+              } else {
+                meta.sessionId = sessionRow?.id || null;
+                connectionPersistence.set(connectionId, meta);
+                sendToClient(connectionId, { type: 'session_started', sessionId: meta.sessionId });
+              }
+            }
+          }
+        }
       } else if (data.type === 'stop_listening') {
         // Stop listening
         stopListening(connectionId);
+        // Mark session ended
+        const meta = connectionPersistence.get(connectionId);
+        if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+          const supabase = createUserSupabaseClient(meta.authToken);
+          if (supabase) {
+            void supabase
+              .from('call_sessions')
+              .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq('id', meta.sessionId)
+              .eq('user_id', meta.userId)
+              .then(() => {})
+              .catch(() => {});
+          }
+        }
       } else if (data.type === 'transcript') {
         // Receive transcript from frontend (from audio transcription or manual input)
         // Ignore empty transcripts (used for keepalive)
@@ -141,6 +195,41 @@ wss.on('connection', (ws, req) => {
           console.log(`[WS] Received keepalive ping from ${connectionId}`);
           return;
         }
+
+        // Persist transcript chunk to Supabase during the call (non-blocking)
+        const meta = connectionPersistence.get(connectionId);
+        if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+          const chunkText = String(data.text || '');
+          const chunkCharCount = chunkText.length;
+          const clientTsMs = typeof data.clientTsMs === 'number' ? data.clientTsMs : null;
+          const prospectType = typeof data.prospectType === 'string' ? data.prospectType : '';
+          const supabase = createUserSupabaseClient(meta.authToken);
+          if (supabase) {
+            void supabase
+              .from('call_transcript_chunks')
+              .insert({
+                session_id: meta.sessionId,
+                user_id: meta.userId,
+                chunk_text: chunkText,
+                chunk_char_count: chunkCharCount,
+                client_ts_ms: clientTsMs
+              })
+              .then(({ error }) => {
+                if (error) console.warn(`[WS] Supabase transcript insert failed: ${error.message}`);
+              })
+              .catch(() => {});
+
+            // Touch session updated_at (also non-blocking)
+            void supabase
+              .from('call_sessions')
+              .update({ updated_at: new Date().toISOString(), ...(prospectType ? { prospect_type: prospectType } : {}) })
+              .eq('id', meta.sessionId)
+              .eq('user_id', meta.userId)
+              .then(() => {})
+              .catch(() => {});
+          }
+        }
+
         console.log(`[WS] Received transcript message from ${connectionId}: "${data.text?.substring(0, 100)}..."`);
         let realtimeConnection = realtimeConnections.get(connectionId);
 
@@ -185,11 +274,27 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
     connections.delete(connectionId);
+    // Mark session ended if we have one
+    const meta = connectionPersistence.get(connectionId);
+    if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+      const supabase = createUserSupabaseClient(meta.authToken);
+      if (supabase) {
+        void supabase
+          .from('call_sessions')
+          .update({ ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('id', meta.sessionId)
+          .eq('user_id', meta.userId)
+          .then(() => {})
+          .catch(() => {});
+      }
+    }
+    connectionPersistence.delete(connectionId);
   });
 
   ws.on('error', (error) => {
     console.error(`WebSocket error for ${connectionId}:`, error);
     connections.delete(connectionId);
+    connectionPersistence.delete(connectionId);
   });
 
   // Send welcome message

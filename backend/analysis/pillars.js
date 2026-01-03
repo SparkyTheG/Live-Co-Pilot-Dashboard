@@ -119,10 +119,6 @@ export async function analyzePillars(transcript, prospectType, aiAnalysis = null
     console.log(`  ${key}: ${pillar.average.toFixed(2)} (weight: ${pillar.weight}x)`);
   }
 
-  // #region agent log - DEBUG: Track pillar calculation from AI scores
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pillars.js:analyzePillars',message:'Pillar Averages Calculated',data:{ai_scores_received:Object.keys(aiIndicatorSignals).length,indicators_processed:indicators,pillar_averages:{P1:pillars.P1.average,P2:pillars.P2.average,P3:pillars.P3.average,P4:pillars.P4.average,P5:pillars.P5.average,P6:pillars.P6.average,P7:pillars.P7.average},pillar_indicator_counts:{P1:pillars.P1.scores.length,P2:pillars.P2.scores.length,P3:pillars.P3.scores.length,P4:pillars.P4.scores.length,P5:pillars.P5.scores.length,P6:pillars.P6.scores.length,P7:pillars.P7.scores.length}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'PILLAR_CALC'})}).catch(()=>{});
-  // #endregion
-
   return {
     indicators,
     pillars,

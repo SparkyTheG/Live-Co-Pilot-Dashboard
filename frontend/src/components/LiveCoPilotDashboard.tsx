@@ -116,10 +116,6 @@ export default function LiveCoPilotDashboard() {
       truthIndex: analysis.truthIndex?.score
     });
 
-    // #region agent log - Hypothesis A,D: Track lubometer data on each update
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:handleAnalysisUpdate',message:'Analysis update received',data:{lubometerScore:analysis.lubometer?.score,lubometerLevel:analysis.lubometer?.level,truthIndexScore:analysis.truthIndex?.score,lubometerNull:analysis.lubometer===null||analysis.lubometer===undefined,hotButtonsCount:analysis.hotButtons?.length||0,timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
-    // #endregion
-
     // STABILITY: Track best lubometer score (allows increases, gradual decreases)
     const newLubometerScore = analysis.lubometer?.score ?? 0;
     setBestLubometerScore(prev => {
@@ -171,10 +167,6 @@ export default function LiveCoPilotDashboard() {
         // Sort by timestamp (newest first) then by score
         const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.score - a.score);
         const capped = sorted.slice(0, MAX_HOT_BUTTONS_HISTORY);
-        
-        // #region agent log - Hypothesis E,F: Track hot buttons order
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'LiveCoPilotDashboard.tsx:hotButtonsMerge',message:'Hot buttons merged and sorted',data:{prevCount:prev.length,newItemsCount:newItems.length,finalCount:capped.length,topThreeIds:capped.slice(0,3).map(h=>h.id),topThreeTimestamps:capped.slice(0,3).map(h=>h.timestamp),allSameTimestamp:capped.length>1&&capped.every(h=>h.timestamp===capped[0].timestamp)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E,F'})}).catch(()=>{});
-        // #endregion
         
         // Avoid unnecessary state updates if top order + scores didn't change
         if (prev.length === capped.length) {
