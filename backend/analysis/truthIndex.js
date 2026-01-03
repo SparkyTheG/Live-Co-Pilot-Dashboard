@@ -82,7 +82,7 @@ export function calculateTruthIndex(pillarScores, transcript, aiTruthIndexResult
   // ========================================
   // INCOHERENCE PENALTIES (from Truth Index CSV)
   // ========================================
-  
+
   // Track which rules have been applied to avoid duplicates
   const appliedRules = new Set();
 
@@ -152,7 +152,7 @@ export function calculateTruthIndex(pillarScores, transcript, aiTruthIndexResult
       // Skip if already applied via pillar scores (avoid double penalty)
       if (appliedRules.has(ruleId)) {
         continue;
-      }
+  }
 
       // Apply AI-detected rules
       let penaltyAmount = 0;
@@ -213,13 +213,13 @@ export function calculateTruthIndex(pillarScores, transcript, aiTruthIndexResult
     
     // If they claim high authority but have low self-permission, might indicate T4
     if (decisionAuthority >= 8 && selfPermission <= 3) {
-      penalties.push({
+    penalties.push({
         rule: 'T4',
         description: 'Claims Authority + Low Self-Permission',
         penalty: -10,
         details: 'Possible contradiction in decision ownership',
         source: 'pillar-fallback'
-      });
+    });
       score -= 10;
       redFlags.push('T4: Claims decision authority but shows signs of needing approval');
     }

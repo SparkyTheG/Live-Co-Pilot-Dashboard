@@ -4,6 +4,30 @@
  */
 
 /**
+ * Check if two strings are similar (for deduplication)
+ * Returns true if strings share >60% of their words
+ */
+function areSimilarStrings(str1, str2) {
+  if (!str1 || !str2) return false;
+  
+  const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const words1 = normalize(str1).split(/\s+/).filter(w => w.length > 2);
+  const words2 = normalize(str2).split(/\s+/).filter(w => w.length > 2);
+  
+  if (words1.length === 0 || words2.length === 0) return false;
+  
+  const set1 = new Set(words1);
+  const set2 = new Set(words2);
+  
+  // Count overlapping words
+  const overlap = [...set1].filter(w => set2.has(w)).length;
+  const minSize = Math.min(set1.size, set2.size);
+  
+  // If >60% words overlap, consider them similar
+  return minSize > 0 && (overlap / minSize) > 0.6;
+}
+
+/**
  * Validates quotes match the transcript (logs warnings if not found)
  * The AI should provide exact quotes, so this mainly validates and logs issues
  */
@@ -109,6 +133,10 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
     indicatorSignalsKeys: aiAnalysis.indicatorSignals ? Object.keys(aiAnalysis.indicatorSignals) : []
   });
   
+  // Track seen indicator IDs and quotes for deduplication
+  const seenIndicatorIds = new Set();
+  const seenQuotes = [];
+  
   // Process hotButtonDetails from AI (this is the primary source)
   if (aiAnalysis.hotButtonDetails && Array.isArray(aiAnalysis.hotButtonDetails) && aiAnalysis.hotButtonDetails.length > 0) {
     console.log(`[HotButtons] Using hotButtonDetails from AI (${aiAnalysis.hotButtonDetails.length} items)`);
@@ -117,6 +145,12 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
       const indicatorId = typeof detail.id === 'string' ? parseInt(detail.id, 10) : detail.id;
       if (isNaN(indicatorId) || indicatorId < 1 || indicatorId > 27) {
         console.log(`[HotButtons] Skipping invalid indicator ID: ${detail.id}`);
+        continue;
+      }
+      
+      // DEDUPLICATION: Skip if we already have this indicator ID
+      if (seenIndicatorIds.has(indicatorId)) {
+        console.log(`[HotButtons] Skipping duplicate indicator ID: ${indicatorId}`);
         continue;
       }
       
@@ -130,8 +164,8 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
       let indicatorScore = detail.score;
       if (indicatorScore === undefined || indicatorScore === null) {
         // Fallback to indicatorSignals
-        const indicatorScoreRaw = aiAnalysis.indicatorSignals?.[indicatorId] || 
-                                  aiAnalysis.indicatorSignals?.[String(indicatorId)];
+      const indicatorScoreRaw = aiAnalysis.indicatorSignals?.[indicatorId] || 
+                                aiAnalysis.indicatorSignals?.[String(indicatorId)];
         indicatorScore = indicatorScoreRaw;
       }
       
@@ -159,6 +193,12 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
         continue;
       }
       
+      // DEDUPLICATION: Skip if we already have a similar quote
+      if (seenQuotes.some(sq => areSimilarStrings(sq, quote))) {
+        console.log(`[HotButtons] Skipping duplicate quote: "${quote.substring(0, 40)}..."`);
+        continue;
+      }
+      
       // Validate and fix quote to match transcript exactly
       quote = validateAndFixQuote(quote, transcript);
       
@@ -167,6 +207,10 @@ export function extractHotButtons(transcript, prospectType, aiAnalysis = null, p
         console.log(`[HotButtons] Skipping indicator ${indicatorId} - quote validation failed`);
         continue;
       }
+      
+      // Mark as seen for deduplication
+      seenIndicatorIds.add(indicatorId);
+      seenQuotes.push(quote);
       
       detectedHotButtons.push({
         id: indicatorId,

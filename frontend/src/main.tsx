@@ -23,7 +23,7 @@ createRoot(rootElement).render(
   <StrictMode>
     <AuthProvider>
       <SettingsProvider>
-        <App />
+    <App />
       </SettingsProvider>
     </AuthProvider>
   </StrictMode>
