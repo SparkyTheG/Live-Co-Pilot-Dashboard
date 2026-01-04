@@ -64,6 +64,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
         file: fileStream,
         model: 'whisper-1',
         language: 'en',
+        prompt: 'Real estate sales call between a CLOSER (salesperson) and a PROSPECT (property owner). Common terms: foreclosure, auction date, months behind, mortgage, lender, loan balance, equity, cash offer, seller financing, tenant, landlord, motivation, timeline.',
         temperature: 0,
         response_format: 'verbose_json'
       });

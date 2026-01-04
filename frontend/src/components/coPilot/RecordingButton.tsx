@@ -125,6 +125,13 @@ export default function RecordingButton({
         }
       });
 
+      ws.setOnTranscriptChunk((chunk) => {
+        // Show live transcript from backend (what is actually being analyzed)
+        if (onTranscriptUpdate && chunk?.text) {
+          onTranscriptUpdate(chunk.text);
+        }
+      });
+
       ws.setOnError((err) => {
         console.error('WebSocket error:', err);
         setError(err.message);
@@ -205,7 +212,8 @@ export default function RecordingButton({
       // Start first segment
       recorder.start(); // no timeslice
 
-      // Stop segments every ~2s to emit a valid standalone blob each time.
+      // Stop segments every ~3s to emit a valid standalone blob each time.
+      // (slightly longer segments improve Whisper accuracy)
       if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
       segmentTimerRef.current = setInterval(() => {
         const r = mediaRecorderRef.current;
@@ -216,7 +224,7 @@ export default function RecordingButton({
             // ignore
           }
         }
-      }, 2000);
+      }, 3000);
 
       console.log('✅ MediaRecorder started (segmented), streaming audio chunks');
 

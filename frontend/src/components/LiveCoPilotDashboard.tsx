@@ -56,6 +56,7 @@ export default function LiveCoPilotDashboard() {
   const [prospectType, setProspectType] = useState<ProspectType>('foreclosure');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [questionStates, setQuestionStates] = useState<Record<number, { asked: boolean }>>({});
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
 
   // Accumulated history for hot buttons and objections (persists across updates)
   const [hotButtonsHistory, setHotButtonsHistory] = useState<Array<{
@@ -392,8 +393,26 @@ export default function LiveCoPilotDashboard() {
               {/* Recording Button */}
               <RecordingButton
                 prospectType={prospectType}
+                onTranscriptUpdate={(t) => {
+                  const next = (t || '').trim();
+                  if (!next) return;
+                  setLiveTranscript((prev) => {
+                    // append with a separator unless it already ends with punctuation
+                    const sep = prev && !/[.!?]$/.test(prev.trim()) ? ' • ' : ' ';
+                    const combined = (prev ? prev + sep : '') + next;
+                    return combined.length > 600 ? combined.slice(-600) : combined;
+                  });
+                }}
                 onAnalysisUpdate={handleAnalysisUpdate}
               />
+
+              {/* Live transcript (from backend) */}
+              <div className="max-w-[520px] px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">
+                <div className="text-xs text-gray-400 mb-1">Live transcript (backend)</div>
+                <div className="text-sm text-gray-200 leading-snug line-clamp-3">
+                  {liveTranscript || 'Waiting for speech…'}
+                </div>
+              </div>
 
               {/* Truth Index Display */}
               <div className="flex items-center gap-3 px-5 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">

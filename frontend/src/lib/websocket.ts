@@ -57,6 +57,7 @@ export class ConversationWebSocket {
   private reconnectDelay = 1000;
   private url: string;
   private onAnalysisUpdate?: (analysis: AnalysisUpdate) => void;
+  private onTranscriptChunk?: (chunk: { speaker: string; text: string; ts?: number }) => void;
   private onError?: (error: Error) => void;
   private onConnect?: () => void;
   private onDisconnect?: () => void;
@@ -170,6 +171,10 @@ export class ConversationWebSocket {
             if (data.type === 'analysis_update') {
               if (this.onAnalysisUpdate) {
                 this.onAnalysisUpdate(data.data);
+              }
+            } else if (data.type === 'transcript_chunk') {
+              if (this.onTranscriptChunk) {
+                this.onTranscriptChunk(data.data);
               }
             } else if (data.type === 'error') {
               if (this.onError) {
@@ -322,6 +327,10 @@ export class ConversationWebSocket {
 
   setOnAnalysisUpdate(callback: (analysis: AnalysisUpdate) => void) {
     this.onAnalysisUpdate = callback;
+  }
+
+  setOnTranscriptChunk(callback: (chunk: { speaker: string; text: string; ts?: number }) => void) {
+    this.onTranscriptChunk = callback;
   }
 
   setOnError(callback: (error: Error) => void) {

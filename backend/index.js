@@ -588,6 +588,16 @@ async function handleIncomingTextChunk(connectionId, {
     connectionPersistence.set(connectionId, meta);
   }
 
+  // Send the transcribed chunk to the frontend for transparency/debugging
+  sendToClient(connectionId, {
+    type: 'transcript_chunk',
+    data: {
+      speaker: detectedSpeaker,
+      text,
+      ts: Date.now()
+    }
+  });
+
   // Option B: use realtime single-session analysis to update frontend quickly
   if (useRealtime && aiAnalysisFromRealtime) {
     const normalizedAi = {
