@@ -626,6 +626,23 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
+  // IMPORTANT: If Realtime is enabled but did not return usable JSON for this chunk,
+  // fall back to the legacy analysis pipeline so the UI keeps updating.
+  if (useRealtime && !aiAnalysisFromRealtime) {
+    try {
+      let realtimeConnection = realtimeConnections.get(connectionId);
+      if (!realtimeConnection) {
+        await startRealtimeListening(connectionId, {});
+        realtimeConnection = realtimeConnections.get(connectionId);
+      }
+      if (realtimeConnection) {
+        await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
+      }
+    } catch (e) {
+      console.warn(`[WS] Legacy fallback analysis failed: ${e.message}`);
+    }
+  }
+
   // Also run conversation summary updates (independent of analysis pipeline)
   if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
     const now = Date.now();
