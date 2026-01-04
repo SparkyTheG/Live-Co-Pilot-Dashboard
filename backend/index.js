@@ -513,6 +513,29 @@ async function handleIncomingTextChunk(connectionId, {
 
   // Maintain a plain transcript (for deterministic calculations)
   if (meta) {
+    // Drop obvious Whisper hallucination spam if it somehow slips through
+    const lowered = text.toLowerCase();
+    if (lowered.includes('thank you for watching') || lowered.includes('like and subscribe')) {
+      // If this repeats, ignore it completely
+      meta._lastBadPhrase = lowered;
+      meta._badPhraseCount = (meta._badPhraseCount || 0) + 1;
+      connectionPersistence.set(connectionId, meta);
+      if (meta._badPhraseCount >= 1) return;
+    } else {
+      meta._badPhraseCount = 0;
+      meta._lastBadPhrase = '';
+    }
+
+    // Deduplicate repeated identical transcripts
+    if (meta._lastTranscriptText === text) {
+      meta._repeatCount = (meta._repeatCount || 0) + 1;
+      connectionPersistence.set(connectionId, meta);
+      if (meta._repeatCount >= 1) return;
+    } else {
+      meta._repeatCount = 0;
+      meta._lastTranscriptText = text;
+    }
+
     meta.plainTranscript = (meta.plainTranscript ? meta.plainTranscript + ' ' : '') + text;
     // Keep it bounded
     const MAX_PLAIN = 12000;

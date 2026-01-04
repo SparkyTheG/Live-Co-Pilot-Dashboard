@@ -33,6 +33,23 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
     return 'webm';
   }
 
+  function looksLikeHallucination(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return true;
+    // Common Whisper hallucinations on silence / noise
+    const badPhrases = [
+      'thank you for watching',
+      'thanks for watching',
+      'like and subscribe',
+      'subscribe to my channel',
+      'hit the bell',
+      'music',
+      'applause'
+    ];
+    if (badPhrases.some((p) => t.includes(p))) return true;
+    return false;
+  }
+
   async function transcribeAudioChunk(audioData, mimeType = '') {
     // We receive a single MediaRecorder chunk (typically webm/opus).
     // Persist to a temp file so OpenAI SDK can stream it as multipart form.
@@ -42,13 +59,38 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
     try {
       await fsp.writeFile(filename, audioData);
       const fileStream = fs.createReadStream(filename);
+      // Use verbose_json when possible so we can suppress "no speech" hallucinations.
       const transcription = await openai.audio.transcriptions.create({
         file: fileStream,
         model: 'whisper-1',
         language: 'en',
-        response_format: 'text'
+        temperature: 0,
+        response_format: 'verbose_json'
       });
-      return String(transcription || '').trim();
+      const text =
+        typeof transcription === 'string'
+          ? transcription
+          : (transcription?.text ?? '');
+
+      const trimmed = String(text || '').trim();
+      if (!trimmed) return '';
+
+      // If we have per-segment no_speech_prob, drop likely silence.
+      const segments = (transcription && typeof transcription === 'object') ? (transcription.segments || []) : [];
+      if (Array.isArray(segments) && segments.length > 0) {
+        const avgNoSpeech = segments
+          .map((s) => Number(s?.no_speech_prob))
+          .filter((n) => Number.isFinite(n))
+          .reduce((a, b, _, arr) => a + b / arr.length, 0);
+        if (Number.isFinite(avgNoSpeech) && avgNoSpeech >= 0.8) {
+          return '';
+        }
+      }
+
+      // Heuristic: suppress common hallucination phrases
+      if (looksLikeHallucination(trimmed)) return '';
+
+      return trimmed;
     } finally {
       try {
         await fsp.unlink(filename);
