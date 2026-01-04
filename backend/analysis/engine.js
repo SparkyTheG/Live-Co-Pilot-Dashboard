@@ -91,6 +91,50 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
     return getEmptyAnalysis();
   }
 
+  const result = await buildFinalResultFromAiAnalysis({
+    cleanedTranscript,
+    lowerTranscript,
+    prospectType,
+    pillarWeights,
+    aiAnalysis,
+    startTime
+  });
+
+  // Cache the result
+  if (analysisCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = analysisCache.keys().next().value;
+    analysisCache.delete(firstKey);
+  }
+  analysisCache.set(cacheKey, { result, timestamp: Date.now() });
+
+  return result;
+}
+
+/**
+ * Build the final analysis object from a precomputed aiAnalysis object.
+ * This allows alternative upstream AI (e.g. Realtime single-session) to produce
+ * indicatorSignals/hotButtonDetails/objections/etc, while we keep deterministic
+ * Lubometer + Truth Index calculations and frontend payload shape.
+ */
+export async function analyzeConversationFromAiAnalysis(transcript, prospectTypeOverride = null, pillarWeights = null, aiAnalysis) {
+  const startTime = Date.now();
+  if (!transcript || transcript.trim().length === 0) return getEmptyAnalysis();
+
+  const cleanedTranscript = cleanTranscriptForAI(transcript);
+  const lowerTranscript = transcript.toLowerCase();
+  const prospectType = prospectTypeOverride || detectProspectType(lowerTranscript);
+
+  return buildFinalResultFromAiAnalysis({
+    cleanedTranscript,
+    lowerTranscript,
+    prospectType,
+    pillarWeights,
+    aiAnalysis,
+    startTime
+  });
+}
+
+async function buildFinalResultFromAiAnalysis({ cleanedTranscript, lowerTranscript, prospectType, pillarWeights, aiAnalysis, startTime }) {
   // Log agent results summary
   console.log(`[Engine] Agent Results Summary:`);
   console.log(`  - Pillars: ${Object.keys(aiAnalysis.indicatorSignals || {}).length} indicators scored`);
@@ -168,13 +212,6 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
     },
     timestamp: new Date().toISOString()
   };
-
-  // Cache the result
-  if (analysisCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = analysisCache.keys().next().value;
-    analysisCache.delete(firstKey);
-  }
-  analysisCache.set(cacheKey, { result, timestamp: Date.now() });
 
   console.log(`[Engine] ====== ANALYSIS COMPLETE in ${Date.now() - startTime}ms ======\n`);
 

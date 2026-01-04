@@ -4,9 +4,10 @@ import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
-import { analyzeConversation } from './analysis/engine.js';
+import { analyzeConversation, analyzeConversationFromAiAnalysis } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
 import { runSpeakerDetectionAgent, runConversationSummaryAgent } from './analysis/aiAgents.js';
+import { RealtimeAnalysisSession } from './realtime/realtimeAnalysis.js';
 
 dotenv.config();
 
@@ -53,6 +54,8 @@ const wss = new WebSocketServer({
 const connections = new Map();
 // Store per-connection persistence metadata
 const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs, conversationHistory, lastSummaryMs, summaryId }
+// Optional: OpenAI Realtime analysis sessions (single-session "Option B")
+const realtimeAnalysisSessions = new Map(); // connectionId -> RealtimeAnalysisSession
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -97,7 +100,24 @@ process.on('SIGTERM', () => {
 wss.on('connection', (ws, req) => {
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
-  connectionPersistence.set(connectionId, { authToken: null, sessionId: null, userId: null, userEmail: null, lastTranscriptPersistMs: 0, conversationHistory: '', lastSummaryMs: 0, summaryId: null });
+  connectionPersistence.set(connectionId, {
+    authToken: null,
+    sessionId: null,
+    userId: null,
+    userEmail: null,
+    lastTranscriptPersistMs: 0,
+    conversationHistory: '',
+    lastSummaryMs: 0,
+    summaryId: null,
+    // Settings/config
+    prospectType: '',
+    customScriptPrompt: '',
+    pillarWeights: null,
+    // Plain transcript (no labels) for deterministic calculations
+    plainTranscript: '',
+    // Option B: use OpenAI Realtime single-session analysis
+    useRealtimeAnalysis: false
+  });
 
   // Track last activity time
   ws.isAlive = true;
@@ -128,7 +148,49 @@ wss.on('connection', (ws, req) => {
           meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
           meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
           meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
+          // Enable Realtime analysis if configured
+          meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_REALTIME_MODEL);
           connectionPersistence.set(connectionId, meta);
+
+          if (meta.useRealtimeAnalysis && process.env.OPENAI_API_KEY) {
+            if (!realtimeAnalysisSessions.get(connectionId)) {
+              const instructions = `You are a real-time sales analysis engine. Output ONLY valid JSON.
+
+TASK:
+- Based on the conversation so far, continuously update the following analysis for a real estate sales call.
+- The conversation is between CLOSER (salesperson) and PROSPECT (seller).
+- You will receive NEW_TEXT chunks. Use session memory for prior context.
+
+OUTPUT JSON SCHEMA (no extra keys):
+{
+  "speaker": "closer|prospect|unknown",
+  "indicatorSignals": {"1":1,"2":1,...,"27":1}, // integers 1-10. Score generously when there is evidence.
+  "hotButtonDetails": [{"id":1,"quote":"exact quote","contextualPrompt":"short question","score":1}],
+  "objections": [{"objectionText":"...","probability":0.8,"fear":"...","whisper":"...","rebuttalScript":"..."}],
+  "askedQuestions": [0,2,5],
+  "detectedRules": [{"ruleId":"T1","evidence":"...","confidence":0.8}],
+  "coherenceSignals": ["..."],
+  "overallCoherence": "high|medium|low",
+  "insights": {"summary":"...","keyMotivators":["..."],"concerns":["..."],"recommendation":"...","closingReadiness":"ready|almost|not_ready"}
+}
+
+RULES:
+- speaker: classify the NEW_TEXT speaker based on conversational flow.
+- indicatorSignals: score ALL 27 indicators if possible; if unknown, omit the key.
+- hotButtonDetails quote MUST be exact substring from conversation.
+- Return compact JSON; no markdown; no explanations.`;
+
+              const session = new RealtimeAnalysisSession({
+                apiKey: process.env.OPENAI_API_KEY,
+                model: process.env.OPENAI_REALTIME_MODEL,
+                instructions,
+                temperature: 0
+              });
+              realtimeAnalysisSessions.set(connectionId, session);
+              // Connect in background so first chunk is fast
+              void session.connect().catch(() => {});
+            }
+          }
         }
         // Capture auth token (if present) for Supabase persistence under RLS
         if (data.authToken && typeof data.authToken === 'string') {
@@ -329,6 +391,14 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     console.log(`WebSocket connection closed: ${connectionId}`);
     connections.delete(connectionId);
+    // Close realtime analysis session if present
+    const rt = realtimeAnalysisSessions.get(connectionId);
+    if (rt) {
+      try {
+        rt.close();
+      } catch {}
+      realtimeAnalysisSessions.delete(connectionId);
+    }
     // Mark session ended and generate final summary if we have one
     const meta = connectionPersistence.get(connectionId);
     if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
@@ -439,16 +509,46 @@ async function handleIncomingTextChunk(connectionId, {
   // Get connection metadata
   const meta = connectionPersistence.get(connectionId);
   const conversationHistory = meta?.conversationHistory || '';
+  const useRealtime = Boolean(meta?.useRealtimeAnalysis && realtimeAnalysisSessions.get(connectionId));
 
-  // AI SPEAKER DETECTION: Analyze who is speaking using AI agent
-  let detectedSpeaker = 'unknown';
-  try {
-    const speakerResult = await runSpeakerDetectionAgent(text, conversationHistory);
-    if (speakerResult && !speakerResult.error) {
-      detectedSpeaker = speakerResult.speaker || 'unknown';
+  // Maintain a plain transcript (for deterministic calculations)
+  if (meta) {
+    meta.plainTranscript = (meta.plainTranscript ? meta.plainTranscript + ' ' : '') + text;
+    // Keep it bounded
+    const MAX_PLAIN = 12000;
+    if (meta.plainTranscript.length > MAX_PLAIN) {
+      meta.plainTranscript = meta.plainTranscript.slice(-MAX_PLAIN);
     }
-  } catch (speakerErr) {
-    console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
+    connectionPersistence.set(connectionId, meta);
+  }
+
+  let detectedSpeaker = 'unknown';
+  let aiAnalysisFromRealtime = null;
+
+  if (useRealtime) {
+    try {
+      const session = realtimeAnalysisSessions.get(connectionId);
+      aiAnalysisFromRealtime = await session.analyzeChunk({
+        chunkText: text,
+        prospectType: prospectType || meta?.prospectType || '',
+        customScriptPrompt: customScriptPrompt || meta?.customScriptPrompt || ''
+      });
+      if (aiAnalysisFromRealtime?.speaker) {
+        detectedSpeaker = aiAnalysisFromRealtime.speaker;
+      }
+    } catch (e) {
+      console.warn(`[WS] Realtime analysis error: ${e.message}`);
+    }
+  } else {
+    // Fallback: Speaker detection via dedicated agent
+    try {
+      const speakerResult = await runSpeakerDetectionAgent(text, conversationHistory);
+      if (speakerResult && !speakerResult.error) {
+        detectedSpeaker = speakerResult.speaker || 'unknown';
+      }
+    } catch (speakerErr) {
+      console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
+    }
   }
 
   // Format speaker label for transcript
@@ -463,6 +563,77 @@ async function handleIncomingTextChunk(connectionId, {
       ? newHistory.slice(-MAX_HISTORY_CHARS)
       : newHistory;
     connectionPersistence.set(connectionId, meta);
+  }
+
+  // Option B: use realtime single-session analysis to update frontend quickly
+  if (useRealtime && aiAnalysisFromRealtime) {
+    const normalizedAi = {
+      indicatorSignals: aiAnalysisFromRealtime.indicatorSignals || {},
+      hotButtonDetails: aiAnalysisFromRealtime.hotButtonDetails || [],
+      objections: aiAnalysisFromRealtime.objections || [],
+      askedQuestions: aiAnalysisFromRealtime.askedQuestions || [],
+      detectedRules: aiAnalysisFromRealtime.detectedRules || [],
+      coherenceSignals: aiAnalysisFromRealtime.coherenceSignals || [],
+      overallCoherence: aiAnalysisFromRealtime.overallCoherence || 'medium',
+      insights: aiAnalysisFromRealtime.insights?.summary || '',
+      keyMotivators: aiAnalysisFromRealtime.insights?.keyMotivators || [],
+      concerns: aiAnalysisFromRealtime.insights?.concerns || [],
+      recommendation: aiAnalysisFromRealtime.insights?.recommendation || '',
+      closingReadiness: aiAnalysisFromRealtime.insights?.closingReadiness || 'not_ready',
+      agentErrors: {}
+    };
+
+    try {
+      const final = await analyzeConversationFromAiAnalysis(
+        meta?.plainTranscript || text,
+        prospectType || meta?.prospectType || null,
+        pillarWeights ?? meta?.pillarWeights ?? null,
+        normalizedAi
+      );
+
+      const safeAnalysis = {
+        ...final,
+        hotButtons: Array.isArray(final.hotButtons) ? final.hotButtons : [],
+        objections: Array.isArray(final.objections) ? final.objections : []
+      };
+
+      sendToClient(connectionId, { type: 'analysis_update', data: safeAnalysis });
+    } catch (e) {
+      console.warn(`[WS] Failed to build analysis from realtime ai: ${e.message}`);
+    }
+  }
+
+  // Also run conversation summary updates (independent of analysis pipeline)
+  if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+    const now = Date.now();
+    const SUMMARY_INTERVAL_MS = 15000;
+    if (!meta.lastSummaryMs || (now - meta.lastSummaryMs) > SUMMARY_INTERVAL_MS) {
+      meta.lastSummaryMs = now;
+      connectionPersistence.set(connectionId, meta);
+      const formattedTranscript = meta.conversationHistory || '';
+      const summaryProspectType = meta.prospectType || prospectType || '';
+      if (formattedTranscript.length > 50) {
+        runConversationSummaryAgent(formattedTranscript, summaryProspectType, false)
+          .then((summaryResult) => {
+            if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
+              const supabase = createUserSupabaseClient(meta.authToken);
+              if (supabase) {
+                const summaryData = {
+                  session_id: meta.sessionId,
+                  user_id: meta.userId,
+                  user_email: meta.userEmail || '',
+                  prospect_type: summaryProspectType,
+                  summary_json: summaryResult,
+                  is_final: false,
+                  updated_at: new Date().toISOString()
+                };
+                void supabase.from('call_summaries').upsert(summaryData, { onConflict: 'session_id' }).catch(() => {});
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    }
   }
 
   // Persist transcript chunk to Supabase with AI-detected speaker role
@@ -501,16 +672,17 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
-  // Ensure realtime connection exists
-  let realtimeConnection = realtimeConnections.get(connectionId);
-  if (!realtimeConnection) {
-    console.warn(`[WS] No realtime connection found for ${connectionId}, creating one...`);
-    await startRealtimeListening(connectionId, {});
-    realtimeConnection = realtimeConnections.get(connectionId);
-  }
-
-  if (realtimeConnection) {
-    await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
+  // Legacy path: push transcript into analysis engine via realtimeConnection
+  if (!useRealtime) {
+    let realtimeConnection = realtimeConnections.get(connectionId);
+    if (!realtimeConnection) {
+      console.warn(`[WS] No realtime connection found for ${connectionId}, creating one...`);
+      await startRealtimeListening(connectionId, {});
+      realtimeConnection = realtimeConnections.get(connectionId);
+    }
+    if (realtimeConnection) {
+      await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
+    }
   }
 }
 
