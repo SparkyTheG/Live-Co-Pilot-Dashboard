@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import { promises as fsp } from 'fs';
+import os from 'os';
+import path from 'path';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -13,9 +18,35 @@ const openai = new OpenAI({
 export async function createRealtimeConnection({ onTranscript, onError }) {
   let conversationHistory = '';
   let isConnected = true;
-  let audioBuffer = Buffer.alloc(0);
   // Cap history so long sessions don't grow prompt size unbounded (prevents slowdown)
   const MAX_HISTORY_CHARS = Number(process.env.MAX_TRANSCRIPT_CHARS || 8000);
+  const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 1800);
+  let lastAudioTranscribeMs = 0;
+
+  async function transcribeAudioChunk(audioData) {
+    // We receive a single MediaRecorder chunk (typically webm/opus).
+    // Persist to a temp file so OpenAI SDK can stream it as multipart form.
+    const tmpDir = os.tmpdir();
+    const id = crypto.randomBytes(8).toString('hex');
+    const filename = path.join(tmpDir, `chunk-${id}.webm`);
+    try {
+      await fsp.writeFile(filename, audioData);
+      const fileStream = fs.createReadStream(filename);
+      const transcription = await openai.audio.transcriptions.create({
+        file: fileStream,
+        model: 'whisper-1',
+        language: 'en',
+        response_format: 'text'
+      });
+      return String(transcription || '').trim();
+    } finally {
+      try {
+        await fsp.unlink(filename);
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   try {
     // OpenAI Realtime API integration
@@ -29,15 +60,19 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       // Send audio data (from browser microphone)
       sendAudio: async (audioData) => {
         try {
-          // Append to buffer
-          audioBuffer = Buffer.concat([audioBuffer, audioData]);
-          
-          // Process in chunks (every 2 seconds of audio)
-          // In production, use OpenAI Realtime API WebSocket
-          // For now, we'll process text transcripts sent from frontend
+          const now = Date.now();
+          if (now - lastAudioTranscribeMs < AUDIO_MIN_INTERVAL_MS) {
+            return { text: '' };
+          }
+          lastAudioTranscribeMs = now;
+
+          const text = await transcribeAudioChunk(audioData);
+          if (!text) return { text: '' };
+          return { text };
         } catch (error) {
           console.error('Audio processing error:', error);
           if (onError) onError(error);
+          return { text: '', error: error.message };
         }
       },
       
@@ -84,7 +119,6 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       
       close: () => {
         isConnected = false;
-        audioBuffer = Buffer.alloc(0);
       },
       
       isConnected: () => isConnected,

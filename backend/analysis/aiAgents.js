@@ -31,16 +31,29 @@ const openai = new OpenAI({
 
 const MODEL = 'gpt-4o-mini';
 
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms))
+  ]);
+}
+
 /**
  * Helper: Call AI with optimized settings per agent
+ * - Enforces JSON output (reduces parse failures + reduces verbosity)
+ * - Adds per-call timeout so one slow agent doesn't block everything
  */
-async function callAI(systemPrompt, userPrompt, agentName, maxTokens = 800) {
+async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 800) {
   const startTime = Date.now();
-  
-  try {
-    console.log(`[${agentName}] Starting...`);
-    
-    const response = await openai.chat.completions.create({
+  const opts = typeof maxTokensOrOptions === 'number'
+    ? { maxTokens: maxTokensOrOptions }
+    : (maxTokensOrOptions || {});
+
+  const maxTokens = Number(opts.maxTokens ?? 800);
+  const timeoutMs = Number(opts.timeoutMs ?? 12000);
+
+  const doCall = async () => {
+    const baseReq = {
       model: MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -48,17 +61,41 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokens = 800) {
       ],
       temperature: 0.0,
       max_tokens: maxTokens
-    });
-    
-    let content = response.choices[0].message.content;
-    
-    // Clean markdown
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    
-    const parsed = JSON.parse(content);
+    };
+
+    let response;
+    try {
+      // Prefer strict JSON output if supported by the API/model
+      response = await openai.chat.completions.create({
+        ...baseReq,
+        response_format: { type: 'json_object' }
+      });
+    } catch (e) {
+      // Fallback for older API behavior: no response_format
+      response = await openai.chat.completions.create(baseReq);
+    }
+
+    let content = response?.choices?.[0]?.message?.content ?? '{}';
+    try {
+      return JSON.parse(content);
+    } catch {
+      // Clean common markdown fences (fallback path)
+      content = String(content).replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      // Ultra-defensive fallback: extract first JSON object if the model emits extra text
+      const m = String(content).match(/\{[\s\S]*\}/);
+      if (m) return JSON.parse(m[0]);
+      return { error: 'Invalid JSON from model' };
+    }
+  };
+
+  try {
+    const result = await withTimeout(
+      doCall(),
+      timeoutMs,
+      { error: `timeout after ${timeoutMs}ms` }
+    );
     console.log(`[${agentName}] Done in ${Date.now() - startTime}ms`);
-    return parsed;
-    
+    return result;
   } catch (error) {
     console.error(`[${agentName}] Error: ${error.message}`);
     return { error: error.message };
@@ -738,25 +775,43 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   console.log(`\n[MultiAgent] Starting parallel analysis...`);
   console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
-  
-  // Run all agents in parallel
+
+  // Token control: different windows per agent (big latency win)
+  const tPillars = String(transcript || '').slice(-2500);
+  const tHotButtons = String(transcript || '').slice(-1600);
+  const tObjections = String(transcript || '').slice(-1800);
+  const tDiagnostic = String(transcript || '').slice(-1400);
+  const tTruth = String(transcript || '').slice(-3500);
+  const tInsights = String(transcript || '').slice(-2200);
+
+  // Run all agents in parallel BUT don't let one straggler block everything
   // Note: runAllPillarAgents internally runs 7 agents in parallel
-  // Note: runObjectionsAgents internally runs 4 agents (1 sequential + 3 parallel)
+  // Note: runObjectionsAgents internally runs 4 objection agents (1 sequential + 3 parallel)
+  const tasks = [
+    withTimeout(runAllPillarAgents(tPillars), 14000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 12000, { objections: [] }),
+    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 7000, { askedQuestions: [] }),
+    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
+  ];
+
+  const settled = await Promise.allSettled(tasks);
   const [
-    pillarsResult,
-    hotButtonsResult,
-    objectionsResult,
-    diagnosticResult,
-    truthIndexResult,
-    insightsResult
-  ] = await Promise.all([
-    runAllPillarAgents(transcript),       // 7 pillar agents in parallel
-    runHotButtonsAgent(transcript),
-    runObjectionsAgents(transcript, customScriptPrompt), // 4 objection agents
-    runDiagnosticQuestionsAgent(transcript, prospectType),
-    runTruthIndexAgent(transcript),
-    runInsightsAgent(transcript, prospectType)
-  ]);
+    pillarsResultRaw,
+    hotButtonsResultRaw,
+    objectionsResultRaw,
+    diagnosticResultRaw,
+    truthIndexResultRaw,
+    insightsResultRaw
+  ] = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
+
+  const pillarsResult = pillarsResultRaw || { indicatorSignals: {}, pillarErrors: {} };
+  const hotButtonsResult = hotButtonsResultRaw || { hotButtonDetails: [] };
+  const objectionsResult = objectionsResultRaw || { objections: [] };
+  const diagnosticResult = diagnosticResultRaw || { askedQuestions: [] };
+  const truthIndexResult = truthIndexResultRaw || { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' };
+  const insightsResult = insightsResultRaw || { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' };
   
   const totalTime = Date.now() - startTime;
   console.log(`[MultiAgent] All done in ${totalTime}ms`);

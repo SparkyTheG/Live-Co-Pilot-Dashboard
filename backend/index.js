@@ -122,6 +122,14 @@ wss.on('connection', (ws, req) => {
       if (data.type === 'start_listening') {
         // Start real-time conversation listening
         console.log(`[WS] Received start_listening from ${connectionId}`);
+        // Capture config/settings for this connection (used for audio-driven transcription as well)
+        {
+          const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
+          meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
+          meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
+          meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
+          connectionPersistence.set(connectionId, meta);
+        }
         // Capture auth token (if present) for Supabase persistence under RLS
         if (data.authToken && typeof data.authToken === 'string') {
           const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
@@ -263,106 +271,36 @@ wss.on('connection', (ws, req) => {
           console.log(`[WS] Received keepalive ping from ${connectionId}`);
           return;
         }
-
-        const chunkText = String(data.text || '').trim();
-        const chunkCharCount = chunkText.length;
-        const clientTsMs = typeof data.clientTsMs === 'number' ? data.clientTsMs : null;
-        const prospectType = typeof data.prospectType === 'string' ? data.prospectType : '';
-        
-        // Get connection metadata
         const meta = connectionPersistence.get(connectionId);
-        const conversationHistory = meta?.conversationHistory || '';
-        
-        // AI SPEAKER DETECTION: Analyze who is speaking using AI agent
-        let detectedSpeaker = 'unknown';
-        
-        try {
-          console.log(`[WS] Running Speaker Detection AI on "${chunkText.substring(0, 50)}..."`);
-          const speakerResult = await runSpeakerDetectionAgent(chunkText, conversationHistory);
-          if (speakerResult && !speakerResult.error) {
-            detectedSpeaker = speakerResult.speaker || 'unknown';
-            console.log(`[WS] AI detected speaker: ${detectedSpeaker}`);
-          } else {
-            console.warn(`[WS] Speaker detection returned error or empty result`);
-          }
-        } catch (speakerErr) {
-          console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
-        }
-        
-        // Format speaker label for transcript
-        const speakerLabel = detectedSpeaker === 'closer' ? 'CLOSER' : detectedSpeaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
-        
-        // Update conversation history with formatted speaker labels (cap at 8000 chars)
-        const MAX_HISTORY_CHARS = 8000;
-        const formattedLine = `${speakerLabel}: ${chunkText}`;
-        const newHistory = conversationHistory ? conversationHistory + '\n\n' + formattedLine : formattedLine;
-        if (meta) {
-          meta.conversationHistory = newHistory.length > MAX_HISTORY_CHARS 
-            ? newHistory.slice(-MAX_HISTORY_CHARS) 
-            : newHistory;
-          connectionPersistence.set(connectionId, meta);
-        }
-
-        // Persist transcript chunk to Supabase with AI-detected speaker role
-        if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
-          const supabase = createUserSupabaseClient(meta.authToken);
-          if (supabase) {
-            void supabase
-              .from('call_transcript_chunks')
-              .insert({
-                session_id: meta.sessionId,
-                user_id: meta.userId,
-                user_email: meta.userEmail || '',
-                speaker_role: detectedSpeaker,
-                chunk_text: chunkText,
-                chunk_char_count: chunkCharCount,
-                client_ts_ms: clientTsMs
-              })
-              .then(({ error }) => {
-                if (error) console.warn(`[WS] Supabase transcript insert failed: ${error.message}`);
-              })
-              .catch(() => {});
-
-            // Update session with formatted transcript paragraph
-            // Format: CLOSER: text\n\nPROSPECT: text\n\n...
-            void supabase
-              .from('call_sessions')
-              .update({ 
-                updated_at: new Date().toISOString(), 
-                transcript_text: meta.conversationHistory || '',
-                transcript_char_count: (meta.conversationHistory || '').length,
-                ...(prospectType ? { prospect_type: prospectType } : {}) 
-              })
-              .eq('id', meta.sessionId)
-              .eq('user_id', meta.userId)
-              .then(() => {})
-              .catch(() => {});
-          }
-        }
-
-        console.log(`[WS] Received transcript message from ${connectionId}: "${data.text?.substring(0, 100)}..."`);
+        await handleIncomingTextChunk(connectionId, {
+          chunkText: data.text,
+          prospectType: (typeof data.prospectType === 'string' ? data.prospectType : '') || meta?.prospectType || '',
+          customScriptPrompt: (typeof data.customScriptPrompt === 'string' ? data.customScriptPrompt : '') || meta?.customScriptPrompt || '',
+          pillarWeights: data.pillarWeights ?? meta?.pillarWeights ?? null,
+          clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
+        });
+      } else if (data.type === 'audio_chunk') {
+        // Receive audio chunk from frontend
         let realtimeConnection = realtimeConnections.get(connectionId);
-
-        // Auto-create realtime connection if it doesn't exist (shouldn't happen, but handle it)
         if (!realtimeConnection) {
-          console.warn(`[WS] No realtime connection found for ${connectionId}, creating one...`);
           await startRealtimeListening(connectionId, {});
           realtimeConnection = realtimeConnections.get(connectionId);
         }
-
-        if (realtimeConnection) {
-          // Pass customScriptPrompt and pillarWeights from frontend settings
-          await realtimeConnection.sendTranscript(data.text, data.prospectType, data.customScriptPrompt, data.pillarWeights);
-        } else {
-          console.error(`[WS] Failed to create realtime connection for ${connectionId}`);
-        }
-      } else if (data.type === 'audio_chunk') {
-        // Receive audio chunk from frontend
-        const realtimeConnection = realtimeConnections.get(connectionId);
         if (realtimeConnection) {
           // Convert base64 to buffer if needed
           const audioBuffer = Buffer.from(data.audio, 'base64');
-          await realtimeConnection.sendAudio(audioBuffer);
+          const meta = connectionPersistence.get(connectionId);
+          const audioResult = await realtimeConnection.sendAudio(audioBuffer);
+          const transcribedText = String(audioResult?.text || '').trim();
+          if (transcribedText) {
+            await handleIncomingTextChunk(connectionId, {
+              chunkText: transcribedText,
+              prospectType: (typeof data.prospectType === 'string' ? data.prospectType : '') || meta?.prospectType || '',
+              customScriptPrompt: meta?.customScriptPrompt || '',
+              pillarWeights: meta?.pillarWeights ?? null,
+              clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
+            });
+          }
         }
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change
@@ -483,6 +421,96 @@ function sendToClient(connectionId, data) {
     ws.send(messageStr);
   } else {
     console.warn(`[WS] Cannot send to ${connectionId}: WebSocket not open (state: ${ws?.readyState})`);
+  }
+}
+
+async function handleIncomingTextChunk(connectionId, {
+  chunkText,
+  prospectType = '',
+  customScriptPrompt = '',
+  pillarWeights = null,
+  clientTsMs = null
+}) {
+  const text = String(chunkText || '').trim();
+  if (!text) return;
+
+  const chunkCharCount = text.length;
+
+  // Get connection metadata
+  const meta = connectionPersistence.get(connectionId);
+  const conversationHistory = meta?.conversationHistory || '';
+
+  // AI SPEAKER DETECTION: Analyze who is speaking using AI agent
+  let detectedSpeaker = 'unknown';
+  try {
+    const speakerResult = await runSpeakerDetectionAgent(text, conversationHistory);
+    if (speakerResult && !speakerResult.error) {
+      detectedSpeaker = speakerResult.speaker || 'unknown';
+    }
+  } catch (speakerErr) {
+    console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
+  }
+
+  // Format speaker label for transcript
+  const speakerLabel = detectedSpeaker === 'closer' ? 'CLOSER' : detectedSpeaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
+
+  // Update conversation history with formatted speaker labels (cap at 8000 chars)
+  const MAX_HISTORY_CHARS = 8000;
+  const formattedLine = `${speakerLabel}: ${text}`;
+  const newHistory = conversationHistory ? conversationHistory + '\n\n' + formattedLine : formattedLine;
+  if (meta) {
+    meta.conversationHistory = newHistory.length > MAX_HISTORY_CHARS
+      ? newHistory.slice(-MAX_HISTORY_CHARS)
+      : newHistory;
+    connectionPersistence.set(connectionId, meta);
+  }
+
+  // Persist transcript chunk to Supabase with AI-detected speaker role
+  if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
+    const supabase = createUserSupabaseClient(meta.authToken);
+    if (supabase) {
+      void supabase
+        .from('call_transcript_chunks')
+        .insert({
+          session_id: meta.sessionId,
+          user_id: meta.userId,
+          user_email: meta.userEmail || '',
+          speaker_role: detectedSpeaker,
+          chunk_text: text,
+          chunk_char_count: chunkCharCount,
+          client_ts_ms: clientTsMs
+        })
+        .then(({ error }) => {
+          if (error) console.warn(`[WS] Supabase transcript insert failed: ${error.message}`);
+        })
+        .catch(() => {});
+
+      // Update session with formatted transcript paragraph
+      void supabase
+        .from('call_sessions')
+        .update({
+          updated_at: new Date().toISOString(),
+          transcript_text: meta.conversationHistory || '',
+          transcript_char_count: (meta.conversationHistory || '').length,
+          ...(prospectType ? { prospect_type: prospectType } : {})
+        })
+        .eq('id', meta.sessionId)
+        .eq('user_id', meta.userId)
+        .then(() => {})
+        .catch(() => {});
+    }
+  }
+
+  // Ensure realtime connection exists
+  let realtimeConnection = realtimeConnections.get(connectionId);
+  if (!realtimeConnection) {
+    console.warn(`[WS] No realtime connection found for ${connectionId}, creating one...`);
+    await startRealtimeListening(connectionId, {});
+    realtimeConnection = realtimeConnections.get(connectionId);
+  }
+
+  if (realtimeConnection) {
+    await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
   }
 }
 

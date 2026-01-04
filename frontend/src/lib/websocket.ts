@@ -290,14 +290,21 @@ export class ConversationWebSocket {
       return;
     }
 
-    // Convert ArrayBuffer to base64
-    const base64 = btoa(
-      String.fromCharCode(...new Uint8Array(audio))
-    );
+    // Convert ArrayBuffer to base64 (safe for large buffers)
+    const bytes = new Uint8Array(audio);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
 
     this.ws.send(JSON.stringify({
       type: 'audio_chunk',
-      audio: base64
+      audio: base64,
+      prospectType: this.currentProspectType,
+      authToken: this.authToken,
+      clientTsMs: Date.now()
     }));
   }
 

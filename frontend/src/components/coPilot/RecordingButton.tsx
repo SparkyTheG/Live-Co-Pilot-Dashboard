@@ -135,193 +135,58 @@ export default function RecordingButton({
       // Provide auth token so backend can persist this call session under RLS
       ws.setAuthToken(session?.access_token ?? null);
       ws.setProspectType(prospectType); // Set initial prospect type
-      ws.startListening(); // This sends 'start_listening' message
+      // Pass settings so backend can use them when analyzing audio-driven transcripts
+      ws.startListening({ customScriptPrompt, pillarWeights }); // This sends 'start_listening' message
       wsRef.current = ws;
-      console.log('✅ Frontend: Listening started, WebSocket ready for transcripts');
+      console.log('✅ Frontend: Listening started, WebSocket ready for audio stream');
 
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
 
-      // Try to use OpenAI Realtime API via backend
-      // For now, we'll use Web Speech API as fallback and send to backend
-      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-        const recognition = new SpeechRecognition();
-
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        // Increase max silence time (some browsers support this)
-        if ('maxSilenceSeconds' in recognition) {
-          (recognition as any).maxSilenceSeconds = 60;
-        }
-
-        recognition.onresult = (event: any) => {
-          // IMPORTANT:
-          // - Do NOT persist interim (non-final) speech results; they cause repeated "are", "are you", etc.
-          // - Only accumulate and send FINAL results to backend (clean transcript chunks)
-          let interimTranscript = '';
-          const finalSegments: string[] = [];
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const t = String(event.results[i][0].transcript || '').trim();
-            if (!t) continue;
-            if (event.results[i].isFinal) {
-              finalSegments.push(t);
-            } else {
-              interimTranscript += t + ' ';
-            }
-          }
-
-          // Optional UI preview: show interim as live text, but don't store it
-          if (onTranscriptUpdate) {
-            const preview = [...finalSegments, interimTranscript.trim()].filter(Boolean).join(' ').trim();
-            if (preview) onTranscriptUpdate(preview);
-          }
-
-          // Only persist/send final segments
-          const finalText = finalSegments.join(' ').trim();
-          if (finalText) {
-            accumulatedTranscriptRef.current += (accumulatedTranscriptRef.current ? ' ' : '') + finalText;
-
-            // Throttle sending to backend (final-only)
-            const now = Date.now();
-            const timeSinceLastSend = now - lastSendTimeRef.current;
-
-            // Send immediately if enough time has passed; otherwise batch final segments
-            if (timeSinceLastSend >= MIN_SEND_INTERVAL) {
-              // Clear any pending timeout
-              if (sendTimeoutRef.current) {
-                clearTimeout(sendTimeoutRef.current);
-                sendTimeoutRef.current = null;
-              }
-
-              // Send accumulated transcript
-              if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
-                console.log('📤 Sending transcript to backend:', accumulatedTranscriptRef.current.substring(0, 100));
-                wsRef.current.sendTranscript(
-                  accumulatedTranscriptRef.current.trim(),
-                  prospectType,
-                  customScriptPrompt,
-                  pillarWeights
-                );
-                lastSendTimeRef.current = now;
-                accumulatedTranscriptRef.current = '';
-              }
-            } else {
-              // Schedule a send after the interval
-              if (!sendTimeoutRef.current) {
-                sendTimeoutRef.current = setTimeout(() => {
-                  if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
-                    console.log('📤 Sending accumulated transcript:', accumulatedTranscriptRef.current.substring(0, 100));
-                    wsRef.current.sendTranscript(
-                      accumulatedTranscriptRef.current.trim(),
-                      prospectType,
-                      customScriptPrompt,
-                      pillarWeights
-                    );
-                    lastSendTimeRef.current = Date.now();
-                    accumulatedTranscriptRef.current = '';
-                  }
-                  sendTimeoutRef.current = null;
-                }, MIN_SEND_INTERVAL - timeSinceLastSend);
-              }
-            }
-          } // end finalText
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          // Don't show error for 'no-speech' as it's common during pauses
-          if (event.error !== 'no-speech') {
-            setError(`Speech recognition: ${event.error}`);
-          }
-          // Auto-restart on errors except 'aborted' and 'not-allowed'
-          // Use ref to check recording state (avoids stale closure)
-          if (event.error !== 'aborted' && event.error !== 'not-allowed' && isRecordingRef.current) {
-            console.log('🔄 Restarting speech recognition after error...');
-            setTimeout(() => {
-              if (isRecordingRef.current && recognitionRef.current) {
-                try {
-                  recognition.start();
-                  console.log('✅ Speech recognition restarted after error');
-                } catch (e) {
-                  console.error('Error restarting recognition:', e);
-                }
-              }
-            }, 500);
-          }
-        };
-
-        recognition.onend = () => {
-          console.log('🔚 Speech recognition ended, isRecordingRef:', isRecordingRef.current);
-          // Use ref to check recording state (avoids stale closure issue!)
-          if (isRecordingRef.current) {
-            // Reset counter every 30 seconds to prevent accumulation during long sessions
-            const now = Date.now();
-            if (now - lastResetTimeRef.current > 30000) {
-              console.log('🔄 Resetting restart counter (30s elapsed)');
-              restartAttemptsRef.current = 0;
-              lastResetTimeRef.current = now;
-            }
-
-            // Check if we've exceeded max restart attempts
-            if (restartAttemptsRef.current >= MAX_RESTART_ATTEMPTS) {
-              console.error('❌ Max restart attempts reached, stopping recording');
-              setError('Speech recognition stopped after multiple restart attempts. Please try again.');
-              stopRecording();
-              return;
-            }
-
-            restartAttemptsRef.current++;
-            console.log(`🔄 Recording still active, restarting speech recognition (attempt ${restartAttemptsRef.current}/${MAX_RESTART_ATTEMPTS})...`);
-
-            // Simplified restart logic - just restart immediately
-            setTimeout(() => {
-              if (!isRecordingRef.current) {
-                console.log('⏹️ Recording stopped during restart delay, not restarting');
-                return;
-              }
-              try {
-                recognition.start();
-                console.log('✅ Speech recognition restarted successfully');
-              } catch (e: any) {
-                // If already started, that's fine
-                if (e.message?.includes('already started')) {
-                  console.log('ℹ️ Recognition already running');
-                } else {
-                  console.error('Failed to restart recognition:', e.message);
-                  // Try one more time after a longer delay
-                  setTimeout(() => {
-                    if (isRecordingRef.current) {
-                      try {
-                        recognition.start();
-                        console.log('✅ Speech recognition restarted on retry');
-                      } catch (e2) {
-                        console.error('Failed to restart recognition on retry:', e2);
-                      }
-                    }
-                  }, 1000);
-                }
-              }
-            }, 100); // Short delay before restart
-          } else {
-            console.log('⏹️ Recording stopped, not restarting speech recognition');
-            restartAttemptsRef.current = 0; // Reset counter
-          }
-        };
-
-        recognition.start();
-        recognitionRef.current = recognition;
-        console.log('✅ Speech recognition started');
-      } else {
-        // No Web Speech API available - show helpful message
-        setError('Speech recognition not available in this browser. Please use Chrome or Edge.');
+      // Stream AUDIO to backend (server-side transcription) using MediaRecorder.
+      // This replaces browser speech-to-text to ensure the backend drives transcription + analysis.
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Microphone access not available in this browser.');
         setIsConnecting(false);
         setIsRecording(false);
         isRecordingRef.current = false;
         return;
       }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeCandidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg'
+      ];
+      const chosenMime = mimeCandidates.find((m) => (window as any).MediaRecorder?.isTypeSupported?.(m)) || '';
+
+      const recorder = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = async (evt: BlobEvent) => {
+        try {
+          if (!evt.data || evt.data.size === 0) return;
+          // Optional UI preview (just show "..." so the UI stays responsive)
+          if (onTranscriptUpdate) onTranscriptUpdate('…');
+
+          const buf = await evt.data.arrayBuffer();
+          wsRef.current?.sendAudioChunk(buf);
+        } catch (e) {
+          console.warn('Error sending audio chunk:', e);
+        }
+      };
+
+      recorder.onerror = (evt: any) => {
+        console.error('MediaRecorder error:', evt?.error || evt);
+        setError('Audio recording error. Please try again.');
+      };
+
+      // Send small chunks for near-real-time transcription.
+      recorder.start(1500); // ms timeslice
+      console.log('✅ MediaRecorder started, streaming audio chunks');
 
       // Update both state and ref
       setIsRecording(true);
@@ -359,13 +224,6 @@ export default function RecordingButton({
     if (sendTimeoutRef.current) {
       clearTimeout(sendTimeoutRef.current);
       sendTimeoutRef.current = null;
-    }
-
-    // Send any remaining accumulated transcript before disconnecting
-    if (wsRef.current && accumulatedTranscriptRef.current.trim()) {
-      console.log('📤 Sending final accumulated transcript');
-      wsRef.current.sendTranscript(accumulatedTranscriptRef.current.trim(), prospectType, customScriptPrompt, pillarWeights);
-      accumulatedTranscriptRef.current = '';
     }
 
     if (recognitionRef.current) {
