@@ -284,7 +284,7 @@ export class ConversationWebSocket {
     }));
   }
 
-  sendAudioChunk(audio: ArrayBuffer) {
+  sendAudioChunk(audio: ArrayBuffer, mimeType?: string) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket is not connected, cannot send audio');
       return;
@@ -302,6 +302,7 @@ export class ConversationWebSocket {
     this.ws.send(JSON.stringify({
       type: 'audio_chunk',
       audio: base64,
+      mimeType: mimeType || '',
       prospectType: this.currentProspectType,
       authToken: this.authToken,
       clientTsMs: Date.now()

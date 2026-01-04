@@ -352,7 +352,7 @@ RULES:
           // Convert base64 to buffer if needed
           const audioBuffer = Buffer.from(data.audio, 'base64');
           const meta = connectionPersistence.get(connectionId);
-          const audioResult = await realtimeConnection.sendAudio(audioBuffer);
+          const audioResult = await realtimeConnection.sendAudio(audioBuffer, data.mimeType || '');
           const transcribedText = String(audioResult?.text || '').trim();
           if (transcribedText) {
             await handleIncomingTextChunk(connectionId, {

@@ -29,6 +29,8 @@ export default function RecordingButton({
   const audioChunksRef = useRef<Blob[]>([]);
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
+  const segmentTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const currentMimeRef = useRef<string>('');
   // Use ref to track recording state (avoids stale closure issues)
   const isRecordingRef = useRef(false);
   // Keepalive interval for WebSocket
@@ -161,6 +163,7 @@ export default function RecordingButton({
         'audio/ogg'
       ];
       const chosenMime = mimeCandidates.find((m) => (window as any).MediaRecorder?.isTypeSupported?.(m)) || '';
+      currentMimeRef.current = chosenMime || '';
 
       const recorder = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined);
       mediaRecorderRef.current = recorder;
@@ -173,7 +176,7 @@ export default function RecordingButton({
           if (onTranscriptUpdate) onTranscriptUpdate('…');
 
           const buf = await evt.data.arrayBuffer();
-          wsRef.current?.sendAudioChunk(buf);
+          wsRef.current?.sendAudioChunk(buf, currentMimeRef.current);
         } catch (e) {
           console.warn('Error sending audio chunk:', e);
         }
@@ -184,9 +187,38 @@ export default function RecordingButton({
         setError('Audio recording error. Please try again.');
       };
 
-      // Send small chunks for near-real-time transcription.
-      recorder.start(1500); // ms timeslice
-      console.log('✅ MediaRecorder started, streaming audio chunks');
+      // IMPORTANT:
+      // MediaRecorder "timeslice" chunks are often fragmented (missing container headers),
+      // which Whisper rejects as invalid format. To ensure each chunk is a valid standalone file,
+      // we record in short segments by STOPPING and RESTARTING the recorder periodically.
+      recorder.onstop = () => {
+        // After each segment stop, restart immediately if still recording.
+        if (isRecordingRef.current && mediaRecorderRef.current) {
+          try {
+            mediaRecorderRef.current.start(); // no timeslice; we stop it ourselves
+          } catch (e) {
+            // ignore
+          }
+        }
+      };
+
+      // Start first segment
+      recorder.start(); // no timeslice
+
+      // Stop segments every ~2s to emit a valid standalone blob each time.
+      if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
+      segmentTimerRef.current = setInterval(() => {
+        const r = mediaRecorderRef.current;
+        if (r && r.state === 'recording') {
+          try {
+            r.stop();
+          } catch {
+            // ignore
+          }
+        }
+      }, 2000);
+
+      console.log('✅ MediaRecorder started (segmented), streaming audio chunks');
 
       // Update both state and ref
       setIsRecording(true);
@@ -219,6 +251,11 @@ export default function RecordingButton({
 
     // Stop keepalive
     stopKeepalive();
+
+    if (segmentTimerRef.current) {
+      clearInterval(segmentTimerRef.current);
+      segmentTimerRef.current = null;
+    }
 
     // Clear any pending send timeout
     if (sendTimeoutRef.current) {

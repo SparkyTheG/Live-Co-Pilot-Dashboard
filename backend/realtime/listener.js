@@ -23,12 +23,22 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
   const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 1800);
   let lastAudioTranscribeMs = 0;
 
-  async function transcribeAudioChunk(audioData) {
+  function extForMime(mimeType) {
+    const mt = String(mimeType || '').toLowerCase();
+    if (mt.includes('webm')) return 'webm';
+    if (mt.includes('ogg') || mt.includes('oga')) return 'ogg';
+    if (mt.includes('wav')) return 'wav';
+    if (mt.includes('mp3')) return 'mp3';
+    if (mt.includes('m4a') || mt.includes('mp4')) return 'm4a';
+    return 'webm';
+  }
+
+  async function transcribeAudioChunk(audioData, mimeType = '') {
     // We receive a single MediaRecorder chunk (typically webm/opus).
     // Persist to a temp file so OpenAI SDK can stream it as multipart form.
     const tmpDir = os.tmpdir();
     const id = crypto.randomBytes(8).toString('hex');
-    const filename = path.join(tmpDir, `chunk-${id}.webm`);
+    const filename = path.join(tmpDir, `chunk-${id}.${extForMime(mimeType)}`);
     try {
       await fsp.writeFile(filename, audioData);
       const fileStream = fs.createReadStream(filename);
@@ -58,7 +68,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
     
     const connection = {
       // Send audio data (from browser microphone)
-      sendAudio: async (audioData) => {
+      sendAudio: async (audioData, mimeType = '') => {
         try {
           const now = Date.now();
           if (now - lastAudioTranscribeMs < AUDIO_MIN_INTERVAL_MS) {
@@ -66,7 +76,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
           }
           lastAudioTranscribeMs = now;
 
-          const text = await transcribeAudioChunk(audioData);
+          const text = await transcribeAudioChunk(audioData, mimeType);
           if (!text) return { text: '' };
           return { text };
         } catch (error) {
