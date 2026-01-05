@@ -13,28 +13,27 @@ function dbg() {}
  */
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'scribe_v2_realtime';
-// Use MANUAL commit strategy; we send discrete ~0.6s PCM chunks from the browser and explicitly commit each chunk.
-// This ensures we get committed transcripts even on short recordings (no need to wait for VAD silence).
+// Use VAD commit strategy - Scribe commits on natural pauses in speech.
+// This produces much better transcription quality than manual commits which fragment words.
 const ELEVENLABS_URL =
   `wss://api.elevenlabs.io/v1/speech-to-text/realtime?` +
   `model_id=${encodeURIComponent(ELEVENLABS_MODEL_ID)}` +
   `&language_code=en` +
   `&audio_format=pcm_16000` +
-  `&commit_strategy=manual`;
+  `&commit_strategy=vad` +
+  `&vad_silence_threshold_secs=0.5` +
+  `&vad_threshold=0.5`;
 
 class ElevenLabsScribeRealtime {
-  constructor({ onError } = {}) {
+  constructor({ onError, onTranscript } = {}) {
     this.onError = onError;
+    this.onTranscript = onTranscript; // Callback for committed transcripts (VAD-based)
     this.ws = null;
     this.connected = false;
-    // "closed" should mean user-requested close() only.
-    // Network disconnects should be reconnectable.
-    this.closed = false;
-    this.pending = []; // FIFO resolves: (text) => void
+    this.closed = false; // true = user explicitly closed, don't reconnect
     this.lastCommitted = '';
     this.lastPartial = '';
-    // ElevenLabs only allows previous_text on the FIRST chunk of a session
-    this.sentFirstChunk = false;
+    this.sentFirstChunk = false; // previous_text only allowed on first chunk
   }
 
   async connect() {
@@ -78,20 +77,12 @@ class ElevenLabsScribeRealtime {
       this.connected = false;
       const reasonStr = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason || '');
       console.log('[S3] ElevenLabs Scribe WS closed', { code, reason: reasonStr.slice(0, 200) });
-      // #region agent log
-      dbg('S3', 'backend/realtime/listener.js:close', 'Scribe WS closed', { code, reason: reasonStr.slice(0, 200) });
-      // #endregion
       this.ws = null;
-      this.#flushPending('');
     });
     this.ws.on('error', (err) => {
       this.connected = false;
       this.ws = null;
-      this.#flushPending('');
       console.log('[S3] ElevenLabs Scribe WS error', { msg: err?.message || String(err) });
-      // #region agent log
-      dbg('S3', 'backend/realtime/listener.js:error', 'Scribe WS error', { msg: err?.message || String(err) });
-      // #endregion
       if (this.onError) this.onError(err);
     });
   }
@@ -102,16 +93,6 @@ class ElevenLabsScribeRealtime {
     try {
       this.ws?.close();
     } catch {}
-    this.#flushPending('');
-  }
-
-  #flushPending(text) {
-    while (this.pending.length) {
-      const r = this.pending.shift();
-      try {
-        r(text);
-      } catch {}
-    }
   }
 
   #onMessage(raw) {
@@ -133,7 +114,13 @@ class ElevenLabsScribeRealtime {
 
     if (t === 'partial_transcript') {
       const text = String(msg?.text || '').trim();
-      if (text) this.lastPartial = text;
+      if (text) {
+        this.lastPartial = text;
+        // With VAD, send partial transcripts to callback for real-time UI updates
+        if (this.onTranscript) {
+          this.onTranscript(text, false); // false = not committed
+        }
+      }
       return;
     }
 
@@ -147,15 +134,11 @@ class ElevenLabsScribeRealtime {
       this.lastPartial = '';
 
       console.log('[S2] ElevenLabs committed transcript', { len: text.length, preview: text.slice(0, 80) });
-      // #region agent log
-      dbg('S2', 'backend/realtime/listener.js:#onMessage', 'Committed transcript received', {
-        textLen: text.length,
-        preview: text.slice(0, 120)
-      });
-      // #endregion
 
-      const r = this.pending.shift();
-      if (r) r(text);
+      // With VAD, send committed transcripts to callback
+      if (this.onTranscript) {
+        this.onTranscript(text, true); // true = committed
+      }
       return;
     }
 
@@ -207,8 +190,8 @@ class ElevenLabsScribeRealtime {
     const payload = {
       message_type: 'input_audio_chunk',
       audio_base_64: Buffer.from(pcmBuffer).toString('base64'),
-      commit: true,
       sample_rate: 16000,
+      // Don't include commit:true - using VAD-based commits for better quality
       ...(includeContext ? { previous_text: String(previousText).slice(-500) } : {})
     };
 
@@ -225,39 +208,11 @@ class ElevenLabsScribeRealtime {
       return '';
     }
 
-    // Resolve when we get a committed transcript.
-    // If we never get a commit (rare), fall back to last partial so UI/analysis can still progress.
-    // CRITICAL: We must remove the resolver from pending if timeout wins, otherwise the queue leaks.
-    const startWait = Date.now();
-    let resolved = false;
-    let myResolver = null;
-
-    const result = await Promise.race([
-      new Promise((resolve) => {
-        myResolver = (txt) => {
-          if (resolved) return; // Already timed out
-          resolved = true;
-          console.log('[S-COMMIT] Got committed text', { waitMs: Date.now() - startWait, len: txt?.length || 0 });
-          resolve(txt);
-        };
-        this.pending.push(myResolver);
-      }),
-      new Promise((resolve) =>
-        setTimeout(() => {
-          if (resolved) return; // Already got commit
-          resolved = true;
-          // CRITICAL: Remove our resolver from the pending queue to prevent leak
-          const idx = this.pending.indexOf(myResolver);
-          if (idx !== -1) this.pending.splice(idx, 1);
-          console.log('[S-TIMEOUT] Chunk timed out after 2.5s', {
-            lastPartialLen: this.lastPartial?.length || 0,
-            pendingLen: this.pending.length
-          });
-          resolve(this.lastPartial || '');
-        }, 2500)
-      )
-    ]);
-    return result;
+    // With VAD, don't wait for commits per-chunk - just return partial transcripts for real-time feel.
+    // Committed transcripts come asynchronously when Scribe detects pauses.
+    // Give a short wait for partial to arrive, then return whatever we have.
+    await new Promise(r => setTimeout(r, 150));
+    return this.lastPartial || '';
   }
 }
 
@@ -317,7 +272,40 @@ function sanitizeTranscript(text) {
   return trimmed;
 }
 
-  const scribe = new ElevenLabsScribeRealtime({ onError });
+  // Handler for committed transcripts from Scribe (VAD-based commits)
+  const handleScribeTranscript = (text, isCommitted) => {
+    if (!text || !isCommitted) return; // Only process committed transcripts
+    
+    const trimmed = String(text).trim();
+    if (!trimmed) return;
+    if (looksLikeHallucination(trimmed)) {
+      console.log('[SCRIBE-COMMIT] Rejected hallucination', { preview: trimmed.slice(0, 60) });
+      return;
+    }
+    const cleaned = sanitizeTranscript(trimmed);
+    if (!cleaned) return;
+    if (looksLikeHallucination(cleaned)) return;
+    
+    console.log('[SCRIBE-COMMIT] Accepted', { len: cleaned.length, preview: cleaned.slice(0, 80) });
+    
+    // Add to conversation history
+    conversationHistory += cleaned + ' ';
+    if (conversationHistory.length > MAX_HISTORY_CHARS) {
+      conversationHistory = conversationHistory.slice(conversationHistory.length - MAX_HISTORY_CHARS);
+    }
+    
+    // Trigger analysis on committed transcripts
+    if (onTranscript && isConnected) {
+      onTranscript(conversationHistory, null, '', null).catch(err => {
+        console.error('[SCRIBE-COMMIT] Analysis error:', err);
+      });
+    }
+  };
+
+  const scribe = new ElevenLabsScribeRealtime({ 
+    onError,
+    onTranscript: handleScribeTranscript
+  });
 
   try {
     const connection = {
