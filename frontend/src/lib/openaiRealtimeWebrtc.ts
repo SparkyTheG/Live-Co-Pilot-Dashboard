@@ -64,6 +64,8 @@ export class OpenAIRealtimeWebRTC {
   private currentResponseText = '';
   private lastTranscript = '';
   private currentTranscriptText = '';
+  private lastGoodTranscript = '';
+  private lastGoodTranscriptMs = 0;
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
   private debug = false;
@@ -298,24 +300,38 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
-    // Transcript events: ONLY treat known audio transcription events.
-    // This avoids accidentally interpreting other message types as transcript.
-    // IMPORTANT: only accept INPUT audio transcription events (what the user spoke).
-    // Do NOT accept response.* transcripts (those can reflect model-side output).
-    const isTranscriptEvt =
+    // Transcript events: accept ONLY "input audio transcription" completion for USER audio.
+    // OpenAI Realtime emits several transcript-like event families; some refer to model output.
+    // We only want what the user actually said on the microphone.
+    const isInputTranscriptionEvt =
       t.startsWith('conversation.item.input_audio_transcription') ||
       t.startsWith('input_audio_transcription');
-    if (isTranscriptEvt) {
+    if (isInputTranscriptionEvt) {
       const deltaText =
         (typeof msg?.delta === 'string' && msg.delta) ||
         (typeof msg?.delta?.transcript === 'string' && msg.delta.transcript) ||
         null;
 
-      const fullText =
+      const fullTextFromItem =
         (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
+        null;
+      const fullTextFromRoot =
         (typeof msg?.transcript === 'string' && msg.transcript) ||
         (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
         null;
+
+      // Only trust item-based transcripts if they look like they came from a USER item.
+      // Defensive: event shapes vary; require some "user-ish" signal when available.
+      const itemRole = String(msg?.item?.role || '').toLowerCase();
+      const itemType = String(msg?.item?.type || '').toLowerCase();
+      const contentType = String(msg?.item?.content?.[0]?.type || '').toLowerCase();
+      const looksLikeUserItem =
+        !itemRole || itemRole === 'user' || itemRole === 'caller' || itemRole === 'speaker';
+      const looksLikeAudioContent =
+        !contentType || contentType.includes('audio') || contentType.includes('input_audio');
+      const okToUseItemTranscript = looksLikeUserItem && looksLikeAudioContent && (itemType ? itemType.includes('message') : true);
+
+      const fullText = (okToUseItemTranscript ? fullTextFromItem : null) || fullTextFromRoot;
 
       const isDelta = /delta/i.test(t);
       const isDone = /completed|done|final/i.test(t);
@@ -330,6 +346,11 @@ export class OpenAIRealtimeWebRTC {
         this.currentTranscriptText = '';
         const tt = sanitizeTranscript(ttRaw);
         if (tt) {
+          // Dedup rapid repeats (common failure mode when event parsing is off)
+          const now = Date.now();
+          if (tt === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500) return;
+          this.lastGoodTranscript = tt;
+          this.lastGoodTranscriptMs = now;
           this.onTranscript?.(tt);
           this.requestAnalysisForTranscript(tt);
         }
