@@ -1055,66 +1055,10 @@ async function startRealtimeListening(connectionId, config) {
             }
           }
 
-          // PERSISTENCE LOGIC: If new analysis has 0 score but we have a previous good score,
-          // preserve the previous score to prevent the UI from "dropping to zero".
-          const previousAnalysis = lastGoodAnalysis.get(connectionId);
-          if (previousAnalysis && analysis.lubometer?.score === 0 && previousAnalysis.lubometer?.score > 0) {
-            console.log(`[${connectionId}] Preserving last good Lubometer score: ${previousAnalysis.lubometer.score} (new was 0)`);
-            analysis.lubometer = previousAnalysis.lubometer;
-            // Also preserve truth index if new one is default (45)
-            if (analysis.truthIndex?.score === 45 && previousAnalysis.truthIndex?.score !== 45) {
-              analysis.truthIndex = previousAnalysis.truthIndex;
-            }
-          }
-
-          // Update last good analysis if this one is valid (score > 0)
-          if (analysis.lubometer?.score > 0) {
-            lastGoodAnalysis.set(connectionId, analysis);
-          }
-
-          console.log(`[${connectionId}] Analysis complete:`, {
-            hotButtons: analysis.hotButtons?.length || 0,
-            objections: analysis.objections?.length || 0,
-            lubometer: analysis.lubometer?.score,
-            truthIndex: analysis.truthIndex?.score
-          });
-
-          // Log analysis results before sending
-          console.log(`[${connectionId}] Analysis results:`, {
-            hotButtonsCount: analysis.hotButtons?.length || 0,
-            objectionsCount: analysis.objections?.length || 0,
-            hasHotButtons: !!analysis.hotButtons,
-            hasObjections: !!analysis.objections,
-            hotButtonsSample: analysis.hotButtons?.slice(0, 2),
-            objectionsSample: analysis.objections?.slice(0, 2)
-          });
-
-          // DEFENSIVE: Ensure arrays before sending to prevent frontend crashes
-          const safeAnalysis = {
-            ...analysis,
-            hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-            objections: Array.isArray(analysis.objections) ? analysis.objections : []
-          };
-
-          // Log if we had to fix the data
-          if (!Array.isArray(analysis.hotButtons)) {
-            console.error(`[${connectionId}] WARNING: Fixed hotButtons type before sending (was ${typeof analysis.hotButtons})`);
-          }
-          if (!Array.isArray(analysis.objections)) {
-            console.error(`[${connectionId}] WARNING: Fixed objections type before sending (was ${typeof analysis.objections})`);
-          }
-
-          // Send analysis to frontend
-          sendToClient(connectionId, {
-            type: 'analysis_update',
-            data: safeAnalysis
-          });
+          // NOTE: Analysis is now handled in onChunk -> handleIncomingTextChunk() via realtime AI
+          // This callback only handles transcript persistence and summary generation
         } catch (error) {
-          console.error(`[${connectionId}] Error in analysis:`, error);
-          sendToClient(connectionId, {
-            type: 'error',
-            message: `Analysis error: ${error.message}`
-          });
+          console.error(`[${connectionId}] Error in onTranscript:`, error);
         }
       },
       onError: (error) => {
