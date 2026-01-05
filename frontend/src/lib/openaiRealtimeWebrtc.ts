@@ -45,6 +45,10 @@ function sanitizeTranscript(text: string): string {
   return t;
 }
 
+function requireExactMatch(a: string, b: string): boolean {
+  return String(a || '').trim() === String(b || '').trim();
+}
+
 function wsUrlToHttpBase(wsUrl: string): string {
   // ws://host/ws -> http://host
   // wss://host/ws -> https://host
@@ -62,7 +66,6 @@ export class OpenAIRealtimeWebRTC {
   private prospectType: string;
   private customScriptPrompt: string;
   private currentResponseText = '';
-  private lastTranscript = '';
   private lastGoodTranscript = '';
   private lastGoodTranscriptMs = 0;
   private responseInFlight = false;
@@ -233,7 +236,6 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
-    this.lastTranscript = text;
     this.responseInFlight = true;
 
     // Make the transcript explicit as a conversation item, then request JSON analysis.
@@ -290,19 +292,25 @@ export class OpenAIRealtimeWebRTC {
     return (
       `Output ONLY valid JSON. No markdown.\n` +
       `You are listening to LIVE AUDIO from the user.\n` +
-      `First, output transcriptText as the VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
+      `First, output rawTranscriptText as the VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
+      `STRICT TRANSCRIPTION RULES (no "improving"):\n` +
       `- Language: English.\n` +
-      `- DO NOT invent words.\n` +
-      `- DO NOT repeat earlier segments.\n` +
-      `- If you are unsure or it is silence/noise, set transcriptText to "" (empty string).\n` +
-      `Then output analysis based ONLY on what the user actually said in the audio.\n` +
+      `- Preserve filler words, false starts, stutters, and informal phrasing.\n` +
+      `- Do NOT correct grammar.\n` +
+      `- Do NOT paraphrase.\n` +
+      `- Do NOT add information that wasn't spoken.\n` +
+      `- Do NOT repeat earlier segments.\n` +
+      `- If unclear/silence/noise, set rawTranscriptText to "".\n` +
+      `Second, output analysisTextUsed which MUST be EXACTLY rawTranscriptText (character-for-character).\n` +
+      `Then output analysis based ONLY on analysisTextUsed.\n` +
       `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
       (this.customScriptPrompt
         ? `Use CUSTOM_SCRIPT_PROMPT (${this.customScriptPrompt}) to tailor rebuttalScript to the business/product.\n`
         : '') +
       `Return JSON EXACTLY like:\n` +
       `{\n` +
-      `  "transcriptText":"exact transcript of the newest audio segment (English)",\n` +
+      `  "rawTranscriptText":"verbatim transcript of the newest audio segment (English)",\n` +
+      `  "analysisTextUsed":"MUST EXACTLY equal rawTranscriptText",\n` +
       `  "speaker":"closer|prospect|unknown",\n` +
       `  "indicatorSignals":{"1":7},\n` +
       `  "hotButtonDetails":[{"id":5,"quote":"exact PROSPECT words","contextualPrompt":"follow-up question","score":8}],\n` +
@@ -375,20 +383,36 @@ export class OpenAIRealtimeWebRTC {
     ) {
       const parsed = safeJsonParse(this.currentResponseText);
       if (parsed && this.onAiAnalysis) {
-        const transcriptText = sanitizeTranscript(parsed?.transcriptText || '');
-        // Use transcriptText produced by the realtime model itself (from audio).
-        if (transcriptText) {
+        const rawTranscriptText = sanitizeTranscript(parsed?.rawTranscriptText || '');
+        const analysisTextUsed = String(parsed?.analysisTextUsed || '').trim();
+
+        // Enforce that analysisTextUsed is EXACTLY what we show in the transcript panel.
+        // If it doesn't match, drop it to prevent "improved transcript" analysis.
+        const ok = requireExactMatch(rawTranscriptText, analysisTextUsed);
+        const transcriptText = ok ? rawTranscriptText : '';
+
+        if (rawTranscriptText && !ok && this.debug) {
+          // eslint-disable-next-line no-console
+          console.warn('[OAI-RT] analysisTextUsed mismatch; dropping transcript for safety', {
+            rawTranscriptText,
+            analysisTextUsed
+          });
+        }
+
+        // Use rawTranscriptText for UI (verbatim). If mismatch, show nothing rather than wrong text.
+        if (rawTranscriptText) {
           // Dedup rapid repeats
           const now = Date.now();
-          if (!(transcriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
-            this.lastGoodTranscript = transcriptText;
+          if (!(rawTranscriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
+            this.lastGoodTranscript = rawTranscriptText;
             this.lastGoodTranscriptMs = now;
-            this.onTranscript?.(transcriptText);
+            this.onTranscript?.(rawTranscriptText);
           }
         }
-        // Strip transcriptText out of aiAnalysis payload before forwarding.
-        const { transcriptText: _tt, ...ai } = parsed || {};
-        this.onAiAnalysis(transcriptText || this.lastTranscript, ai);
+        // Strip transcript fields out of aiAnalysis payload before forwarding.
+        // Ensure analysis is tied to the exact raw transcript we displayed.
+        const { rawTranscriptText: _rt, analysisTextUsed: _atu, transcriptText: _legacy, ...ai } = parsed || {};
+        this.onAiAnalysis(transcriptText || rawTranscriptText || '', ai);
       }
       this.currentResponseText = '';
       this.responseInFlight = false;
