@@ -250,6 +250,22 @@ export default function RecordingButton({
           }
         });
         openAiRealtimeRef.current = openAi;
+
+        // #region agent log
+        // Forward debug events to backend so they show up in Railway logs (no secrets).
+        (window as any).__OAI_DEBUG_SINK__ = (payload: any) => {
+          try {
+            wsRef.current?.sendRaw({
+              type: 'debug_event',
+              tag: payload?.tag || '',
+              message: payload?.message || '',
+              data: payload?.data || null,
+              ts: payload?.ts || Date.now()
+            });
+          } catch {}
+        };
+        // #endregion
+
         await openAi.connect();
         console.log('✅ OpenAI Realtime WebRTC connected');
 

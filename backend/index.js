@@ -626,6 +626,18 @@ CRITICAL RULES:
           type: 'transcript_chunk',
           data: { speaker: sp || 'unknown', text: transcriptText, ts: Date.now() }
         });
+      } else if (data.type === 'debug_event') {
+        // Debug-only: allows frontend to emit structured logs visible in Railway.
+        // Never log secrets.
+        try {
+          console.log('[DEBUG_EVENT]', {
+            connectionId: connectionId.slice(-8),
+            tag: String(data?.tag || ''),
+            message: String(data?.message || ''),
+            data: data?.data && typeof data.data === 'object' ? data.data : null,
+            ts: data?.ts || Date.now()
+          });
+        } catch {}
       } else if (data.type === 'audio_chunk') {
         // Receive audio chunk from frontend
         let realtimeConnection = realtimeConnections.get(connectionId);
