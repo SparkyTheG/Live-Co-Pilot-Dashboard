@@ -241,16 +241,28 @@ class ElevenLabsScribeRealtime {
 
     // Resolve when we get a committed transcript.
     // If we never get a commit (rare), fall back to last partial so UI/analysis can still progress.
+    // CRITICAL: We must remove the resolver from pending if timeout wins, otherwise the queue leaks.
     const startWait = Date.now();
-    let resolvedBy = 'pending';
+    let resolved = false;
+    let myResolver = null;
+
     const result = await Promise.race([
-      new Promise((resolve) => this.pending.push((txt) => {
-        resolvedBy = 'commit';
-        resolve(txt);
-      })),
+      new Promise((resolve) => {
+        myResolver = (txt) => {
+          if (resolved) return; // Already timed out
+          resolved = true;
+          console.log('[S-COMMIT] Got committed text', { waitMs: Date.now() - startWait, len: txt?.length || 0 });
+          resolve(txt);
+        };
+        this.pending.push(myResolver);
+      }),
       new Promise((resolve) =>
         setTimeout(() => {
-          resolvedBy = 'timeout';
+          if (resolved) return; // Already got commit
+          resolved = true;
+          // CRITICAL: Remove our resolver from the pending queue to prevent leak
+          const idx = this.pending.indexOf(myResolver);
+          if (idx !== -1) this.pending.splice(idx, 1);
           console.log('[S-TIMEOUT] Chunk timed out after 2.5s', {
             lastPartialLen: this.lastPartial?.length || 0,
             pendingLen: this.pending.length
@@ -259,9 +271,6 @@ class ElevenLabsScribeRealtime {
         }, 2500)
       )
     ]);
-    if (resolvedBy === 'commit') {
-      console.log('[S-COMMIT] Got committed text', { waitMs: Date.now() - startWait, len: result?.length || 0 });
-    }
     return result;
   }
 }
