@@ -194,36 +194,18 @@ class ElevenLabsScribeRealtime {
   }
 
   async sendPcmChunk(pcmBuffer, previousText = '') {
-    // #region agent log
-    dbg('H1', 'listener.js:sendPcmChunk:entry', 'sendPcmChunk called', {
-      connected: this.connected,
-      closed: this.closed,
-      wsState: this.ws?.readyState,
-      pendingLen: this.pending.length,
-      chunkBytes: Buffer.byteLength(pcmBuffer)
-    });
-    // #endregion
-
     // If we were disconnected, reconnect.
     if (!this.connected) {
-      // #region agent log
-      dbg('H1', 'listener.js:sendPcmChunk:reconnect', 'Attempting reconnect', { closed: this.closed });
-      // #endregion
+      console.log('[S-RECONNECT] Scribe not connected, attempting reconnect', { closed: this.closed });
       try {
         await this.connect();
       } catch (e) {
-        // #region agent log
-        dbg('H1', 'listener.js:sendPcmChunk:reconnectFail', 'Reconnect failed', { err: e?.message });
-        // #endregion
+        console.log('[S-RECONNECT-FAIL]', { err: e?.message });
         return '';
       }
     }
     if (!this.ws || this.ws.readyState !== WS.OPEN) {
-      // #region agent log
-      dbg('H1', 'listener.js:sendPcmChunk:notOpen', 'WS not open after connect attempt', {
-        wsState: this.ws?.readyState
-      });
-      // #endregion
+      console.log('[S-NOT-OPEN] WS not open', { wsState: this.ws?.readyState, closed: this.closed });
       return '';
     }
 
@@ -260,28 +242,26 @@ class ElevenLabsScribeRealtime {
     // Resolve when we get a committed transcript.
     // If we never get a commit (rare), fall back to last partial so UI/analysis can still progress.
     const startWait = Date.now();
+    let resolvedBy = 'pending';
     const result = await Promise.race([
       new Promise((resolve) => this.pending.push((txt) => {
-        // #region agent log
-        dbg('H4', 'listener.js:resolved', 'Pending resolved', {
-          waitMs: Date.now() - startWait,
-          textLen: txt?.length || 0
-        });
-        // #endregion
+        resolvedBy = 'commit';
         resolve(txt);
       })),
       new Promise((resolve) =>
         setTimeout(() => {
-          // #region agent log
-          dbg('H4', 'listener.js:timeout', 'Timeout fallback', {
+          resolvedBy = 'timeout';
+          console.log('[S-TIMEOUT] Chunk timed out after 2.5s', {
             lastPartialLen: this.lastPartial?.length || 0,
             pendingLen: this.pending.length
           });
-          // #endregion
           resolve(this.lastPartial || '');
         }, 2500)
       )
     ]);
+    if (resolvedBy === 'commit') {
+      console.log('[S-COMMIT] Got committed text', { waitMs: Date.now() - startWait, len: result?.length || 0 });
+    }
     return result;
   }
 }
@@ -293,6 +273,7 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
   const MAX_HISTORY_CHARS = Number(process.env.MAX_TRANSCRIPT_CHARS || 8000);
   const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 250);
   let lastAudioTranscribeMs = 0;
+  let audioChunkCount = 0;
 
   function looksLikeHallucination(text) {
     const t = String(text || '').trim().toLowerCase();
@@ -347,19 +328,16 @@ function sanitizeTranscript(text) {
     const connection = {
       // Send audio data (from browser microphone)
       sendAudio: async (audioData, mimeType = '') => {
-        // #region agent log
-        dbg('H3', 'listener.js:sendAudio:entry', 'sendAudio called', {
-          dataLen: audioData?.length || audioData?.byteLength || 0
+        // Runtime evidence for Railway logs
+        const chunkNum = ++audioChunkCount;
+        console.log(`[A1] sendAudio chunk #${chunkNum}`, {
+          bytes: audioData?.length || audioData?.byteLength || 0,
+          scribeConnected: scribe.connected,
+          scribeClosed: scribe.closed
         });
-        // #endregion
         try {
           const now = Date.now();
           if (now - lastAudioTranscribeMs < AUDIO_MIN_INTERVAL_MS) {
-            // #region agent log
-            dbg('H3', 'listener.js:sendAudio:throttled', 'Skipped (throttle)', {
-              deltaMs: now - lastAudioTranscribeMs
-            });
-            // #endregion
             return { text: '' };
           }
           lastAudioTranscribeMs = now;
@@ -372,51 +350,28 @@ function sanitizeTranscript(text) {
               : '';
           const text = await scribe.sendPcmChunk(audioData, safePrev);
           const trimmed = String(text || '').trim();
-          // #region agent log
-          dbg('H5', 'listener.js:sendAudio:postScribe', 'Text from Scribe', {
-            rawLen: text?.length || 0,
-            trimmedLen: trimmed.length,
-            preview: trimmed.slice(0, 80)
+          console.log(`[A2] Scribe returned for chunk #${chunkNum}`, {
+            textLen: trimmed.length,
+            preview: trimmed.slice(0, 60) || '(empty)'
           });
-          // #endregion
           if (!trimmed) return { text: '' };
           if (looksLikeHallucination(trimmed)) {
-            // #region agent log
-            dbg('H5', 'listener.js:sendAudio:hallucination', 'Rejected as hallucination', {
-              preview: trimmed.slice(0, 80)
-            });
-            // #endregion
+            console.log(`[A3] Rejected hallucination chunk #${chunkNum}`, { preview: trimmed.slice(0, 60) });
             return { text: '' };
           }
           const cleaned = sanitizeTranscript(trimmed);
           if (!cleaned) {
-            // #region agent log
-            dbg('H5', 'listener.js:sendAudio:sanitized', 'Sanitized to empty', {
-              before: trimmed.slice(0, 80)
-            });
-            // #endregion
+            console.log(`[A3] Sanitized to empty chunk #${chunkNum}`, { before: trimmed.slice(0, 60) });
             return { text: '' };
           }
           if (looksLikeHallucination(cleaned)) {
-            // #region agent log
-            dbg('H5', 'listener.js:sendAudio:postSanitizeHallucination', 'Post-sanitize hallucination', {
-              cleaned: cleaned.slice(0, 80)
-            });
-            // #endregion
+            console.log(`[A3] Post-sanitize hallucination chunk #${chunkNum}`, { cleaned: cleaned.slice(0, 60) });
             return { text: '' };
           }
-          // #region agent log
-          dbg('H5', 'listener.js:sendAudio:success', 'Returning text', {
-            cleanedLen: cleaned.length
-          });
-          // #endregion
+          console.log(`[A4] Accepted chunk #${chunkNum}`, { cleanedLen: cleaned.length });
           return { text: cleaned };
         } catch (error) {
-          // #region agent log
-          dbg('H3', 'listener.js:sendAudio:error', 'sendAudio error', {
-            err: error?.message || String(error)
-          });
-          // #endregion
+          console.log(`[A5] sendAudio error chunk #${chunkNum}`, { err: error?.message || String(error) });
           console.error('Audio processing error:', error);
           if (onError) onError(error);
           return { text: '', error: error.message };
