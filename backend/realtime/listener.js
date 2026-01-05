@@ -1,28 +1,10 @@
 import { WebSocket as WS } from 'ws';
 import dotenv from 'dotenv';
-import fs from 'fs';
 
 dotenv.config();
 
-// #region agent debug-mode log (HTTP ingest) - keep tiny, no secrets
-const DEBUG_INGEST =
-  'http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a';
-function dbg(hypothesisId, location, message, data = {}) {
-  fetch(DEBUG_INGEST, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'scribe-v2',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now()
-    })
-  }).catch(() => {});
-}
-// #endregion
+// Debug logging - no-op in production (logs go to Railway console instead)
+function dbg() {}
 
 /**
  * ElevenLabs Scribe v2 Realtime STT
@@ -196,16 +178,22 @@ class ElevenLabsScribeRealtime {
   async sendPcmChunk(pcmBuffer, previousText = '') {
     // If we were disconnected, reconnect.
     if (!this.connected) {
-      console.log('[S-RECONNECT] Scribe not connected, attempting reconnect', { closed: this.closed });
+      // If closed=true, user explicitly closed - don't reconnect
+      if (this.closed) {
+        console.log('[S-CLOSED] Scribe session permanently closed, not reconnecting');
+        return '';
+      }
+      console.log('[S-RECONNECT] Scribe disconnected, attempting reconnect...');
       try {
         await this.connect();
+        console.log('[S-RECONNECT-OK] Reconnected successfully');
       } catch (e) {
         console.log('[S-RECONNECT-FAIL]', { err: e?.message });
         return '';
       }
     }
     if (!this.ws || this.ws.readyState !== WS.OPEN) {
-      console.log('[S-NOT-OPEN] WS not open', { wsState: this.ws?.readyState, closed: this.closed });
+      console.log('[S-NOT-OPEN] WS not open after connect', { wsState: this.ws?.readyState, closed: this.closed });
       return '';
     }
 
@@ -233,9 +221,7 @@ class ElevenLabsScribeRealtime {
     try {
       this.ws.send(JSON.stringify(payload));
     } catch (e) {
-      // #region agent log
-      dbg('S3', 'backend/realtime/listener.js:sendPcmChunk', 'WS send failed', { msg: e?.message || String(e) });
-      // #endregion
+      console.log('[S-SEND-FAIL] WS send failed', { err: e?.message || String(e) });
       return '';
     }
 
