@@ -29,6 +29,8 @@ export default function RecordingButton({
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
   const openAiRealtimeRef = useRef<OpenAIRealtimeWebRTC | null>(null);
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string>('default');
   // Use ref to track recording state (avoids stale closure issues)
   const isRecordingRef = useRef(false);
   // Keepalive interval for WebSocket
@@ -76,6 +78,31 @@ export default function RecordingButton({
       wsRef.current.setProspectType(prospectType);
     }
   }, [prospectType]);
+
+  // Load microphone devices (best-effort)
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        setAudioInputs(mics);
+        // If current selection vanished, fall back to default
+        if (selectedMicId !== 'default' && !mics.some(m => m.deviceId === selectedMicId)) {
+          setSelectedMicId('default');
+        }
+      } catch {
+        // ignore
+      }
+    };
+    refresh();
+    const handler = () => { void refresh(); };
+    navigator.mediaDevices?.addEventListener?.('devicechange', handler as any);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handler as any);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -198,6 +225,7 @@ export default function RecordingButton({
           authToken: session.access_token,
           prospectType,
           customScriptPrompt,
+          deviceId: selectedMicId,
           onTranscript: (text) => {
             if (onTranscriptUpdate) onTranscriptUpdate(text);
             // Immediately push transcript into backend so the "Live transcript (backend)" panel updates
@@ -429,6 +457,21 @@ export default function RecordingButton({
 
   return (
     <div className="flex flex-col items-center gap-2">
+      {audioInputs.length > 1 && !isRecording && (
+        <select
+          value={selectedMicId}
+          onChange={(e) => setSelectedMicId(e.target.value)}
+          className="text-xs bg-gray-800/60 border border-gray-700 rounded-md px-2 py-1 text-gray-200 max-w-[220px]"
+          title="Select microphone"
+        >
+          <option value="default">Default microphone</option>
+          {audioInputs.map((d) => (
+            <option key={d.deviceId} value={d.deviceId}>
+              {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+            </option>
+          ))}
+        </select>
+      )}
       <button
         onClick={handleToggle}
         disabled={isConnecting}

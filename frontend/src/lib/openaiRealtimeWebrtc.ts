@@ -70,6 +70,7 @@ export class OpenAIRealtimeWebRTC {
   private debug = false;
   private hadSpeechSinceLastTick = false;
   private analysisTickTimer: number | null = null;
+  private deviceId: string | null = null;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
   private onAiAnalysis?: (transcriptText: string, ai: RealtimeAiAnalysis) => void;
@@ -80,6 +81,7 @@ export class OpenAIRealtimeWebRTC {
     model?: string;
     prospectType?: string;
     customScriptPrompt?: string;
+    deviceId?: string | null;
     onTranscript?: (text: string) => void;
     onAiAnalysis?: (transcriptText: string, ai: RealtimeAiAnalysis) => void;
     onError?: (err: Error) => void;
@@ -89,6 +91,7 @@ export class OpenAIRealtimeWebRTC {
     this.model = opts.model || 'gpt-4o-realtime-preview';
     this.prospectType = opts.prospectType || 'unknown';
     this.customScriptPrompt = opts.customScriptPrompt || '';
+    this.deviceId = opts.deviceId || null;
     this.onTranscript = opts.onTranscript;
     this.onAiAnalysis = opts.onAiAnalysis;
     this.onError = opts.onError;
@@ -120,7 +123,17 @@ export class OpenAIRealtimeWebRTC {
     this.model = model;
 
     // 2) Get mic stream and create peer connection
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Use strong constraints to improve transcription quality and avoid system-audio/echo issues.
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1
+    };
+    if (this.deviceId && this.deviceId !== 'default') {
+      (audioConstraints as any).deviceId = { exact: this.deviceId };
+    }
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
 
     const pc = new RTCPeerConnection();
     this.pc = pc;
@@ -276,7 +289,12 @@ export class OpenAIRealtimeWebRTC {
   #buildResponseInstructions() {
     return (
       `Output ONLY valid JSON. No markdown.\n` +
-      `You are listening to LIVE AUDIO from the user. First, output transcriptText of what you just heard (English).\n` +
+      `You are listening to LIVE AUDIO from the user.\n` +
+      `First, output transcriptText as the VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
+      `- Language: English.\n` +
+      `- DO NOT invent words.\n` +
+      `- DO NOT repeat earlier segments.\n` +
+      `- If you are unsure or it is silence/noise, set transcriptText to "" (empty string).\n` +
       `Then output analysis based ONLY on what the user actually said in the audio.\n` +
       `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
       (this.customScriptPrompt
