@@ -792,6 +792,14 @@ async function handleIncomingTextChunk(connectionId, {
 
   // Option B: use realtime single-session analysis to update frontend quickly
   if (useRealtime && aiAnalysisFromRealtime) {
+    // Log what realtime AI returned (especially objections with rebuttals)
+    console.log('[REALTIME-AI-RESULT]', {
+      hasObjections: Array.isArray(aiAnalysisFromRealtime.objections),
+      objectionCount: aiAnalysisFromRealtime.objections?.length || 0,
+      firstObjection: aiAnalysisFromRealtime.objections?.[0] || null,
+      hotButtonCount: aiAnalysisFromRealtime.hotButtonDetails?.length || 0
+    });
+    
     const normalizedAi = {
       indicatorSignals: aiAnalysisFromRealtime.indicatorSignals || {},
       hotButtonDetails: aiAnalysisFromRealtime.hotButtonDetails || [],
@@ -957,12 +965,10 @@ async function startRealtimeListening(connectionId, config) {
       },
       onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
         try {
-          console.log(`[${connectionId}] Analyzing transcript (${transcript.length} chars), prospectType: ${prospectType}`);
-          if (pillarWeights) {
-            console.log(`[${connectionId}] Using custom pillar weights from Admin Panel`);
-          }
-          // Analyze the conversation in real-time with prospect type, custom script prompt, and pillar weights
-          const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
+          // OLD 15 AI AGENTS DISABLED - Realtime AI is now the ONLY analysis source
+          // Analysis is done in onChunk -> handleIncomingTextChunk() using the realtime AI session
+          console.log(`[${connectionId}] onTranscript: Skipping legacy 15 AI agents (realtime AI is active)`);
+          console.log(`[${connectionId}] Transcript length: ${transcript.length} chars, prospectType: ${prospectType}`);
 
           // Persist a readable "paragraph" snapshot with CLOSER:/PROSPECT: labels on the session row.
           // Uses the formatted conversationHistory which has speaker labels.
