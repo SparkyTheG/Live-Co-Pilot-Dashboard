@@ -115,8 +115,10 @@ export class RealtimeAnalysisSession {
     });
 
     this.connected = true;
+    console.log('[REALTIME-AI] WebSocket connected successfully to OpenAI Realtime');
 
     // Configure session.
+    console.log('[REALTIME-AI] Sending session.update with instructions');
     this.#send({
       type: 'session.update',
       session: {
@@ -272,9 +274,36 @@ export class RealtimeAnalysisSession {
     }
 
     const t = msg?.type || '';
-    // #region agent log
-    debugLog('H-C: Realtime WS message', { type: t, hasError: !!msg?.error, errorMsg: msg?.error?.message || 'none' });
-    // #endregion
+    
+    // Log ALL messages for debugging (Railway visible)
+    console.log('[REALTIME-WS-MSG]', {
+      type: t,
+      hasError: !!msg?.error,
+      errorMsg: msg?.error?.message || 'none',
+      // Log the raw structure to understand the format
+      keys: Object.keys(msg || {}).join(','),
+      rawPreview: JSON.stringify(msg).slice(0, 200)
+    });
+
+    // Handle errors from OpenAI
+    if (msg?.error) {
+      console.error('[REALTIME-AI-ERROR]', msg.error);
+      this.#failPending(new Error(msg.error.message || 'OpenAI Realtime error'));
+      return;
+    }
+
+    // OpenAI Realtime text streaming: response.text.delta
+    if (t === 'response.text.delta' && typeof msg?.delta === 'string') {
+      this.currentText += msg.delta;
+      console.log('[REALTIME-STREAMING]', { textLen: this.currentText.length });
+      return;
+    }
+
+    // OpenAI Realtime content part events
+    if (t === 'response.content_part.added' && msg?.part?.text) {
+      this.currentText += msg.part.text;
+      return;
+    }
 
     // Different Realtime implementations may emit different event names.
     // We handle multiple common shapes defensively.
@@ -311,6 +340,7 @@ export class RealtimeAnalysisSession {
       t === 'response.text.done' ||
       t === 'response.output_text.done'
     ) {
+      console.log('[REALTIME-DONE]', { accumulatedTextLen: this.currentText.length, textPreview: this.currentText.slice(0, 100) });
       this.#finishPending(this.currentText);
     }
   }
