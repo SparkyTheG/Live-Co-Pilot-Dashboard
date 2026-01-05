@@ -190,11 +190,38 @@ class ElevenLabsScribeRealtime {
   }
 
   async sendPcmChunk(pcmBuffer, previousText = '') {
+    // #region agent log
+    dbg('H1', 'listener.js:sendPcmChunk:entry', 'sendPcmChunk called', {
+      connected: this.connected,
+      closed: this.closed,
+      wsState: this.ws?.readyState,
+      pendingLen: this.pending.length,
+      chunkBytes: Buffer.byteLength(pcmBuffer)
+    });
+    // #endregion
+
     // If we were disconnected, reconnect.
     if (!this.connected) {
-      await this.connect();
+      // #region agent log
+      dbg('H1', 'listener.js:sendPcmChunk:reconnect', 'Attempting reconnect', { closed: this.closed });
+      // #endregion
+      try {
+        await this.connect();
+      } catch (e) {
+        // #region agent log
+        dbg('H1', 'listener.js:sendPcmChunk:reconnectFail', 'Reconnect failed', { err: e?.message });
+        // #endregion
+        return '';
+      }
     }
-    if (!this.ws || this.ws.readyState !== WS.OPEN) return '';
+    if (!this.ws || this.ws.readyState !== WS.OPEN) {
+      // #region agent log
+      dbg('H1', 'listener.js:sendPcmChunk:notOpen', 'WS not open after connect attempt', {
+        wsState: this.ws?.readyState
+      });
+      // #endregion
+      return '';
+    }
 
     // reset partial before sending
     this.lastPartial = '';
@@ -224,12 +251,30 @@ class ElevenLabsScribeRealtime {
 
     // Resolve when we get a committed transcript.
     // If we never get a commit (rare), fall back to last partial so UI/analysis can still progress.
-    return await Promise.race([
-      new Promise((resolve) => this.pending.push(resolve)),
+    const startWait = Date.now();
+    const result = await Promise.race([
+      new Promise((resolve) => this.pending.push((txt) => {
+        // #region agent log
+        dbg('H4', 'listener.js:resolved', 'Pending resolved', {
+          waitMs: Date.now() - startWait,
+          textLen: txt?.length || 0
+        });
+        // #endregion
+        resolve(txt);
+      })),
       new Promise((resolve) =>
-        setTimeout(() => resolve(this.lastPartial || ''), 2500)
+        setTimeout(() => {
+          // #region agent log
+          dbg('H4', 'listener.js:timeout', 'Timeout fallback', {
+            lastPartialLen: this.lastPartial?.length || 0,
+            pendingLen: this.pending.length
+          });
+          // #endregion
+          resolve(this.lastPartial || '');
+        }, 2500)
       )
     ]);
+    return result;
   }
 }
 
@@ -294,9 +339,19 @@ function sanitizeTranscript(text) {
     const connection = {
       // Send audio data (from browser microphone)
       sendAudio: async (audioData, mimeType = '') => {
+        // #region agent log
+        dbg('H3', 'listener.js:sendAudio:entry', 'sendAudio called', {
+          dataLen: audioData?.length || audioData?.byteLength || 0
+        });
+        // #endregion
         try {
           const now = Date.now();
           if (now - lastAudioTranscribeMs < AUDIO_MIN_INTERVAL_MS) {
+            // #region agent log
+            dbg('H3', 'listener.js:sendAudio:throttled', 'Skipped (throttle)', {
+              deltaMs: now - lastAudioTranscribeMs
+            });
+            // #endregion
             return { text: '' };
           }
           lastAudioTranscribeMs = now;
@@ -309,13 +364,51 @@ function sanitizeTranscript(text) {
               : '';
           const text = await scribe.sendPcmChunk(audioData, safePrev);
           const trimmed = String(text || '').trim();
+          // #region agent log
+          dbg('H5', 'listener.js:sendAudio:postScribe', 'Text from Scribe', {
+            rawLen: text?.length || 0,
+            trimmedLen: trimmed.length,
+            preview: trimmed.slice(0, 80)
+          });
+          // #endregion
           if (!trimmed) return { text: '' };
-          if (looksLikeHallucination(trimmed)) return { text: '' };
+          if (looksLikeHallucination(trimmed)) {
+            // #region agent log
+            dbg('H5', 'listener.js:sendAudio:hallucination', 'Rejected as hallucination', {
+              preview: trimmed.slice(0, 80)
+            });
+            // #endregion
+            return { text: '' };
+          }
           const cleaned = sanitizeTranscript(trimmed);
-          if (!cleaned) return { text: '' };
-          if (looksLikeHallucination(cleaned)) return { text: '' };
+          if (!cleaned) {
+            // #region agent log
+            dbg('H5', 'listener.js:sendAudio:sanitized', 'Sanitized to empty', {
+              before: trimmed.slice(0, 80)
+            });
+            // #endregion
+            return { text: '' };
+          }
+          if (looksLikeHallucination(cleaned)) {
+            // #region agent log
+            dbg('H5', 'listener.js:sendAudio:postSanitizeHallucination', 'Post-sanitize hallucination', {
+              cleaned: cleaned.slice(0, 80)
+            });
+            // #endregion
+            return { text: '' };
+          }
+          // #region agent log
+          dbg('H5', 'listener.js:sendAudio:success', 'Returning text', {
+            cleanedLen: cleaned.length
+          });
+          // #endregion
           return { text: cleaned };
         } catch (error) {
+          // #region agent log
+          dbg('H3', 'listener.js:sendAudio:error', 'sendAudio error', {
+            err: error?.message || String(error)
+          });
+          // #endregion
           console.error('Audio processing error:', error);
           if (onError) onError(error);
           return { text: '', error: error.message };
