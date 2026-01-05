@@ -228,8 +228,8 @@ export default function RecordingButton({
         setIsRecording(true);
         isRecordingRef.current = true;
         setIsConnecting(false);
-        return;
-      }
+              return;
+            }
 
       // Stream AUDIO to backend (server-side transcription) as PCM16 @ 16kHz for ElevenLabs Scribe v2 Realtime.
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -237,8 +237,8 @@ export default function RecordingButton({
         setIsConnecting(false);
         setIsRecording(false);
         isRecordingRef.current = false;
-        return;
-      }
+                return;
+              }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;

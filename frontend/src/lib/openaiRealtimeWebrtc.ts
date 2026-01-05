@@ -63,12 +63,13 @@ export class OpenAIRealtimeWebRTC {
   private customScriptPrompt: string;
   private currentResponseText = '';
   private lastTranscript = '';
-  private currentTranscriptText = '';
   private lastGoodTranscript = '';
   private lastGoodTranscriptMs = 0;
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
   private debug = false;
+  private hadSpeechSinceLastTick = false;
+  private analysisTickTimer: number | null = null;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
   private onAiAnalysis?: (transcriptText: string, ai: RealtimeAiAnalysis) => void;
@@ -134,20 +135,23 @@ export class OpenAIRealtimeWebRTC {
     this.dc = dc;
     dc.onmessage = (ev) => this.#onDataMessage(ev.data);
     dc.onopen = () => {
-      // Configure session: transcription + server VAD. Keep response modality text only.
+      // Configure session: server VAD. We DO NOT use a separate transcription model (no Whisper/gpt-4o-transcribe).
+      // Instead, we ask the realtime model itself to output transcriptText + aiAnalysis JSON.
       this.#send({
         type: 'session.update',
         session: {
           modalities: ['text'],
           turn_detection: { type: 'server_vad' },
-          // Force English transcription for your use case.
-          input_audio_transcription: {
-            model: 'gpt-4o-transcribe',
-            language: 'en'
-          },
           instructions: this.#buildInstructions()
         }
       });
+
+      // Fallback: request an analysis tick periodically (only if speech happened)
+      this.analysisTickTimer = window.setInterval(() => {
+        if (!this.responseInFlight && this.hadSpeechSinceLastTick) {
+          this.requestAnalysisTick();
+        }
+      }, 2500);
     };
 
     // 3) SDP exchange with OpenAI Realtime (WebRTC)
@@ -184,6 +188,26 @@ export class OpenAIRealtimeWebRTC {
     this.mediaStream = null;
     this.responseInFlight = false;
     this.pendingTranscript = null;
+    this.hadSpeechSinceLastTick = false;
+    if (this.analysisTickTimer) window.clearInterval(this.analysisTickTimer);
+    this.analysisTickTimer = null;
+  }
+
+  requestAnalysisTick() {
+    if (this.responseInFlight) return;
+    this.responseInFlight = true;
+    this.hadSpeechSinceLastTick = false;
+    this.currentResponseText = '';
+    // Cancel any ghost response then request a new one.
+    this.#send({ type: 'response.cancel' });
+    this.#send({
+      type: 'response.create',
+      response: {
+        modalities: ['text'],
+        instructions: this.#buildResponseInstructions(),
+        max_output_tokens: 1400
+      }
+    });
   }
 
   requestAnalysisForTranscript(transcriptText: string) {
@@ -252,13 +276,15 @@ export class OpenAIRealtimeWebRTC {
   #buildResponseInstructions() {
     return (
       `Output ONLY valid JSON. No markdown.\n` +
-      `Analyze the entire conversation so far, with focus on the newest transcript.\n` +
+      `You are listening to LIVE AUDIO from the user. First, output transcriptText of what you just heard (English).\n` +
+      `Then output analysis based ONLY on what the user actually said in the audio.\n` +
       `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
       (this.customScriptPrompt
         ? `Use CUSTOM_SCRIPT_PROMPT (${this.customScriptPrompt}) to tailor rebuttalScript to the business/product.\n`
         : '') +
       `Return JSON EXACTLY like:\n` +
       `{\n` +
+      `  "transcriptText":"exact transcript of the newest audio segment (English)",\n` +
       `  "speaker":"closer|prospect|unknown",\n` +
       `  "indicatorSignals":{"1":7},\n` +
       `  "hotButtonDetails":[{"id":5,"quote":"exact PROSPECT words","contextualPrompt":"follow-up question","score":8}],\n` +
@@ -300,63 +326,12 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
-    // Transcript events: accept ONLY "input audio transcription" completion for USER audio.
-    // OpenAI Realtime emits several transcript-like event families; some refer to model output.
-    // We only want what the user actually said on the microphone.
-    const isInputTranscriptionEvt =
-      t.startsWith('conversation.item.input_audio_transcription') ||
-      t.startsWith('input_audio_transcription');
-    if (isInputTranscriptionEvt) {
-      const deltaText =
-        (typeof msg?.delta === 'string' && msg.delta) ||
-        (typeof msg?.delta?.transcript === 'string' && msg.delta.transcript) ||
-        null;
-
-      const fullTextFromItem =
-        (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
-        null;
-      const fullTextFromRoot =
-        (typeof msg?.transcript === 'string' && msg.transcript) ||
-        (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
-        null;
-
-      // Only trust item-based transcripts if they look like they came from a USER item.
-      // Defensive: event shapes vary; require some "user-ish" signal when available.
-      const itemRole = String(msg?.item?.role || '').toLowerCase();
-      const itemType = String(msg?.item?.type || '').toLowerCase();
-      const contentType = String(msg?.item?.content?.[0]?.type || '').toLowerCase();
-      const looksLikeUserItem =
-        !itemRole || itemRole === 'user' || itemRole === 'caller' || itemRole === 'speaker';
-      const looksLikeAudioContent =
-        !contentType || contentType.includes('audio') || contentType.includes('input_audio');
-      const okToUseItemTranscript = looksLikeUserItem && looksLikeAudioContent && (itemType ? itemType.includes('message') : true);
-
-      const fullText = (okToUseItemTranscript ? fullTextFromItem : null) || fullTextFromRoot;
-
-      const isDelta = /delta/i.test(t);
-      const isDone = /completed|done|final/i.test(t);
-
-      if (isDelta && deltaText) {
-        this.currentTranscriptText += deltaText;
-        return;
+    // VAD / speech state events. Trigger analysis when speech stops.
+    if (/speech_stopped|speech_end|speech_ended/i.test(t)) {
+      this.hadSpeechSinceLastTick = true;
+      if (!this.responseInFlight) {
+        this.requestAnalysisTick();
       }
-
-      if (isDone) {
-        const ttRaw = String((fullText || this.currentTranscriptText || '')).trim();
-        this.currentTranscriptText = '';
-        const tt = sanitizeTranscript(ttRaw);
-        if (tt) {
-          // Dedup rapid repeats (common failure mode when event parsing is off)
-          const now = Date.now();
-          if (tt === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500) return;
-          this.lastGoodTranscript = tt;
-          this.lastGoodTranscriptMs = now;
-          this.onTranscript?.(tt);
-          this.requestAnalysisForTranscript(tt);
-        }
-        return;
-      }
-      // Other transcript event types: ignore
       return;
     }
 
@@ -382,7 +357,20 @@ export class OpenAIRealtimeWebRTC {
     ) {
       const parsed = safeJsonParse(this.currentResponseText);
       if (parsed && this.onAiAnalysis) {
-        this.onAiAnalysis(this.lastTranscript, parsed);
+        const transcriptText = sanitizeTranscript(parsed?.transcriptText || '');
+        // Use transcriptText produced by the realtime model itself (from audio).
+        if (transcriptText) {
+          // Dedup rapid repeats
+          const now = Date.now();
+          if (!(transcriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
+            this.lastGoodTranscript = transcriptText;
+            this.lastGoodTranscriptMs = now;
+            this.onTranscript?.(transcriptText);
+          }
+        }
+        // Strip transcriptText out of aiAnalysis payload before forwarding.
+        const { transcriptText: _tt, ...ai } = parsed || {};
+        this.onAiAnalysis(transcriptText || this.lastTranscript, ai);
       }
       this.currentResponseText = '';
       this.responseInFlight = false;
