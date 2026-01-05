@@ -31,17 +31,14 @@ function dbg(hypothesisId, location, message, data = {}) {
  */
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'scribe_v2_realtime';
-// Use VAD commit strategy so silence doesn't constantly "commit" hallucinated phrases.
+// Use MANUAL commit strategy; we send discrete ~0.6s PCM chunks from the browser and explicitly commit each chunk.
+// This ensures we get committed transcripts even on short recordings (no need to wait for VAD silence).
 const ELEVENLABS_URL =
   `wss://api.elevenlabs.io/v1/speech-to-text/realtime?` +
   `model_id=${encodeURIComponent(ELEVENLABS_MODEL_ID)}` +
   `&language_code=en` +
   `&audio_format=pcm_16000` +
-  `&commit_strategy=vad` +
-  `&vad_silence_threshold_secs=1.5` +
-  `&vad_threshold=0.4` +
-  `&min_speech_duration_ms=250` +
-  `&min_silence_duration_ms=2500`;
+  `&commit_strategy=manual`;
 
 class ElevenLabsScribeRealtime {
   constructor({ onError } = {}) {
@@ -53,6 +50,7 @@ class ElevenLabsScribeRealtime {
     this.closed = false;
     this.pending = []; // FIFO resolves: (text) => void
     this.lastCommitted = '';
+    this.lastPartial = '';
   }
 
   async connect() {
@@ -147,6 +145,12 @@ class ElevenLabsScribeRealtime {
     });
     // #endregion
 
+    if (t === 'partial_transcript') {
+      const text = String(msg?.text || '').trim();
+      if (text) this.lastPartial = text;
+      return;
+    }
+
     if (t === 'committed_transcript' || t === 'committed_transcript_with_timestamps') {
       const text = String(msg?.text || '').trim();
       if (!text) return;
@@ -154,6 +158,7 @@ class ElevenLabsScribeRealtime {
       // Dedup common repeats
       if (text === this.lastCommitted) return;
       this.lastCommitted = text;
+      this.lastPartial = '';
 
       console.log('[S2] ElevenLabs committed transcript', { len: text.length, preview: text.slice(0, 80) });
       // #region agent log
@@ -191,9 +196,13 @@ class ElevenLabsScribeRealtime {
     }
     if (!this.ws || this.ws.readyState !== WS.OPEN) return '';
 
+    // reset partial before sending
+    this.lastPartial = '';
+
     const payload = {
       message_type: 'input_audio_chunk',
       audio_base_64: Buffer.from(pcmBuffer).toString('base64'),
+      commit: true,
       sample_rate: 16000,
       ...(previousText ? { previous_text: String(previousText).slice(-500) } : {})
     };
@@ -213,10 +222,13 @@ class ElevenLabsScribeRealtime {
       return '';
     }
 
-    // Resolve when we get a committed transcript (or timeout => empty)
+    // Resolve when we get a committed transcript.
+    // If we never get a commit (rare), fall back to last partial so UI/analysis can still progress.
     return await Promise.race([
       new Promise((resolve) => this.pending.push(resolve)),
-      new Promise((resolve) => setTimeout(() => resolve(''), 6000))
+      new Promise((resolve) =>
+        setTimeout(() => resolve(this.lastPartial || ''), 2500)
+      )
     ]);
   }
 }
@@ -246,8 +258,8 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       'for more information visit'
     ];
     if (badPhrases.some((p) => t.includes(p))) return true;
-  // URLs are almost always hallucinations in this app context
-  if (t.includes('http://') || t.includes('https://') || t.includes('www.')) return true;
+    // URLs are almost always hallucinations in this app context
+    if (t.includes('http://') || t.includes('https://') || t.includes('www.')) return true;
     return false;
   }
 
