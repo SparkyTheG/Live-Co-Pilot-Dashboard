@@ -25,25 +25,44 @@ export default function RecordingButton({
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noBackend, setNoBackend] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
-  const segmentTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const currentMimeRef = useRef<string>('');
   // Use ref to track recording state (avoids stale closure issues)
   const isRecordingRef = useRef(false);
   // Keepalive interval for WebSocket
   const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  // Transcript accumulation for throttling
-  const accumulatedTranscriptRef = useRef<string>('');
-  const lastSendTimeRef = useRef<number>(0);
   const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const MIN_SEND_INTERVAL = 3000; // Minimum 3 seconds between sends
-  // Track restart attempts to prevent infinite loops
-  const restartAttemptsRef = useRef<number>(0);
-  const MAX_RESTART_ATTEMPTS = 500; // Very high limit for long sessions (increased from 50)
-  const lastResetTimeRef = useRef<number>(Date.now());
+
+  // ElevenLabs Scribe expects PCM16 @ 16kHz. We capture mic audio and stream PCM chunks.
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmPendingRef = useRef<Int16Array[]>([]);
+  const pcmPendingSamplesRef = useRef<number>(0);
+
+  function resampleLinear(input: Float32Array, inRate: number, outRate: number) {
+    if (inRate === outRate) return input;
+    const ratio = inRate / outRate;
+    const outLength = Math.max(1, Math.floor(input.length / ratio));
+    const out = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const idx = i * ratio;
+      const i0 = Math.floor(idx);
+      const i1 = Math.min(input.length - 1, i0 + 1);
+      const frac = idx - i0;
+      out[i] = input[i0] * (1 - frac) + input[i1] * frac;
+    }
+    return out;
+  }
+
+  function floatToInt16PCM(input: Float32Array) {
+    const out = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      const s = Math.max(-1, Math.min(1, input[i]));
+      out[i] = s < 0 ? (s * 0x8000) : (s * 0x7fff);
+    }
+    return out;
+  }
 
   // Update prospect type when it changes
   useEffect(() => {
@@ -152,8 +171,7 @@ export default function RecordingButton({
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
 
-      // Stream AUDIO to backend (server-side transcription) using MediaRecorder.
-      // This replaces browser speech-to-text to ensure the backend drives transcription + analysis.
+      // Stream AUDIO to backend (server-side transcription) as PCM16 @ 16kHz for ElevenLabs Scribe v2 Realtime.
       if (!navigator.mediaDevices?.getUserMedia) {
         setError('Microphone access not available in this browser.');
         setIsConnecting(false);
@@ -163,75 +181,68 @@ export default function RecordingButton({
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeCandidates = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/ogg'
-      ];
-      const chosenMime = mimeCandidates.find((m) => (window as any).MediaRecorder?.isTypeSupported?.(m)) || '';
-      currentMimeRef.current = chosenMime || '';
+      mediaStreamRef.current = stream;
 
-      const recorder = new MediaRecorder(stream, chosenMime ? { mimeType: chosenMime } : undefined);
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
+      const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) {
+        setError('Web Audio API not available in this browser.');
+        setIsConnecting(false);
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        return;
+      }
 
-      recorder.ondataavailable = async (evt: BlobEvent) => {
-        try {
-          if (!evt.data || evt.data.size === 0) return;
-          // Optional UI preview (just show "..." so the UI stays responsive)
+      const audioCtx: AudioContext = new AudioContextCtor();
+      audioContextRef.current = audioCtx;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      // ScriptProcessorNode is deprecated but widely supported in Chromium (and simplest for PCM capture).
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      const INPUT_RATE = audioCtx.sampleRate;
+      const TARGET_RATE = 16000;
+      // Send about ~0.6s per chunk at 16kHz (~9600 samples)
+      const TARGET_SAMPLES_PER_CHUNK = 9600;
+
+      processor.onaudioprocess = (evt) => {
+        if (!isRecordingRef.current) return;
+        const input = evt.inputBuffer.getChannelData(0);
+        const resampled = resampleLinear(input, INPUT_RATE, TARGET_RATE);
+        const pcm16 = floatToInt16PCM(resampled);
+
+        pcmPendingRef.current.push(pcm16);
+        pcmPendingSamplesRef.current += pcm16.length;
+
+        if (pcmPendingSamplesRef.current >= TARGET_SAMPLES_PER_CHUNK) {
+          const total = pcmPendingSamplesRef.current;
+          const merged = new Int16Array(total);
+          let offset = 0;
+          for (const part of pcmPendingRef.current) {
+            merged.set(part, offset);
+            offset += part.length;
+          }
+          pcmPendingRef.current = [];
+          pcmPendingSamplesRef.current = 0;
+
+          // Optional UI preview to show activity
           if (onTranscriptUpdate) onTranscriptUpdate('…');
 
-          const buf = await evt.data.arrayBuffer();
-          wsRef.current?.sendAudioChunk(buf, currentMimeRef.current);
-        } catch (e) {
-          console.warn('Error sending audio chunk:', e);
+          // NOTE: sendAudioChunk expects ArrayBuffer. We send PCM16 little-endian at 16kHz.
+          wsRef.current?.sendAudioChunk(merged.buffer, 'pcm_16000');
         }
       };
 
-      recorder.onerror = (evt: any) => {
-        console.error('MediaRecorder error:', evt?.error || evt);
-        setError('Audio recording error. Please try again.');
-      };
+      // Wire graph
+      source.connect(processor);
+      // Some browsers require processor be connected to destination to start processing.
+      processor.connect(audioCtx.destination);
 
-      // IMPORTANT:
-      // MediaRecorder "timeslice" chunks are often fragmented (missing container headers),
-      // which Whisper rejects as invalid format. To ensure each chunk is a valid standalone file,
-      // we record in short segments by STOPPING and RESTARTING the recorder periodically.
-      recorder.onstop = () => {
-        // After each segment stop, restart immediately if still recording.
-        if (isRecordingRef.current && mediaRecorderRef.current) {
-          try {
-            mediaRecorderRef.current.start(); // no timeslice; we stop it ourselves
-          } catch (e) {
-            // ignore
-          }
-        }
-      };
-
-      // Start first segment
-      recorder.start(); // no timeslice
-
-      // Stop segments every ~3s to emit a valid standalone blob each time.
-      // (slightly longer segments improve Whisper accuracy)
-      if (segmentTimerRef.current) clearInterval(segmentTimerRef.current);
-      segmentTimerRef.current = setInterval(() => {
-        const r = mediaRecorderRef.current;
-        if (r && r.state === 'recording') {
-          try {
-            r.stop();
-          } catch {
-            // ignore
-          }
-        }
-      }, 3000);
-
-      console.log('✅ MediaRecorder started (segmented), streaming audio chunks');
+      console.log('✅ PCM streaming started (PCM16@16k) for ElevenLabs Scribe v2 Realtime');
 
       // Update both state and ref
       setIsRecording(true);
       isRecordingRef.current = true;
-      restartAttemptsRef.current = 0; // Reset restart counter
       setIsConnecting(false);
     } catch (err: any) {
       console.error('Error starting recording:', err);
@@ -260,11 +271,6 @@ export default function RecordingButton({
     // Stop keepalive
     stopKeepalive();
 
-    if (segmentTimerRef.current) {
-      clearInterval(segmentTimerRef.current);
-      segmentTimerRef.current = null;
-    }
-
     // Clear any pending send timeout
     if (sendTimeoutRef.current) {
       clearTimeout(sendTimeoutRef.current);
@@ -280,14 +286,23 @@ export default function RecordingButton({
       recognitionRef.current = null;
     }
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    // Stop PCM pipeline + mic
+    try {
+      processorRef.current?.disconnect();
+    } catch {}
+    processorRef.current = null;
+    try {
+      audioContextRef.current?.close();
+    } catch {}
+    audioContextRef.current = null;
+
+    if (mediaStreamRef.current) {
       try {
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
       } catch (e) {
-        console.warn('Error stopping media recorder:', e);
+        console.warn('Error stopping media stream:', e);
       }
-      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
     }
 
     if (wsRef.current) {
@@ -302,7 +317,6 @@ export default function RecordingButton({
     }
 
     setIsRecording(false);
-    audioChunksRef.current = [];
     console.log('✅ Frontend: Recording stopped and cleaned up');
   };
 

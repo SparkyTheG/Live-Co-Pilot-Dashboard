@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation, analyzeConversationFromAiAnalysis } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
@@ -10,6 +11,38 @@ import { runSpeakerDetectionAgent, runConversationSummaryAgent } from './analysi
 import { RealtimeAnalysisSession } from './realtime/realtimeAnalysis.js';
 
 dotenv.config();
+
+// #region agent log helper
+const DEBUG_LOG_PATH = '/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log';
+function debugLog(msg, data = {}) {
+  const line = JSON.stringify({ ts: Date.now(), msg, ...data }) + '\n';
+  try {
+    fs.appendFileSync(DEBUG_LOG_PATH, line);
+  } catch {
+    // In production (Railway), this path may not exist; never crash the server for logging.
+  }
+}
+// #endregion
+
+// #region agent debug-mode log (HTTP ingest) - keep tiny, no secrets
+const DEBUG_INGEST =
+  'http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a';
+function dbg(hypothesisId, location, message, data = {}) {
+  fetch(DEBUG_INGEST, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'scribe-v2',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+}
+// #endregion
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -98,6 +131,9 @@ process.on('SIGTERM', () => {
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
+  // #region agent log
+  debugLog('H-G: NEW WebSocket connection', { ip: req.socket.remoteAddress });
+  // #endregion
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
   connectionPersistence.set(connectionId, {
@@ -138,6 +174,9 @@ wss.on('connection', (ws, req) => {
       ws.isAlive = true;
 
       const data = JSON.parse(message.toString());
+      // #region agent log
+      debugLog('H-H: WS message received', { type: data.type, hasText: !!data.text, hasAudio: !!data.audio });
+      // #endregion
 
       if (data.type === 'start_listening') {
         // Start real-time conversation listening
@@ -148,9 +187,27 @@ wss.on('connection', (ws, req) => {
           meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
           meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
           meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
-          // Enable Realtime analysis if configured
-          meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_REALTIME_MODEL);
+          // Enable Realtime analysis by default when OPENAI_API_KEY is set (model defaults internally)
+          meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_API_KEY) && process.env.OPENAI_REALTIME_DISABLED !== 'true';
           connectionPersistence.set(connectionId, meta);
+
+          // Runtime evidence in Railway logs (no secrets)
+          console.log('[A1] start_listening env check', {
+            useRealtimeAnalysis: meta.useRealtimeAnalysis,
+            hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+            hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
+            hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL),
+            disabled: process.env.OPENAI_REALTIME_DISABLED === 'true'
+          });
+
+          // #region agent log
+          dbg('A1', 'backend/index.js:start_listening', 'Realtime analysis enabled?', {
+            useRealtimeAnalysis: meta.useRealtimeAnalysis,
+            hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
+            hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+            hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL)
+          });
+          // #endregion
 
           if (meta.useRealtimeAnalysis && process.env.OPENAI_API_KEY) {
             if (!realtimeAnalysisSessions.get(connectionId)) {
@@ -182,11 +239,15 @@ RULES:
 
               const session = new RealtimeAnalysisSession({
                 apiKey: process.env.OPENAI_API_KEY,
-                model: process.env.OPENAI_REALTIME_MODEL,
+                model: process.env.OPENAI_REALTIME_MODEL || undefined,
                 instructions,
                 temperature: 0
               });
               realtimeAnalysisSessions.set(connectionId, session);
+              console.log('[A1] RealtimeAnalysisSession created', {
+                connectionId,
+                model: process.env.OPENAI_REALTIME_MODEL || 'default'
+              });
               // Connect in background so first chunk is fast
               void session.connect().catch(() => {});
             }
@@ -351,6 +412,12 @@ RULES:
         if (realtimeConnection) {
           // Convert base64 to buffer if needed
           const audioBuffer = Buffer.from(data.audio, 'base64');
+          // #region agent log
+          dbg('A2', 'backend/index.js:audio_chunk', 'Audio chunk received', {
+            bytes: audioBuffer.length,
+            mimeType: String(data.mimeType || '')
+          });
+          // #endregion
           const meta = connectionPersistence.get(connectionId);
           const audioResult = await realtimeConnection.sendAudio(audioBuffer, data.mimeType || '');
           const transcribedText = String(audioResult?.text || '').trim();
@@ -548,18 +615,37 @@ async function handleIncomingTextChunk(connectionId, {
   let detectedSpeaker = 'unknown';
   let aiAnalysisFromRealtime = null;
 
+  // #region agent log
+  debugLog('H-E: handleIncomingTextChunk', { useRealtime, hasSession: !!realtimeAnalysisSessions.get(connectionId), chunkTextLen: text.length });
+  // #endregion
+  // Runtime evidence in Railway logs (no secrets)
+  console.log('[A2] handleIncomingTextChunk', {
+    useRealtime,
+    hasSession: !!realtimeAnalysisSessions.get(connectionId),
+    chunkTextLen: text.length
+  });
+
   if (useRealtime) {
     try {
       const session = realtimeAnalysisSessions.get(connectionId);
+      // #region agent log
+      debugLog('H-A,H-B: Calling analyzeChunk', { sessionConnected: session?.connected, sessionClosed: session?.closed, inFlight: session?.inFlight });
+      // #endregion
       aiAnalysisFromRealtime = await session.analyzeChunk({
         chunkText: text,
         prospectType: prospectType || meta?.prospectType || '',
         customScriptPrompt: customScriptPrompt || meta?.customScriptPrompt || ''
       });
+      // #region agent log
+      debugLog('H-B,H-D: analyzeChunk returned', { isNull: aiAnalysisFromRealtime===null, hasIndicatorSignals: !!aiAnalysisFromRealtime?.indicatorSignals, hasHotButtonDetails: Array.isArray(aiAnalysisFromRealtime?.hotButtonDetails), hasObjections: Array.isArray(aiAnalysisFromRealtime?.objections), speaker: aiAnalysisFromRealtime?.speaker });
+      // #endregion
       if (aiAnalysisFromRealtime?.speaker) {
         detectedSpeaker = aiAnalysisFromRealtime.speaker;
       }
     } catch (e) {
+      // #region agent log
+      debugLog('H-A,H-C: analyzeChunk threw', { errorMsg: e.message });
+      // #endregion
       console.warn(`[WS] Realtime analysis error: ${e.message}`);
     }
   } else {

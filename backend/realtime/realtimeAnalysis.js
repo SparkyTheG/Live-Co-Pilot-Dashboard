@@ -1,4 +1,17 @@
 import { WebSocket as WS } from 'ws';
+import fs from 'fs';
+
+// #region agent log helper
+const DEBUG_LOG_PATH = '/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log';
+function debugLog(msg, data = {}) {
+  const line = JSON.stringify({ ts: Date.now(), msg, ...data }) + '\n';
+  try {
+    fs.appendFileSync(DEBUG_LOG_PATH, line);
+  } catch {
+    // In production (Railway), this path may not exist; never crash the process for logging.
+  }
+}
+// #endregion
 
 /**
  * OpenAI Realtime API bridge (TEXT mode).
@@ -59,6 +72,9 @@ export class RealtimeAnalysisSession {
     if (!this.apiKey) throw new Error('OPENAI_API_KEY missing');
 
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.model)}`;
+    // #region agent log
+    debugLog('H-A: Attempting Realtime WS connect', { url, model: this.model });
+    // #endregion
     this.ws = new WS(url, {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -70,10 +86,16 @@ export class RealtimeAnalysisSession {
       const t = setTimeout(() => reject(new Error('Realtime connect timeout')), 15000);
       this.ws.on('open', () => {
         clearTimeout(t);
+        // #region agent log
+        debugLog('H-A: Realtime WS opened successfully');
+        // #endregion
         resolve();
       });
       this.ws.on('error', (err) => {
         clearTimeout(t);
+        // #region agent log
+        debugLog('H-A: Realtime WS error during connect', { errorMsg: err?.message });
+        // #endregion
         reject(err);
       });
     });
@@ -205,11 +227,20 @@ export class RealtimeAnalysisSession {
   #finishPending(text) {
     if (this.pendingTimer) clearTimeout(this.pendingTimer);
     this.pendingTimer = null;
+    // #region agent log
+    debugLog('H-C: finishPending', { textLength: text?.length, textPreview: String(text||'').slice(0,300) });
+    // #endregion
     const parsed = safeJsonParse(text);
     if (!parsed) {
+      // #region agent log
+      debugLog('H-C: JSON parse FAILED', { textPreview: String(text||'').slice(0,200) });
+      // #endregion
       this.#failPending(new Error('Realtime returned invalid JSON'));
       return;
     }
+    // #region agent log
+    debugLog('H-D: JSON parsed OK', { keys: Object.keys(parsed).join(','), hasIndicatorSignals: !!parsed.indicatorSignals, hasHotButtonDetails: !!parsed.hotButtonDetails, hasObjections: !!parsed.objections });
+    // #endregion
     if (this.pendingResolve) this.pendingResolve(parsed);
     this.pendingResolve = null;
     this.pendingReject = null;
@@ -224,6 +255,9 @@ export class RealtimeAnalysisSession {
     }
 
     const t = msg?.type || '';
+    // #region agent log
+    debugLog('H-C: Realtime WS message', { type: t, hasError: !!msg?.error, errorMsg: msg?.error?.message || 'none' });
+    // #endregion
 
     // Different Realtime implementations may emit different event names.
     // We handle multiple common shapes defensively.

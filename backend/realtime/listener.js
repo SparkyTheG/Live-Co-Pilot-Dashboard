@@ -1,42 +1,208 @@
-import OpenAI from 'openai';
+import { WebSocket as WS } from 'ws';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import { promises as fsp } from 'fs';
-import os from 'os';
-import path from 'path';
-import crypto from 'crypto';
 
 dotenv.config();
 
-// For audio transcription, we use OpenAI's Whisper API
-// The main text analysis uses GPT-4o-mini - see engine.js
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 30000 // 30 second timeout for audio processing
-});
+// #region agent debug-mode log (HTTP ingest) - keep tiny, no secrets
+const DEBUG_INGEST =
+  'http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a';
+function dbg(hypothesisId, location, message, data = {}) {
+  fetch(DEBUG_INGEST, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'scribe-v2',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now()
+    })
+  }).catch(() => {});
+}
+// #endregion
+
+/**
+ * ElevenLabs Scribe v2 Realtime STT
+ * - Requires PCM 16-bit little-endian at 16kHz (we stream this from the frontend)
+ * - Docs: https://elevenlabs.io/docs/api-reference/speech-to-text/v-1-speech-to-text-realtime
+ */
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
+const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'scribe_v2_realtime';
+// Use VAD commit strategy so silence doesn't constantly "commit" hallucinated phrases.
+const ELEVENLABS_URL =
+  `wss://api.elevenlabs.io/v1/speech-to-text/realtime?` +
+  `model_id=${encodeURIComponent(ELEVENLABS_MODEL_ID)}` +
+  `&language_code=en` +
+  `&audio_format=pcm_16000` +
+  `&commit_strategy=vad` +
+  `&vad_silence_threshold_secs=1.5` +
+  `&vad_threshold=0.4` +
+  `&min_speech_duration_ms=250` +
+  `&min_silence_duration_ms=2500`;
+
+class ElevenLabsScribeRealtime {
+  constructor({ onError } = {}) {
+    this.onError = onError;
+    this.ws = null;
+    this.connected = false;
+    this.closed = false;
+    this.pending = []; // FIFO resolves: (text) => void
+    this.lastCommitted = '';
+  }
+
+  async connect() {
+    if (this.connected) return;
+    if (this.closed) throw new Error('Scribe session closed');
+    if (!ELEVENLABS_API_KEY) throw new Error('ELEVENLABS_API_KEY missing');
+
+    // #region agent log
+    dbg('S1', 'backend/realtime/listener.js:connect', 'Connecting ElevenLabs Scribe WS', {
+      model: ELEVENLABS_MODEL_ID
+    });
+    // #endregion
+
+    this.ws = new WS(ELEVENLABS_URL, {
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+    });
+
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('ElevenLabs connect timeout')), 15000);
+      this.ws.on('open', () => {
+        clearTimeout(t);
+        this.connected = true;
+        // Runtime evidence in Railway logs (no secrets)
+        console.log('[S1] ElevenLabs Scribe WS open', { model: ELEVENLABS_MODEL_ID });
+        // #region agent log
+        dbg('S1', 'backend/realtime/listener.js:connect', 'ElevenLabs WS open');
+        // #endregion
+        resolve();
+      });
+      this.ws.on('error', (err) => {
+        clearTimeout(t);
+        reject(err);
+      });
+    });
+
+    this.ws.on('message', (raw) => this.#onMessage(raw));
+    this.ws.on('close', () => {
+      this.connected = false;
+      this.closed = true;
+      console.log('[S3] ElevenLabs Scribe WS closed');
+      this.#flushPending('');
+    });
+    this.ws.on('error', (err) => {
+      this.connected = false;
+      this.#flushPending('');
+      console.log('[S3] ElevenLabs Scribe WS error', { msg: err?.message || String(err) });
+      if (this.onError) this.onError(err);
+    });
+  }
+
+  close() {
+    this.closed = true;
+    this.connected = false;
+    try {
+      this.ws?.close();
+    } catch {}
+    this.#flushPending('');
+  }
+
+  #flushPending(text) {
+    while (this.pending.length) {
+      const r = this.pending.shift();
+      try {
+        r(text);
+      } catch {}
+    }
+  }
+
+  #onMessage(raw) {
+    let msg;
+    try {
+      msg = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+
+    const t = String(msg?.message_type || '');
+
+    if (t === 'committed_transcript' || t === 'committed_transcript_with_timestamps') {
+      const text = String(msg?.text || '').trim();
+      if (!text) return;
+
+      // Dedup common repeats
+      if (text === this.lastCommitted) return;
+      this.lastCommitted = text;
+
+      console.log('[S2] ElevenLabs committed transcript', { len: text.length, preview: text.slice(0, 80) });
+      // #region agent log
+      dbg('S2', 'backend/realtime/listener.js:#onMessage', 'Committed transcript received', {
+        textLen: text.length,
+        preview: text.slice(0, 120)
+      });
+      // #endregion
+
+      const r = this.pending.shift();
+      if (r) r(text);
+      return;
+    }
+
+    // Surface auth/quota/etc errors (do not log secrets)
+    if (t.toLowerCase().includes('error')) {
+      const errMsg = String(msg?.message || msg?.error || t);
+      console.log('[S3] ElevenLabs Scribe error msg', { msgType: t, errMsg: String(errMsg).slice(0, 140) });
+      // #region agent log
+      dbg('S3', 'backend/realtime/listener.js:#onMessage', 'Scribe error message', {
+        msgType: t,
+        errMsg
+      });
+      // #endregion
+      if (this.onError) this.onError(new Error(errMsg));
+    }
+  }
+
+  async sendPcmChunk(pcmBuffer, previousText = '') {
+    await this.connect();
+    if (!this.ws || this.ws.readyState !== WS.OPEN) return '';
+
+    const payload = {
+      message_type: 'input_audio_chunk',
+      audio_base_64: Buffer.from(pcmBuffer).toString('base64'),
+      sample_rate: 16000,
+      ...(previousText ? { previous_text: String(previousText).slice(-500) } : {})
+    };
+
+    // #region agent log
+    dbg('S2', 'backend/realtime/listener.js:sendPcmChunk', 'Sending PCM chunk', {
+      bytes: Buffer.byteLength(pcmBuffer)
+    });
+    // #endregion
+
+    this.ws.send(JSON.stringify(payload));
+
+    // Resolve when we get a committed transcript (or timeout => empty)
+    return await Promise.race([
+      new Promise((resolve) => this.pending.push(resolve)),
+      new Promise((resolve) => setTimeout(() => resolve(''), 6000))
+    ]);
+  }
+}
 
 export async function createRealtimeConnection({ onTranscript, onError }) {
   let conversationHistory = '';
   let isConnected = true;
   // Cap history so long sessions don't grow prompt size unbounded (prevents slowdown)
   const MAX_HISTORY_CHARS = Number(process.env.MAX_TRANSCRIPT_CHARS || 8000);
-  const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 1800);
+  const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 250);
   let lastAudioTranscribeMs = 0;
-
-  function extForMime(mimeType) {
-    const mt = String(mimeType || '').toLowerCase();
-    if (mt.includes('webm')) return 'webm';
-    if (mt.includes('ogg') || mt.includes('oga')) return 'ogg';
-    if (mt.includes('wav')) return 'wav';
-    if (mt.includes('mp3')) return 'mp3';
-    if (mt.includes('m4a') || mt.includes('mp4')) return 'm4a';
-    return 'webm';
-  }
 
   function looksLikeHallucination(text) {
     const t = String(text || '').trim().toLowerCase();
     if (!t) return true;
-    // Common Whisper hallucinations on silence / noise
+    // Common STT hallucinations on silence / noise
     const badPhrases = [
       'thank you for watching',
       'thanks for watching',
@@ -44,71 +210,18 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       'subscribe to my channel',
       'hit the bell',
       'music',
-      'applause'
+      'applause',
+      'disclaimer',
+      'fema.gov',
+      'for more information visit'
     ];
     if (badPhrases.some((p) => t.includes(p))) return true;
     return false;
   }
 
-  async function transcribeAudioChunk(audioData, mimeType = '') {
-    // We receive a single MediaRecorder chunk (typically webm/opus).
-    // Persist to a temp file so OpenAI SDK can stream it as multipart form.
-    const tmpDir = os.tmpdir();
-    const id = crypto.randomBytes(8).toString('hex');
-    const filename = path.join(tmpDir, `chunk-${id}.${extForMime(mimeType)}`);
-    try {
-      await fsp.writeFile(filename, audioData);
-      const fileStream = fs.createReadStream(filename);
-      // Use verbose_json when possible so we can suppress "no speech" hallucinations.
-      const transcription = await openai.audio.transcriptions.create({
-        file: fileStream,
-        model: 'whisper-1',
-        language: 'en',
-        prompt: 'Real estate sales call between a CLOSER (salesperson) and a PROSPECT (property owner). Common terms: foreclosure, auction date, months behind, mortgage, lender, loan balance, equity, cash offer, seller financing, tenant, landlord, motivation, timeline.',
-        temperature: 0,
-        response_format: 'verbose_json'
-      });
-      const text =
-        typeof transcription === 'string'
-          ? transcription
-          : (transcription?.text ?? '');
-
-      const trimmed = String(text || '').trim();
-      if (!trimmed) return '';
-
-      // If we have per-segment no_speech_prob, drop likely silence.
-      const segments = (transcription && typeof transcription === 'object') ? (transcription.segments || []) : [];
-      if (Array.isArray(segments) && segments.length > 0) {
-        const avgNoSpeech = segments
-          .map((s) => Number(s?.no_speech_prob))
-          .filter((n) => Number.isFinite(n))
-          .reduce((a, b, _, arr) => a + b / arr.length, 0);
-        if (Number.isFinite(avgNoSpeech) && avgNoSpeech >= 0.8) {
-          return '';
-        }
-      }
-
-      // Heuristic: suppress common hallucination phrases
-      if (looksLikeHallucination(trimmed)) return '';
-
-      return trimmed;
-    } finally {
-      try {
-        await fsp.unlink(filename);
-      } catch {
-        // ignore
-      }
-    }
-  }
+  const scribe = new ElevenLabsScribeRealtime({ onError });
 
   try {
-    // OpenAI Realtime API integration
-    // For production, use OpenAI's Realtime API WebSocket
-    // For now, we'll use a hybrid approach:
-    // 1. Accept audio/text input via WebSocket
-    // 2. Process with OpenAI Whisper for transcription
-    // 3. Analyze in real-time
-    
     const connection = {
       // Send audio data (from browser microphone)
       sendAudio: async (audioData, mimeType = '') => {
@@ -119,9 +232,17 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
           }
           lastAudioTranscribeMs = now;
 
-          const text = await transcribeAudioChunk(audioData, mimeType);
-          if (!text) return { text: '' };
-          return { text };
+          // Expect PCM16@16k from frontend. Ignore mimeType; kept for backward compatibility.
+          // Avoid feeding bad hallucinated context back into Scribe as previous_text.
+          const safePrev =
+            conversationHistory && !looksLikeHallucination(conversationHistory)
+              ? conversationHistory
+              : '';
+          const text = await scribe.sendPcmChunk(audioData, safePrev);
+          const trimmed = String(text || '').trim();
+          if (!trimmed) return { text: '' };
+          if (looksLikeHallucination(trimmed)) return { text: '' };
+          return { text: trimmed };
         } catch (error) {
           console.error('Audio processing error:', error);
           if (onError) onError(error);
@@ -151,27 +272,11 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
         }
       },
       
-      // Process audio file with Whisper
-      processAudioFile: async (audioFile) => {
-        try {
-          const transcription = await openai.audio.transcriptions.create({
-            file: audioFile,
-            model: 'whisper-1',
-            language: 'en',
-            response_format: 'text'
-          });
-          
-          await connection.sendTranscript(transcription);
-          return transcription;
-        } catch (error) {
-          console.error('Whisper transcription error:', error);
-          if (onError) onError(error);
-          throw error;
-        }
-      },
-      
       close: () => {
         isConnected = false;
+        try {
+          scribe.close();
+        } catch {}
       },
       
       isConnected: () => isConnected,
@@ -191,14 +296,6 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
 // Alternative: Use OpenAI's audio transcription API for real-time processing
 export async function processAudioStream(audioStream, onTranscript) {
   try {
-    // This would use OpenAI's Whisper API or Realtime API
-    // For now, we'll use a placeholder that processes text transcripts
-    
-    // In production, integrate with:
-    // 1. OpenAI Realtime API (when available)
-    // 2. WebRTC for audio capture
-    // 3. Streaming transcription service
-    
     return {
       start: () => {
         console.log('Audio processing started');
@@ -212,4 +309,3 @@ export async function processAudioStream(audioStream, onTranscript) {
     throw error;
   }
 }
-
