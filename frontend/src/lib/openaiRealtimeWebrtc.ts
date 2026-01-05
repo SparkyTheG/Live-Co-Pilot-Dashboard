@@ -50,6 +50,46 @@ function requireExactMatch(a: string, b: string): boolean {
   return String(a || '').trim() === String(b || '').trim();
 }
 
+function extractTextFromResponseDone(msg: any): string {
+  // Some Realtime implementations put final text in response.output[].content[]
+  try {
+    const out = msg?.response?.output;
+    if (!Array.isArray(out)) return '';
+    const parts: string[] = [];
+    for (const item of out) {
+      const content = item?.content;
+      if (!Array.isArray(content)) continue;
+      for (const c of content) {
+        const t = c?.type || '';
+        if (t === 'output_text' || t === 'text') {
+          const v = c?.text;
+          if (typeof v === 'string' && v.trim()) parts.push(v);
+        }
+      }
+    }
+    return parts.join('');
+  } catch {
+    return '';
+  }
+}
+
+function collapseConsecutiveSentenceRepeats(text: string): string {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const sentenceRe = /[^.!?]+[.!?]+|\S+$/g;
+  const chunks = s.match(sentenceRe) || [s];
+  const out: string[] = [];
+  let lastNorm = '';
+  for (const ch of chunks) {
+    const norm = ch.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!norm) continue;
+    if (norm === lastNorm) continue;
+    out.push(ch.trim());
+    lastNorm = norm;
+  }
+  return out.join(' ');
+}
+
 function wsUrlToHttpBase(wsUrl: string): string {
   // ws://host/ws -> http://host
   // wss://host/ws -> https://host
@@ -72,8 +112,9 @@ export class OpenAIRealtimeWebRTC {
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
   private debug = false;
-  private hadSpeechSinceLastTick = false;
   private analysisTickTimer: number | null = null;
+  private watchdogTimer: number | null = null;
+  private lastResponseStartMs = 0;
   private deviceId: string | null = null;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
@@ -165,12 +206,23 @@ export class OpenAIRealtimeWebRTC {
         }
       });
 
-      // Fallback: request an analysis tick periodically (only if speech happened)
+      // Drive analysis ticks periodically (do NOT depend on fragile VAD event names).
       this.analysisTickTimer = window.setInterval(() => {
-        if (!this.responseInFlight && this.hadSpeechSinceLastTick) {
+        if (!this.responseInFlight) {
           this.requestAnalysisTick();
         }
       }, 2500);
+
+      // Watchdog: if a response gets stuck (no response.done), unblock and continue.
+      this.watchdogTimer = window.setInterval(() => {
+        if (!this.responseInFlight) return;
+        if (!this.lastResponseStartMs) return;
+        if (Date.now() - this.lastResponseStartMs > 12000) {
+          this.responseInFlight = false;
+          this.currentResponseText = '';
+          this.#send({ type: 'response.cancel' });
+        }
+      }, 1000);
     };
 
     // 3) SDP exchange with OpenAI Realtime (WebRTC)
@@ -207,16 +259,18 @@ export class OpenAIRealtimeWebRTC {
     this.mediaStream = null;
     this.responseInFlight = false;
     this.pendingTranscript = null;
-    this.hadSpeechSinceLastTick = false;
     if (this.analysisTickTimer) window.clearInterval(this.analysisTickTimer);
     this.analysisTickTimer = null;
+    if (this.watchdogTimer) window.clearInterval(this.watchdogTimer);
+    this.watchdogTimer = null;
+    this.lastResponseStartMs = 0;
   }
 
   requestAnalysisTick() {
     if (this.responseInFlight) return;
     this.responseInFlight = true;
-    this.hadSpeechSinceLastTick = false;
     this.currentResponseText = '';
+    this.lastResponseStartMs = Date.now();
     // Cancel any ghost response then request a new one.
     this.#send({ type: 'response.cancel' });
     this.#send({
@@ -359,7 +413,6 @@ export class OpenAIRealtimeWebRTC {
 
     // VAD / speech state events. Trigger analysis when speech stops.
     if (/speech_stopped|speech_end|speech_ended/i.test(t)) {
-      this.hadSpeechSinceLastTick = true;
       if (!this.responseInFlight) {
         this.requestAnalysisTick();
       }
@@ -386,6 +439,11 @@ export class OpenAIRealtimeWebRTC {
       t === 'response.output_text.done' ||
       t === 'response.cancelled'
     ) {
+      // If we didn't accumulate deltas, attempt to extract text from response output.
+      if (!this.currentResponseText || !this.currentResponseText.trim()) {
+        const extracted = extractTextFromResponseDone(msg);
+        if (extracted) this.currentResponseText = extracted;
+      }
       const parsed = safeJsonParse(this.currentResponseText);
       if (parsed && this.onAiAnalysis) {
         const rawTranscriptTextRaw = String(parsed?.rawTranscriptText || '').trim();
@@ -393,7 +451,7 @@ export class OpenAIRealtimeWebRTC {
 
         // Enforce that analysisTextUsed is EXACTLY the transcript we display (no "improving" before analysis).
         const ok = requireExactMatch(rawTranscriptTextRaw, analysisTextUsedRaw);
-        const rawTranscriptText = ok ? sanitizeTranscript(rawTranscriptTextRaw) : '';
+        const rawTranscriptText = ok ? sanitizeTranscript(collapseConsecutiveSentenceRepeats(rawTranscriptTextRaw)) : '';
         if (!rawTranscriptText) return;
 
         if (!ok && this.debug) {
@@ -418,6 +476,7 @@ export class OpenAIRealtimeWebRTC {
       }
       this.currentResponseText = '';
       this.responseInFlight = false;
+      this.lastResponseStartMs = 0;
 
       // If a newer transcript arrived while we were generating, run analysis again (latest wins).
       if (this.pendingTranscript) {
