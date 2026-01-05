@@ -15,14 +15,15 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'scribe_v2_realtime';
 // Use VAD commit strategy - Scribe commits on natural pauses in speech.
 // This produces much better transcription quality than manual commits which fragment words.
+// Lowered thresholds for more sensitive speech detection.
 const ELEVENLABS_URL =
   `wss://api.elevenlabs.io/v1/speech-to-text/realtime?` +
   `model_id=${encodeURIComponent(ELEVENLABS_MODEL_ID)}` +
   `&language_code=en` +
   `&audio_format=pcm_16000` +
   `&commit_strategy=vad` +
-  `&vad_silence_threshold_secs=0.5` +
-  `&vad_threshold=0.5`;
+  `&vad_silence_threshold_secs=1.0` +  // Wait longer for natural pauses
+  `&vad_threshold=0.3`;  // Lower threshold = more sensitive to speech
 
 class ElevenLabsScribeRealtime {
   constructor({ onError, onTranscript } = {}) {
@@ -104,13 +105,14 @@ class ElevenLabsScribeRealtime {
     }
 
     const t = String(msg?.message_type || '');
-    // Always log message types for debugging (no secrets).
-    // #region agent log
-    dbg('S2', 'backend/realtime/listener.js:#onMessage', 'Scribe message', {
-      message_type: t,
-      keys: msg && typeof msg === 'object' ? Object.keys(msg).slice(0, 12) : []
+    // Log ALL messages from ElevenLabs for debugging
+    console.log('[SCRIBE-MSG]', { 
+      type: t, 
+      hasText: !!msg?.text,
+      textLen: msg?.text?.length || 0,
+      textPreview: msg?.text?.slice?.(0, 50) || '(none)',
+      keys: Object.keys(msg || {}).slice(0, 8).join(',')
     });
-    // #endregion
 
     if (t === 'partial_transcript') {
       const text = String(msg?.text || '').trim();
