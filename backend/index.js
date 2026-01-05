@@ -608,6 +608,24 @@ CRITICAL RULES:
         } catch (e) {
           console.warn(`[WS] realtime_ai_update: failed to build analysis: ${e.message}`);
         }
+      } else if (data.type === 'realtime_transcript_chunk') {
+        // Frontend OpenAI WebRTC mode: push transcript to backend immediately for UI/persistence.
+        const meta = connectionPersistence.get(connectionId);
+        const transcriptText = String(data?.text || '').trim();
+        const sp = String(data?.speaker || 'unknown').toLowerCase();
+        if (!transcriptText) return;
+
+        if (meta) {
+          meta.plainTranscript = `${meta.plainTranscript || ''}${transcriptText} `;
+          const label = sp === 'prospect' ? 'PROSPECT' : sp === 'closer' ? 'CLOSER' : 'UNKNOWN';
+          meta.conversationHistory = `${meta.conversationHistory || ''}${label}: ${transcriptText}\n`;
+          connectionPersistence.set(connectionId, meta);
+        }
+
+        sendToClient(connectionId, {
+          type: 'transcript_chunk',
+          data: { speaker: sp || 'unknown', text: transcriptText, ts: Date.now() }
+        });
       } else if (data.type === 'audio_chunk') {
         // Receive audio chunk from frontend
         let realtimeConnection = realtimeConnections.get(connectionId);

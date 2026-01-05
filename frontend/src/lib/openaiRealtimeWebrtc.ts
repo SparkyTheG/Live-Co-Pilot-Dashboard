@@ -32,6 +32,7 @@ export class OpenAIRealtimeWebRTC {
   private customScriptPrompt: string;
   private currentResponseText = '';
   private lastTranscript = '';
+  private currentTranscriptText = '';
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
   private onError?: (err: Error) => void;
@@ -104,7 +105,12 @@ export class OpenAIRealtimeWebRTC {
         session: {
           modalities: ['text'],
           turn_detection: { type: 'server_vad' },
-          input_audio_transcription: { model: 'gpt-4o-transcribe' },
+          // Force English transcription for your use case.
+          input_audio_transcription: {
+            model: 'gpt-4o-transcribe',
+            language: 'en',
+            prompt: 'Transcribe spoken English accurately. Output English text.'
+          },
           instructions: this.#buildInstructions()
         }
       });
@@ -249,25 +255,41 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
-    // Transcript events (defensive: accept multiple shapes)
-    const transcriptText =
-      msg?.transcript ??
-      msg?.text ??
-      msg?.delta?.transcript ??
-      msg?.item?.content?.[0]?.transcript ??
-      msg?.item?.content?.[0]?.text ??
-      null;
+    // Transcript events: ONLY treat events that look like transcription/audio transcript.
+    // This avoids accidentally interpreting other message types as transcript.
+    const isTranscriptEvt = /transcription|audio_transcript/i.test(t);
+    if (isTranscriptEvt) {
+      const deltaText =
+        (typeof msg?.delta === 'string' && msg.delta) ||
+        (typeof msg?.delta?.text === 'string' && msg.delta.text) ||
+        (typeof msg?.delta?.transcript === 'string' && msg.delta.transcript) ||
+        null;
 
-    // Heuristic: if this looks like a transcription completion event, kick analysis
-    if (
-      t.includes('transcription') &&
-      typeof transcriptText === 'string' &&
-      transcriptText.trim().length > 0 &&
-      (t.includes('completed') || t.includes('done'))
-    ) {
-      const tt = transcriptText.trim();
-      this.onTranscript?.(tt);
-      this.requestAnalysisForTranscript(tt);
+      const fullText =
+        (typeof msg?.transcript === 'string' && msg.transcript) ||
+        (typeof msg?.text === 'string' && msg.text) ||
+        (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
+        (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
+        null;
+
+      const isDelta = /delta/i.test(t);
+      const isDone = /completed|done|final/i.test(t);
+
+      if (isDelta && deltaText) {
+        this.currentTranscriptText += deltaText;
+        return;
+      }
+
+      if (isDone) {
+        const tt = String((fullText || this.currentTranscriptText || '')).trim();
+        this.currentTranscriptText = '';
+        if (tt) {
+          this.onTranscript?.(tt);
+          this.requestAnalysisForTranscript(tt);
+        }
+        return;
+      }
+      // Other transcript event types: ignore
       return;
     }
 

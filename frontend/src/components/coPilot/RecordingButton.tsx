@@ -200,6 +200,13 @@ export default function RecordingButton({
           customScriptPrompt,
           onTranscript: (text) => {
             if (onTranscriptUpdate) onTranscriptUpdate(text);
+            // Immediately push transcript into backend so the "Live transcript (backend)" panel updates
+            wsRef.current?.sendRaw({
+              type: 'realtime_transcript_chunk',
+              text,
+              speaker: 'unknown',
+              ts: Date.now()
+            });
           },
           onAiAnalysis: (transcriptText, aiAnalysis) => {
             wsRef.current?.sendRaw({
