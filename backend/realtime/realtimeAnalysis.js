@@ -161,8 +161,18 @@ export class RealtimeAnalysisSession {
     this.currentText = '';
 
     const { chunkText, prospectType, customScriptPrompt } = payload;
+    
+    // Log for Railway visibility
+    const hasCustomPrompt = customScriptPrompt && customScriptPrompt.trim().length > 0;
+    console.log('[REALTIME-AI] analyzeChunk', {
+      chunkLen: chunkText?.length || 0,
+      prospectType: prospectType || 'unknown',
+      hasCustomPrompt,
+      customPromptPreview: hasCustomPrompt ? customScriptPrompt.slice(0, 50) : '(none)'
+    });
 
     // Add message to conversation (the Realtime session keeps memory).
+    // Include custom script prompt prominently so it's used for rebuttal generation
     this.#send({
       type: 'conversation.item.create',
       item: {
@@ -173,7 +183,7 @@ export class RealtimeAnalysisSession {
             type: 'input_text',
             text:
               `PROSPECT_TYPE: ${prospectType || 'unknown'}\n` +
-              (customScriptPrompt ? `CUSTOM_SCRIPT_PROMPT: ${customScriptPrompt}\n` : '') +
+              (hasCustomPrompt ? `BUSINESS_CONTEXT: "${customScriptPrompt}" - USE THIS to tailor all rebuttal scripts!\n` : '') +
               `NEW_TEXT: ${chunkText}`
           }
         ]
@@ -181,12 +191,16 @@ export class RealtimeAnalysisSession {
     });
 
     // Ask for updated state (JSON only).
+    // Explicitly remind AI to use business context for rebuttals
+    const responseInstructions = hasCustomPrompt
+      ? `Return ONLY valid JSON. IMPORTANT: Use the BUSINESS_CONTEXT ("${customScriptPrompt}") to make rebuttal scripts specific to this business/product. Do not give generic rebuttals.`
+      : 'Return ONLY valid JSON, no markdown. Update state based on the entire conversation so far.';
+    
     this.#send({
       type: 'response.create',
       response: {
         modalities: ['text'],
-        instructions:
-          'Return ONLY valid JSON, no markdown. Update state based on the entire conversation so far.',
+        instructions: responseInstructions,
         max_output_tokens: 1200
       }
     });
