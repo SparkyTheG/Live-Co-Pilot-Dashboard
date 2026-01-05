@@ -410,16 +410,28 @@ RULES:
           realtimeConnection = realtimeConnections.get(connectionId);
         }
         if (realtimeConnection) {
+          const mimeType = String(data.mimeType || '');
+          // ElevenLabs Scribe expects PCM16@16k. If the frontend is still on the old MediaRecorder(WebM) build,
+          // passing those bytes as PCM causes the "FEMA/disclaimer" hallucination spam.
+          const isPcm16k = mimeType.includes('pcm_16000') || mimeType.toLowerCase().includes('pcm');
+          if (!isPcm16k && process.env.ALLOW_NON_PCM_AUDIO !== 'true') {
+            sendToClient(connectionId, {
+              type: 'error',
+              message:
+                'Audio format mismatch: backend expects PCM16@16k (mimeType=pcm_16000). Please redeploy the latest frontend build that streams PCM (not MediaRecorder/webm).'
+            });
+            return;
+          }
           // Convert base64 to buffer if needed
           const audioBuffer = Buffer.from(data.audio, 'base64');
           // #region agent log
           dbg('A2', 'backend/index.js:audio_chunk', 'Audio chunk received', {
             bytes: audioBuffer.length,
-            mimeType: String(data.mimeType || '')
+            mimeType
           });
           // #endregion
           const meta = connectionPersistence.get(connectionId);
-          const audioResult = await realtimeConnection.sendAudio(audioBuffer, data.mimeType || '');
+          const audioResult = await realtimeConnection.sendAudio(audioBuffer, mimeType);
           const transcribedText = String(audioResult?.text || '').trim();
           if (transcribedText) {
             await handleIncomingTextChunk(connectionId, {
