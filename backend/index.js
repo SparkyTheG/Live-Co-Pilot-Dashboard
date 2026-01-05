@@ -241,7 +241,7 @@ RULES:
                 apiKey: process.env.OPENAI_API_KEY,
                 model: process.env.OPENAI_REALTIME_MODEL || undefined,
                 instructions,
-                temperature: 0
+                temperature: 0.6
               });
               realtimeAnalysisSessions.set(connectionId, session);
               console.log('[A1] RealtimeAnalysisSession created', {

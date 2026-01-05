@@ -47,12 +47,15 @@ export class RealtimeAnalysisSession {
     apiKey,
     model = DEFAULT_MODEL,
     instructions,
-    temperature = 0
+    temperature = 0.6
   }) {
     this.apiKey = apiKey;
     this.model = model;
     this.instructions = instructions;
-    this.temperature = temperature;
+    // OpenAI Realtime enforces a minimum temperature (currently >= 0.6).
+    // Clamp so session.update doesn't fail and silently kill realtime analysis.
+    const tNum = Number(temperature);
+    this.temperature = Number.isFinite(tNum) ? Math.max(0.6, tNum) : 0.6;
 
     this.ws = null;
     this.connected = false;

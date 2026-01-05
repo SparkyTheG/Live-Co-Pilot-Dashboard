@@ -216,8 +216,35 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
       'for more information visit'
     ];
     if (badPhrases.some((p) => t.includes(p))) return true;
+  // URLs are almost always hallucinations in this app context
+  if (t.includes('http://') || t.includes('https://') || t.includes('www.')) return true;
     return false;
   }
+
+function sanitizeTranscript(text) {
+  const raw = String(text || '');
+  const lower = raw.toLowerCase();
+  // Strip common hallucinated suffixes rather than dropping the whole chunk.
+  const cutMarkers = [
+    ' disclaimer',
+    'disclaimer',
+    'http://',
+    'https://',
+    'www.',
+    'fema.gov',
+    'sites.google.com',
+    'for more information'
+  ];
+  let cutAt = -1;
+  for (const m of cutMarkers) {
+    const idx = lower.indexOf(m);
+    if (idx !== -1 && (cutAt === -1 || idx < cutAt)) cutAt = idx;
+  }
+  const trimmed = (cutAt === -1 ? raw : raw.slice(0, cutAt)).trim();
+  // If what's left is too small, treat as noise.
+  if (trimmed.split(/\s+/).filter(Boolean).length < 3) return '';
+  return trimmed;
+}
 
   const scribe = new ElevenLabsScribeRealtime({ onError });
 
@@ -242,7 +269,10 @@ export async function createRealtimeConnection({ onTranscript, onError }) {
           const trimmed = String(text || '').trim();
           if (!trimmed) return { text: '' };
           if (looksLikeHallucination(trimmed)) return { text: '' };
-          return { text: trimmed };
+          const cleaned = sanitizeTranscript(trimmed);
+          if (!cleaned) return { text: '' };
+          if (looksLikeHallucination(cleaned)) return { text: '' };
+          return { text: cleaned };
         } catch (error) {
           console.error('Audio processing error:', error);
           if (onError) onError(error);
