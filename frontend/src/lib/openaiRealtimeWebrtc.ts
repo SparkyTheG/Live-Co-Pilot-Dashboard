@@ -42,7 +42,33 @@ function sanitizeTranscript(text: string): string {
   const uniq = new Set(words.map((w) => w.toLowerCase()));
   if (uniq.size <= 2 && words.length >= 6) return '';
 
-  return t;
+  // Normalize to "raw words" only: lowercase, no punctuation (closer to what user actually said)
+  const normalized = t
+    .toLowerCase()
+    .replace(/[“”"']/g, "'")
+    .replace(/[.,!?;:()[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return '';
+
+  // If the transcript is a repetition of the same token sequence, collapse to one.
+  const toks = normalized.split(' ').filter(Boolean);
+  for (let unit = 1; unit <= Math.floor(toks.length / 2); unit++) {
+    if (toks.length % unit !== 0) continue;
+    let ok = true;
+    for (let i = unit; i < toks.length; i++) {
+      if (toks[i] !== toks[i % unit]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      return toks.slice(0, unit).join(' ');
+    }
+  }
+
+  return normalized;
 }
 
 function requireExactMatch(a: string, b: string): boolean {
@@ -158,6 +184,7 @@ export class OpenAIRealtimeWebRTC {
         session: {
           modalities: ['text'],
           turn_detection: { type: 'server_vad' },
+          temperature: 0,
           instructions: this.#buildInstructions()
         }
       });
@@ -295,6 +322,7 @@ export class OpenAIRealtimeWebRTC {
       `First, output rawTranscriptText as the VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
       `STRICT TRANSCRIPTION RULES (no "improving"):\n` +
       `- Language: English.\n` +
+      `- Output RAW WORDS ONLY: lowercase, no punctuation, single spaces.\n` +
       `- Preserve filler words, false starts, stutters, and informal phrasing.\n` +
       `- Do NOT correct grammar.\n` +
       `- Do NOT paraphrase.\n` +
