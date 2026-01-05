@@ -221,31 +221,85 @@ wss.on('connection', (ws, req) => {
 
           if (meta.useRealtimeAnalysis && process.env.OPENAI_API_KEY) {
             if (!realtimeAnalysisSessions.get(connectionId)) {
-              const instructions = `You are a real-time sales analysis engine. Output ONLY valid JSON.
+              const instructions = `You are a REAL-TIME sales call analyzer for real estate. Output ONLY valid JSON.
 
-TASK:
-- Based on the conversation so far, continuously update the following analysis for a real estate sales call.
-- The conversation is between CLOSER (salesperson) and PROSPECT (seller).
-- You will receive NEW_TEXT chunks. Use session memory for prior context.
+CONTEXT: Analyzing calls between CLOSER (salesperson) and PROSPECT (property seller).
 
-OUTPUT JSON SCHEMA (no extra keys):
+===== 27 INDICATORS (score 1-10, higher=stronger signal) =====
+P1-PAIN/DESIRE GAP:
+1-Pain Intensity: How much distress about current situation? (stress, frustration, urgency in voice)
+2-Pain Awareness: Do they recognize their problem? ("I know I need to...", "The issue is...")
+3-Desire Clarity: Clear vision of what they want? ("I want to...", specific goals)
+4-Desire Priority: How important is solving this? ("This is my top priority", "I need this now")
+
+P2-URGENCY:
+5-Time Pressure: External deadlines? ("I need to sell by...", "The bank is...")
+6-Cost of Delay: Aware of consequences? ("Every month costs me...", "I'm losing...")
+7-Internal Timing: Personal readiness? ("I'm ready to move forward", "Now is the time")
+8-Environmental Availability: Time/resources to act? ("I have time this week", "I can meet")
+
+P3-DECISIVENESS:
+9-Decision Authority: Can they decide alone? ("I make the decisions", "I need to check with...")
+10-Decision Style: Quick or slow decider? (asks for details vs. ready to commit)
+11-Commitment to Decide: Will they actually decide? ("I will decide by...", "Let me think...")
+12-Self-Permission: Allow themselves to act? ("I deserve this", "I should do this")
+
+P4-MONEY AVAILABILITY:
+13-Resource Access: Do they have funds? ("I have savings", "Money isn't the issue")
+14-Resource Fluidity: Can they access it? ("It's liquid", "I'd need to...")
+15-Investment Mindset: See it as investment? ("It's worth it", "ROI", "value")
+16-Resourcefulness: Can find money if needed? ("I'll figure it out", "I can borrow")
+
+P5-OWNERSHIP:
+17-Problem Recognition: Own their problem? ("It's my fault", "I created this")
+18-Solution Ownership: Own fixing it? ("I need to fix this", "It's on me")
+19-Locus of Control: Feel in control? ("I can change this", "It's up to me")
+20-Action Integrity: Actions match words? (doing what they say)
+
+P6-PRICE SENSITIVITY (REVERSE - high score = LESS price sensitive):
+21-Emotional Response to Price: Calm about costs? (not shocked, accepting)
+22-Negotiation Reflex: Don't immediately haggle? (accepts pricing)
+23-Structural Rigidity: Flexible on terms? (open to options)
+
+P7-TRUST:
+24-ROI Belief: Trust it will work? ("I believe this will help")
+25-External Trust: Trust the closer/company? ("I trust you", "You seem honest")
+26-Internal Trust: Trust themselves to succeed? ("I can do this")
+27-Risk Tolerance: Comfortable with uncertainty? ("I'm okay with risk")
+
+===== HOT BUTTONS =====
+Detect emotional triggers when prospect shows strong emotion about:
+- Family concerns, health issues, financial stress, time pressure, frustration, dreams/goals
+- Quote MUST be exact words from conversation
+- Score 1-10 based on emotional intensity
+
+===== OBJECTIONS =====
+Common patterns to detect:
+- PRICE: "too expensive", "can't afford", "need to think about cost"
+- TIMING: "not the right time", "maybe later", "need more time"
+- TRUST: "how do I know", "sounds too good", "what's the catch"
+- AUTHORITY: "need to talk to spouse/partner", "not my decision alone"
+- NEED: "not sure I need this", "might not be necessary"
+For each objection provide: fear (underlying worry), whisper (what they want to hear), rebuttalScript
+
+===== TRUTH INDEX SIGNALS =====
+- coherenceSignals: List any contradictions, hesitations, deflections, or confidence markers
+- overallCoherence: "high" (consistent, confident), "medium" (some hesitation), "low" (contradictory, evasive)
+
+OUTPUT JSON (no markdown, no explanations):
 {
   "speaker": "closer|prospect|unknown",
-  "indicatorSignals": {"1":1,"2":1,...,"27":1}, // integers 1-10. Score generously when there is evidence.
-  "hotButtonDetails": [{"id":1,"quote":"exact quote","contextualPrompt":"short question","score":1}],
-  "objections": [{"objectionText":"...","probability":0.8,"fear":"...","whisper":"...","rebuttalScript":"..."}],
-  "askedQuestions": [0,2,5],
-  "detectedRules": [{"ruleId":"T1","evidence":"...","confidence":0.8}],
-  "coherenceSignals": ["..."],
+  "indicatorSignals": {"1":7,"2":6,...}, 
+  "hotButtonDetails": [{"id":5,"quote":"exact words","contextualPrompt":"follow-up question","score":8}],
+  "objections": [{"objectionText":"specific objection","probability":0.8,"fear":"their fear","whisper":"what they need to hear","rebuttalScript":"suggested response"}],
+  "askedQuestions": [1,5,12],
+  "detectedRules": [{"ruleId":"T1","evidence":"quote","confidence":0.8}],
+  "coherenceSignals": ["signal1","signal2"],
   "overallCoherence": "high|medium|low",
-  "insights": {"summary":"...","keyMotivators":["..."],"concerns":["..."],"recommendation":"...","closingReadiness":"ready|almost|not_ready"}
+  "insights": {"summary":"brief summary","keyMotivators":["motivator1"],"concerns":["concern1"],"recommendation":"next step","closingReadiness":"ready|almost|not_ready"}
 }
 
-RULES:
-- speaker: classify the NEW_TEXT speaker based on conversational flow.
-- indicatorSignals: score ALL 27 indicators if possible; if unknown, omit the key.
-- hotButtonDetails quote MUST be exact substring from conversation.
-- Return compact JSON; no markdown; no explanations.`;
+CRITICAL: Score indicators based on ACTUAL evidence in conversation. Be generous when there's any signal.`;
 
               const session = new RealtimeAnalysisSession({
                 apiKey: process.env.OPENAI_API_KEY,
@@ -853,16 +907,18 @@ async function startRealtimeListening(connectionId, config) {
     });
 
     const realtimeConnection = await createRealtimeConnection({
-      // Called when a new transcript chunk is committed (VAD-based) - send to frontend for display
-      onChunk: (chunkText) => {
-        console.log(`[${connectionId}] Sending transcript chunk to frontend:`, chunkText.slice(0, 60));
-        sendToClient(connectionId, {
-          type: 'transcript_chunk',
-          data: {
-            speaker: 'UNKNOWN',
-            text: chunkText,
-            ts: Date.now()
-          }
+      // Called when a new transcript chunk is committed (VAD-based)
+      // This triggers the FULL analysis pipeline including realtime AI
+      onChunk: async (chunkText) => {
+        console.log(`[${connectionId}] VAD committed chunk, triggering analysis:`, chunkText.slice(0, 60));
+        const meta = connectionPersistence.get(connectionId);
+        // Trigger the full analysis pipeline (includes realtime AI analysis)
+        await handleIncomingTextChunk(connectionId, {
+          chunkText: chunkText,
+          prospectType: meta?.prospectType || '',
+          customScriptPrompt: meta?.customScriptPrompt || '',
+          pillarWeights: meta?.pillarWeights ?? null,
+          clientTsMs: Date.now()
         });
       },
       onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
