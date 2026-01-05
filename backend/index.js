@@ -209,6 +209,12 @@ wss.on('connection', (ws, req) => {
             hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL),
             disabled: process.env.OPENAI_REALTIME_DISABLED === 'true'
           });
+          // Log custom script prompt for debugging
+          console.log('[A1] Custom script prompt stored:', {
+            hasCustomScript: Boolean(meta.customScriptPrompt),
+            customScriptPrompt: meta.customScriptPrompt || '(none)',
+            prospectType: meta.prospectType || '(none)'
+          });
 
           // #region agent log
           dbg('A1', 'backend/index.js:start_listening', 'Realtime analysis enabled?', {
@@ -662,6 +668,14 @@ async function handleIncomingTextChunk(connectionId, {
 }) {
   const text = String(chunkText || '').trim();
   if (!text) return;
+  
+  // Debug: Log what we received including custom script prompt
+  console.log(`[handleIncomingTextChunk] Received`, {
+    connectionId: connectionId.slice(-8),
+    textLen: text.length,
+    customScriptPrompt: customScriptPrompt || '(EMPTY)',
+    prospectType: prospectType || '(none)'
+  });
 
   const chunkCharCount = text.length;
 
@@ -926,8 +940,12 @@ async function startRealtimeListening(connectionId, config) {
       // Called when a new transcript chunk is committed (VAD-based)
       // This triggers the FULL analysis pipeline including realtime AI
       onChunk: async (chunkText) => {
-        console.log(`[${connectionId}] VAD committed chunk, triggering analysis:`, chunkText.slice(0, 60));
         const meta = connectionPersistence.get(connectionId);
+        console.log(`[${connectionId}] VAD committed chunk`, {
+          chunkPreview: chunkText.slice(0, 60),
+          customScriptPrompt: meta?.customScriptPrompt || '(NONE - not set!)',
+          prospectType: meta?.prospectType || '(none)'
+        });
         // Trigger the full analysis pipeline (includes realtime AI analysis)
         await handleIncomingTextChunk(connectionId, {
           chunkText: chunkText,
