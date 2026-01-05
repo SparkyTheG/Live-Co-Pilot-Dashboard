@@ -61,6 +61,59 @@ const WS_PORT = process.env.WS_PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
+// Mint an ephemeral OpenAI Realtime token for browser WebRTC clients.
+// Browser WebSocket can't set auth headers, so we use WebRTC + ephemeral token.
+app.post('/api/openai/realtime-token', async (req, res) => {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY missing on server' });
+    }
+
+    // Require Supabase auth token to mint token (prevents public abuse)
+    const authHeader = String(req.headers.authorization || '');
+    const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : '';
+    const authToken = bearer || String(req.body?.authToken || '');
+    if (!authToken) {
+      return res.status(401).json({ error: 'Missing Authorization bearer token' });
+    }
+
+    if (isSupabaseConfigured()) {
+      const supabase = createUserSupabaseClient(authToken);
+      if (supabase) {
+        const { error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          return res.status(401).json({ error: 'Invalid auth token' });
+        }
+      }
+    }
+
+    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview';
+    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        // Client will do session.update with detailed instructions.
+        modalities: ['text']
+      })
+    });
+
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      console.error('[OPENAI] realtime-token mint failed', { status: r.status, data });
+      return res.status(500).json({ error: 'Failed to mint realtime token', status: r.status });
+    }
+
+    return res.json({ ok: true, model, ...data });
+  } catch (e) {
+    console.error('[OPENAI] realtime-token exception', { msg: e?.message || String(e) });
+    return res.status(500).json({ error: 'Failed to mint realtime token' });
+  }
+});
+
 // Test endpoint to verify analysis works
 app.post('/api/test-analysis', async (req, res) => {
   try {
@@ -162,7 +215,9 @@ wss.on('connection', (ws, req) => {
     // Plain transcript (no labels) for deterministic calculations
     plainTranscript: '',
     // Option B: use OpenAI Realtime single-session analysis
-    useRealtimeAnalysis: false
+    useRealtimeAnalysis: false,
+    // Client mode: backend_transcribe (default) or openai_webrtc (frontend streams direct to OpenAI)
+    clientMode: 'backend_transcribe'
   });
 
   // Track last activity time
@@ -194,11 +249,18 @@ wss.on('connection', (ws, req) => {
         // Capture config/settings for this connection (used for audio-driven transcription as well)
         {
           const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
+          meta.clientMode = typeof data.config?.clientMode === 'string' ? data.config.clientMode : (meta.clientMode || 'backend_transcribe');
           meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
           meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
           meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
-          // Enable Realtime analysis by default when OPENAI_API_KEY is set (model defaults internally)
-          meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_API_KEY) && process.env.OPENAI_REALTIME_DISABLED !== 'true';
+          // If frontend is using OpenAI WebRTC direct, backend does NOT run analysis sessions.
+          // Frontend will post transcript+aiAnalysis back via WS message `realtime_ai_update`.
+          if (meta.clientMode === 'openai_webrtc') {
+            meta.useRealtimeAnalysis = false;
+          } else {
+            // Enable Realtime analysis by default when OPENAI_API_KEY is set (model defaults internally)
+            meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_API_KEY) && process.env.OPENAI_REALTIME_DISABLED !== 'true';
+          }
           connectionPersistence.set(connectionId, meta);
 
           // Runtime evidence in Railway logs (no secrets)
@@ -358,7 +420,13 @@ CRITICAL RULES:
           realtimeConnections.delete(connectionId);
         }
 
-        await startRealtimeListening(connectionId, data.config);
+        // Only start backend transcription if client is streaming audio to backend.
+        const metaAfterConfig = connectionPersistence.get(connectionId);
+        if (metaAfterConfig?.clientMode !== 'openai_webrtc') {
+          await startRealtimeListening(connectionId, data.config);
+        } else {
+          console.log(`[WS] clientMode=openai_webrtc: skipping backend transcription startup`);
+        }
 
         // Create a call session in Supabase (if configured + authed)
         const meta = connectionPersistence.get(connectionId);
@@ -488,6 +556,58 @@ CRITICAL RULES:
           pillarWeights: data.pillarWeights ?? meta?.pillarWeights ?? null,
           clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
         });
+      } else if (data.type === 'realtime_ai_update') {
+        // Frontend OpenAI WebRTC mode: frontend sends transcript chunk + aiAnalysis JSON from Realtime audio agent.
+        const meta = connectionPersistence.get(connectionId);
+        const transcriptText = String(data?.transcriptText || '').trim();
+        const ai = data?.aiAnalysis && typeof data.aiAnalysis === 'object' ? data.aiAnalysis : null;
+        if (!transcriptText || !ai) return;
+
+        // Update transcripts used for persistence + deterministic calculations.
+        if (meta) {
+          meta.plainTranscript = `${meta.plainTranscript || ''}${transcriptText} `;
+          // Keep labeled history for readability in DB; use ai.speaker if present.
+          const sp = String(ai?.speaker || 'unknown').toLowerCase();
+          const label = sp === 'prospect' ? 'PROSPECT' : sp === 'closer' ? 'CLOSER' : 'UNKNOWN';
+          meta.conversationHistory = `${meta.conversationHistory || ''}${label}: ${transcriptText}\n`;
+          connectionPersistence.set(connectionId, meta);
+        }
+
+        // Fan out transcript chunk to frontend UI (same event name used elsewhere)
+        sendToClient(connectionId, {
+          type: 'transcript_chunk',
+          data: { speaker: ai?.speaker || 'unknown', text: transcriptText, ts: Date.now() }
+        });
+
+        // Build final analysis payload from aiAnalysis (reuses deterministic lubometer/truthIndex)
+        try {
+          const normalizedAi = {
+            indicatorSignals: ai.indicatorSignals || {},
+            hotButtonDetails: ai.hotButtonDetails || [],
+            objections: ai.objections || [],
+            askedQuestions: ai.askedQuestions || [],
+            detectedRules: ai.detectedRules || [],
+            coherenceSignals: ai.coherenceSignals || [],
+            overallCoherence: ai.overallCoherence || 'medium',
+            insights: ai.insights || {}
+          };
+          const final = await analyzeConversationFromAiAnalysis(
+            meta?.plainTranscript || transcriptText,
+            meta?.prospectType || null,
+            meta?.pillarWeights ?? null,
+            normalizedAi
+          );
+          sendToClient(connectionId, {
+            type: 'analysis_update',
+            data: {
+              ...final,
+              hotButtons: Array.isArray(final.hotButtons) ? final.hotButtons : [],
+              objections: Array.isArray(final.objections) ? final.objections : []
+            }
+          });
+        } catch (e) {
+          console.warn(`[WS] realtime_ai_update: failed to build analysis: ${e.message}`);
+        }
       } else if (data.type === 'audio_chunk') {
         // Receive audio chunk from frontend
         let realtimeConnection = realtimeConnections.get(connectionId);

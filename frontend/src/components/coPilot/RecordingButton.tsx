@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { ConversationWebSocket } from '../../lib/websocket';
+import { OpenAIRealtimeWebRTC } from '../../lib/openaiRealtimeWebrtc';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -27,6 +28,7 @@ export default function RecordingButton({
   const [noBackend, setNoBackend] = useState(false);
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
+  const openAiRealtimeRef = useRef<OpenAIRealtimeWebRTC | null>(null);
   // Use ref to track recording state (avoids stale closure issues)
   const isRecordingRef = useRef(false);
   // Keepalive interval for WebSocket
@@ -39,6 +41,10 @@ export default function RecordingButton({
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const pcmPendingRef = useRef<Int16Array[]>([]);
   const pcmPendingSamplesRef = useRef<number>(0);
+
+  // Mode: stream mic directly to OpenAI Realtime (WebRTC). Backend persists + fans out updates.
+  // You selected option (B), so this is enabled by default.
+  const useOpenAIWebRTC = true;
 
   function resampleLinear(input: Float32Array, inRate: number, outRate: number) {
     if (inRate === outRate) return input;
@@ -163,13 +169,60 @@ export default function RecordingButton({
       // Provide auth token so backend can persist this call session under RLS
       ws.setAuthToken(session?.access_token ?? null);
       ws.setProspectType(prospectType); // Set initial prospect type
-      // Pass settings so backend can use them when analyzing audio-driven transcripts
-      ws.startListening({ customScriptPrompt, pillarWeights }); // This sends 'start_listening' message
+      // Pass settings. In OpenAI WebRTC mode, backend will not transcribe; it will persist + fan out updates.
+      ws.startListening({
+        customScriptPrompt,
+        pillarWeights,
+        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : 'backend_transcribe'
+      });
       wsRef.current = ws;
-      console.log('✅ Frontend: Listening started, WebSocket ready for audio stream');
+      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : 'backend_transcribe'})`);
 
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
+
+      // Option B: Stream mic directly to OpenAI Realtime via WebRTC (no ElevenLabs required)
+      if (useOpenAIWebRTC) {
+        if (!session?.access_token) {
+          throw new Error('Not authenticated: missing session access token');
+        }
+        const wsUrl =
+          import.meta.env.VITE_WS_URL ||
+          (import.meta.env.DEV ? 'ws://localhost:3001/ws' : '');
+        if (!wsUrl) {
+          throw new Error('Backend WS URL missing (set VITE_WS_URL)');
+        }
+
+        const openAi = new OpenAIRealtimeWebRTC({
+          wsUrl,
+          authToken: session.access_token,
+          prospectType,
+          customScriptPrompt,
+          onTranscript: (text) => {
+            if (onTranscriptUpdate) onTranscriptUpdate(text);
+          },
+          onAiAnalysis: (transcriptText, aiAnalysis) => {
+            wsRef.current?.sendRaw({
+              type: 'realtime_ai_update',
+              transcriptText,
+              aiAnalysis,
+              ts: Date.now()
+            });
+          },
+          onError: (e) => {
+            console.error('OpenAI Realtime error:', e);
+            setError(e.message);
+          }
+        });
+        openAiRealtimeRef.current = openAi;
+        await openAi.connect();
+        console.log('✅ OpenAI Realtime WebRTC connected');
+
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setIsConnecting(false);
+        return;
+      }
 
       // Stream AUDIO to backend (server-side transcription) as PCM16 @ 16kHz for ElevenLabs Scribe v2 Realtime.
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -284,6 +337,16 @@ export default function RecordingButton({
         console.warn('Error stopping recognition:', e);
       }
       recognitionRef.current = null;
+    }
+
+    // Stop OpenAI Realtime WebRTC (if used)
+    if (openAiRealtimeRef.current) {
+      try {
+        openAiRealtimeRef.current.close();
+      } catch (e) {
+        console.warn('Error closing OpenAI Realtime:', e);
+      }
+      openAiRealtimeRef.current = null;
     }
 
     // Stop PCM pipeline + mic

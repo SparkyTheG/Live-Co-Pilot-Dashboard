@@ -240,6 +240,15 @@ export class ConversationWebSocket {
     }));
   }
 
+  // Send an arbitrary message to the backend WS (for new message types like realtime_ai_update)
+  sendRaw(payload: any) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket is not connected, cannot sendRaw');
+      return;
+    }
+    this.ws.send(JSON.stringify(payload));
+  }
+
   stopListening() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
