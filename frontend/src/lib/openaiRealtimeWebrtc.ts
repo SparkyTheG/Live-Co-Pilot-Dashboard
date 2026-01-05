@@ -14,6 +14,34 @@ function safeJsonParse(text: string): any | null {
   }
 }
 
+function sanitizeTranscript(text: string): string {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  const lower = t.toLowerCase();
+
+  // Drop anything that looks like our own prompts/instructions leaking in.
+  const badSubstrings = [
+    'custom_script_prompt',
+    'prospect_type:',
+    'new_audio_transcript:',
+    'output only valid json',
+    'return json',
+    'transcribe audio',
+    'transcribe spoken english'
+  ];
+  if (badSubstrings.some((s) => lower.includes(s))) return '';
+
+  // Reject extremely short/noisy outputs.
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return '';
+
+  // Reject if it's mostly repeated same word (common hallucination on silence/noise)
+  const uniq = new Set(words.map((w) => w.toLowerCase()));
+  if (uniq.size <= 2 && words.length >= 6) return '';
+
+  return t;
+}
+
 function wsUrlToHttpBase(wsUrl: string): string {
   // ws://host/ws -> http://host
   // wss://host/ws -> https://host
@@ -263,9 +291,12 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
-    // Transcript events: ONLY treat events that look like transcription/audio transcript.
+    // Transcript events: ONLY treat known audio transcription events.
     // This avoids accidentally interpreting other message types as transcript.
-    const isTranscriptEvt = /audio_transcript|input_audio_transcription/i.test(t);
+    const isTranscriptEvt =
+      t.startsWith('conversation.item.input_audio_transcription') ||
+      t.startsWith('input_audio_transcription') ||
+      t.startsWith('response.audio_transcript');
     if (isTranscriptEvt) {
       const deltaText =
         (typeof msg?.delta === 'string' && msg.delta) ||
@@ -273,9 +304,9 @@ export class OpenAIRealtimeWebRTC {
         null;
 
       const fullText =
+        (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
         (typeof msg?.transcript === 'string' && msg.transcript) ||
         (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
-        (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
         null;
 
       const isDelta = /delta/i.test(t);
@@ -287,8 +318,9 @@ export class OpenAIRealtimeWebRTC {
       }
 
       if (isDone) {
-        const tt = String((fullText || this.currentTranscriptText || '')).trim();
+        const ttRaw = String((fullText || this.currentTranscriptText || '')).trim();
         this.currentTranscriptText = '';
+        const tt = sanitizeTranscript(ttRaw);
         if (tt) {
           this.onTranscript?.(tt);
           this.requestAnalysisForTranscript(tt);
