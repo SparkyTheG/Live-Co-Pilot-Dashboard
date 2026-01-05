@@ -101,6 +101,11 @@ export class OpenAIRealtimeWebRTC {
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
   private mediaStream: MediaStream | null = null;
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private vadRaf: number | null = null;
+  private lastSpeechMs = 0;
+  private lastLoudMs = 0;
   private wsUrl: string;
   private authToken: string;
   private model: string;
@@ -112,7 +117,7 @@ export class OpenAIRealtimeWebRTC {
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
   private debug = false;
-  private analysisTickTimer: number | null = null;
+  private analysisTickTimer: number | null = null; // backup only
   private watchdogTimer: number | null = null;
   private lastResponseStartMs = 0;
   private deviceId: string | null = null;
@@ -180,6 +185,53 @@ export class OpenAIRealtimeWebRTC {
     }
     this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
 
+    // Local VAD (no Whisper): use an analyser to detect when the user stops speaking.
+    // This prevents us from requesting analysis on silence, which causes hallucinated/repeated transcripts.
+    try {
+      const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextCtor) {
+        const ctx: AudioContext = new AudioContextCtor();
+        this.audioCtx = ctx;
+        const source = ctx.createMediaStreamSource(this.mediaStream as MediaStream);
+        this.analyser = ctx.createAnalyser();
+        this.analyser.fftSize = 2048;
+        source.connect(this.analyser);
+
+        const buf = new Uint8Array(this.analyser.fftSize);
+        const THRESH = 0.018; // RMS threshold tuned for typical mics; adjust if needed
+        const SILENCE_MS = 650;
+        const loop = () => {
+          if (!this.analyser) return;
+          this.analyser.getByteTimeDomainData(buf);
+          // RMS on normalized samples
+          let sumSq = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const v = (buf[i] - 128) / 128;
+            sumSq += v * v;
+          }
+          const rms = Math.sqrt(sumSq / buf.length);
+          const now = Date.now();
+          if (rms > THRESH) {
+            this.lastLoudMs = now;
+            this.lastSpeechMs = now;
+          } else {
+            // If we had loud audio recently and now we're in silence, trigger an analysis tick once.
+            if (this.lastLoudMs && (now - this.lastLoudMs) > SILENCE_MS) {
+              // reset lastLoudMs so we don't spam
+              this.lastLoudMs = 0;
+              if (!this.responseInFlight && this.dc && this.dc.readyState === 'open') {
+                this.requestAnalysisTick();
+              }
+            }
+          }
+          this.vadRaf = window.requestAnimationFrame(loop);
+        };
+        this.vadRaf = window.requestAnimationFrame(loop);
+      }
+    } catch {
+      // If analyser fails, we fall back to timed ticks.
+    }
+
     const pc = new RTCPeerConnection();
     this.pc = pc;
 
@@ -206,10 +258,14 @@ export class OpenAIRealtimeWebRTC {
         }
       });
 
-      // Drive analysis ticks periodically (do NOT depend on fragile VAD event names).
+      // Backup: periodic analysis tick, only if we saw speech within the last few seconds.
+      // If local VAD is working, it will trigger analysis faster and this will do almost nothing.
       this.analysisTickTimer = window.setInterval(() => {
         if (!this.responseInFlight) {
-          this.requestAnalysisTick();
+          const now = Date.now();
+          if (this.lastSpeechMs && (now - this.lastSpeechMs) < 5000) {
+            this.requestAnalysisTick();
+          }
         }
       }, 2500);
 
@@ -264,6 +320,15 @@ export class OpenAIRealtimeWebRTC {
     if (this.watchdogTimer) window.clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
     this.lastResponseStartMs = 0;
+    if (this.vadRaf) window.cancelAnimationFrame(this.vadRaf);
+    this.vadRaf = null;
+    try {
+      this.audioCtx?.close();
+    } catch {}
+    this.audioCtx = null;
+    this.analyser = null;
+    this.lastSpeechMs = 0;
+    this.lastLoudMs = 0;
   }
 
   requestAnalysisTick() {
