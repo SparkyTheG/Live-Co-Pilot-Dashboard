@@ -182,6 +182,9 @@ export class OpenAIRealtimeWebRTC {
     const tokenJson = await tokenResp.json().catch(() => null);
     if (!tokenResp.ok) {
       this.#dbg('token', 'token mint failed', { status: tokenResp.status, body: tokenJson });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:token',message:'token mint failed',data:{status:tokenResp.status,hasBody:!!tokenJson},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       throw new Error(`Failed to mint realtime token (${tokenResp.status})`);
     }
     const clientSecret =
@@ -193,6 +196,9 @@ export class OpenAIRealtimeWebRTC {
     if (!clientSecret) throw new Error('Realtime token missing client_secret.value');
     this.model = model;
     this.#dbg('token', 'token mint ok', { model: this.model });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:token',message:'token mint ok',data:{model:this.model,hasClientSecret:true},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
 
     // 2) Get mic stream and create peer connection
     // Use strong constraints to improve transcription quality and avoid system-audio/echo issues.
@@ -658,7 +664,7 @@ export class OpenAIRealtimeWebRTC {
         }
       }
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished',data:{type:t,hadText:!!this.currentResponseText,parsedOk:!!parsed,responseInFlightBefore:this.responseInFlight,textLen:(this.currentResponseText||'').length},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished',data:{type:t,parsedOk:!!parsed,textLen:(this.currentResponseText||'').length,preview:String(this.currentResponseText||'').slice(0,220)},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H4'})}).catch(()=>{});
       // #endregion
       this.currentResponseText = '';
       this.responseInFlight = false;
