@@ -35,6 +35,9 @@ function sanitizeTranscript(text: string): string {
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length < 2) return '';
 
+  // Must contain at least some letters (avoid garbage tokens)
+  if (!/[a-z]/i.test(t)) return '';
+
   // Reject if it's mostly repeated same word (common hallucination on silence/noise)
   const uniq = new Set(words.map((w) => w.toLowerCase()));
   if (uniq.size <= 2 && words.length >= 6) return '';
@@ -282,6 +285,10 @@ export class OpenAIRealtimeWebRTC {
     }
     if (msg?.error) {
       const errMsg = String(msg.error?.message || 'OpenAI Realtime error');
+      // Benign: cancel can fail if nothing is active; don't spam UI.
+      if (errMsg.toLowerCase().includes('no active response')) {
+        return;
+      }
       // If we accidentally tried to create a response while one is still active,
       // keep the inFlight flag set and wait for the done event.
       if (errMsg.toLowerCase().includes('active response')) {
@@ -293,10 +300,11 @@ export class OpenAIRealtimeWebRTC {
 
     // Transcript events: ONLY treat known audio transcription events.
     // This avoids accidentally interpreting other message types as transcript.
+    // IMPORTANT: only accept INPUT audio transcription events (what the user spoke).
+    // Do NOT accept response.* transcripts (those can reflect model-side output).
     const isTranscriptEvt =
       t.startsWith('conversation.item.input_audio_transcription') ||
-      t.startsWith('input_audio_transcription') ||
-      t.startsWith('response.audio_transcript');
+      t.startsWith('input_audio_transcription');
     if (isTranscriptEvt) {
       const deltaText =
         (typeof msg?.delta === 'string' && msg.delta) ||
