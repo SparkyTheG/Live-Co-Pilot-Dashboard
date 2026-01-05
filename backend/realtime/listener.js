@@ -48,6 +48,8 @@ class ElevenLabsScribeRealtime {
     this.onError = onError;
     this.ws = null;
     this.connected = false;
+    // "closed" should mean user-requested close() only.
+    // Network disconnects should be reconnectable.
     this.closed = false;
     this.pending = []; // FIFO resolves: (text) => void
     this.lastCommitted = '';
@@ -87,16 +89,25 @@ class ElevenLabsScribeRealtime {
     });
 
     this.ws.on('message', (raw) => this.#onMessage(raw));
-    this.ws.on('close', () => {
+    this.ws.on('close', (code, reason) => {
+      // IMPORTANT: do not permanently "close" on transient disconnects.
       this.connected = false;
-      this.closed = true;
-      console.log('[S3] ElevenLabs Scribe WS closed');
+      const reasonStr = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason || '');
+      console.log('[S3] ElevenLabs Scribe WS closed', { code, reason: reasonStr.slice(0, 200) });
+      // #region agent log
+      dbg('S3', 'backend/realtime/listener.js:close', 'Scribe WS closed', { code, reason: reasonStr.slice(0, 200) });
+      // #endregion
+      this.ws = null;
       this.#flushPending('');
     });
     this.ws.on('error', (err) => {
       this.connected = false;
+      this.ws = null;
       this.#flushPending('');
       console.log('[S3] ElevenLabs Scribe WS error', { msg: err?.message || String(err) });
+      // #region agent log
+      dbg('S3', 'backend/realtime/listener.js:error', 'Scribe WS error', { msg: err?.message || String(err) });
+      // #endregion
       if (this.onError) this.onError(err);
     });
   }
@@ -128,6 +139,13 @@ class ElevenLabsScribeRealtime {
     }
 
     const t = String(msg?.message_type || '');
+    // Always log message types for debugging (no secrets).
+    // #region agent log
+    dbg('S2', 'backend/realtime/listener.js:#onMessage', 'Scribe message', {
+      message_type: t,
+      keys: msg && typeof msg === 'object' ? Object.keys(msg).slice(0, 12) : []
+    });
+    // #endregion
 
     if (t === 'committed_transcript' || t === 'committed_transcript_with_timestamps') {
       const text = String(msg?.text || '').trim();
@@ -151,7 +169,9 @@ class ElevenLabsScribeRealtime {
     }
 
     // Surface auth/quota/etc errors (do not log secrets)
-    if (t.toLowerCase().includes('error')) {
+    const tl = t.toLowerCase();
+    // message_type can be "scribe_auth_error", "scribeQuotaExceededError", etc.
+    if (tl.includes('error')) {
       const errMsg = String(msg?.message || msg?.error || t);
       console.log('[S3] ElevenLabs Scribe error msg', { msgType: t, errMsg: String(errMsg).slice(0, 140) });
       // #region agent log
@@ -165,7 +185,10 @@ class ElevenLabsScribeRealtime {
   }
 
   async sendPcmChunk(pcmBuffer, previousText = '') {
-    await this.connect();
+    // If we were disconnected, reconnect.
+    if (!this.connected) {
+      await this.connect();
+    }
     if (!this.ws || this.ws.readyState !== WS.OPEN) return '';
 
     const payload = {
@@ -181,7 +204,14 @@ class ElevenLabsScribeRealtime {
     });
     // #endregion
 
-    this.ws.send(JSON.stringify(payload));
+    try {
+      this.ws.send(JSON.stringify(payload));
+    } catch (e) {
+      // #region agent log
+      dbg('S3', 'backend/realtime/listener.js:sendPcmChunk', 'WS send failed', { msg: e?.message || String(e) });
+      // #endregion
+      return '';
+    }
 
     // Resolve when we get a committed transcript (or timeout => empty)
     return await Promise.race([
