@@ -51,6 +51,8 @@ class ElevenLabsScribeRealtime {
     this.pending = []; // FIFO resolves: (text) => void
     this.lastCommitted = '';
     this.lastPartial = '';
+    // ElevenLabs only allows previous_text on the FIRST chunk of a session
+    this.sentFirstChunk = false;
   }
 
   async connect() {
@@ -73,6 +75,8 @@ class ElevenLabsScribeRealtime {
       this.ws.on('open', () => {
         clearTimeout(t);
         this.connected = true;
+        // New session = can send previous_text on first chunk again
+        this.sentFirstChunk = false;
         // Runtime evidence in Railway logs (no secrets)
         console.log('[S1] ElevenLabs Scribe WS open', { model: ELEVENLABS_MODEL_ID });
         // #region agent log
@@ -226,12 +230,16 @@ class ElevenLabsScribeRealtime {
     // reset partial before sending
     this.lastPartial = '';
 
+    // ElevenLabs Scribe API: previous_text can ONLY be set on the FIRST audio chunk
+    const includeContext = !this.sentFirstChunk && previousText;
+    this.sentFirstChunk = true;
+
     const payload = {
       message_type: 'input_audio_chunk',
       audio_base_64: Buffer.from(pcmBuffer).toString('base64'),
       commit: true,
       sample_rate: 16000,
-      ...(previousText ? { previous_text: String(previousText).slice(-500) } : {})
+      ...(includeContext ? { previous_text: String(previousText).slice(-500) } : {})
     };
 
     // #region agent log
