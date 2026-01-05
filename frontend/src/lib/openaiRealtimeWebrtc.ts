@@ -35,6 +35,7 @@ export class OpenAIRealtimeWebRTC {
   private currentTranscriptText = '';
   private responseInFlight = false;
   private pendingTranscript: string | null = null;
+  private debug = false;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
   private onAiAnalysis?: (transcriptText: string, ai: RealtimeAiAnalysis) => void;
@@ -57,6 +58,7 @@ export class OpenAIRealtimeWebRTC {
     this.onTranscript = opts.onTranscript;
     this.onAiAnalysis = opts.onAiAnalysis;
     this.onError = opts.onError;
+    this.debug = Boolean((window as any).__OPENAI_REALTIME_DEBUG__);
   }
 
   async connect() {
@@ -108,8 +110,7 @@ export class OpenAIRealtimeWebRTC {
           // Force English transcription for your use case.
           input_audio_transcription: {
             model: 'gpt-4o-transcribe',
-            language: 'en',
-            prompt: 'Transcribe spoken English accurately. Output English text.'
+            language: 'en'
           },
           instructions: this.#buildInstructions()
         }
@@ -184,6 +185,9 @@ export class OpenAIRealtimeWebRTC {
     });
 
     this.currentResponseText = '';
+    // Defensive: if OpenAI thinks a response is still active (event shape differences),
+    // cancel before starting a new one.
+    this.#send({ type: 'response.cancel' });
     this.#send({
       type: 'response.create',
       response: {
@@ -244,6 +248,10 @@ export class OpenAIRealtimeWebRTC {
     }
 
     const t = String(msg?.type || '');
+    if (this.debug) {
+      // eslint-disable-next-line no-console
+      console.log('[OAI-RT]', t, msg);
+    }
     if (msg?.error) {
       const errMsg = String(msg.error?.message || 'OpenAI Realtime error');
       // If we accidentally tried to create a response while one is still active,
@@ -257,17 +265,15 @@ export class OpenAIRealtimeWebRTC {
 
     // Transcript events: ONLY treat events that look like transcription/audio transcript.
     // This avoids accidentally interpreting other message types as transcript.
-    const isTranscriptEvt = /transcription|audio_transcript/i.test(t);
+    const isTranscriptEvt = /audio_transcript|input_audio_transcription/i.test(t);
     if (isTranscriptEvt) {
       const deltaText =
         (typeof msg?.delta === 'string' && msg.delta) ||
-        (typeof msg?.delta?.text === 'string' && msg.delta.text) ||
         (typeof msg?.delta?.transcript === 'string' && msg.delta.transcript) ||
         null;
 
       const fullText =
         (typeof msg?.transcript === 'string' && msg.transcript) ||
-        (typeof msg?.text === 'string' && msg.text) ||
         (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
         (typeof msg?.item?.content?.[0]?.transcript === 'string' && msg.item.content[0].transcript) ||
         null;
@@ -306,7 +312,13 @@ export class OpenAIRealtimeWebRTC {
       this.currentResponseText = fullText;
     }
 
-    if (t === 'response.done' || t === 'response.text.done' || t === 'response.output_text.done') {
+    if (
+      t === 'response.done' ||
+      t === 'response.completed' ||
+      t === 'response.text.done' ||
+      t === 'response.output_text.done' ||
+      t === 'response.cancelled'
+    ) {
       const parsed = safeJsonParse(this.currentResponseText);
       if (parsed && this.onAiAnalysis) {
         this.onAiAnalysis(this.lastTranscript, parsed);
