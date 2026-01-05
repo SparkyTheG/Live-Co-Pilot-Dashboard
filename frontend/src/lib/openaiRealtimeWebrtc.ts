@@ -452,7 +452,6 @@ export class OpenAIRealtimeWebRTC {
         // Enforce that analysisTextUsed is EXACTLY the transcript we display (no "improving" before analysis).
         const ok = requireExactMatch(rawTranscriptTextRaw, analysisTextUsedRaw);
         const rawTranscriptText = ok ? sanitizeTranscript(collapseConsecutiveSentenceRepeats(rawTranscriptTextRaw)) : '';
-        if (!rawTranscriptText) return;
 
         if (!ok && this.debug) {
           // eslint-disable-next-line no-console
@@ -462,17 +461,20 @@ export class OpenAIRealtimeWebRTC {
           });
         }
 
-        // UI shows exactly what model returned (we only filter obvious prompt leaks / noise).
-        const now = Date.now();
-        if (!(rawTranscriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
-          this.lastGoodTranscript = rawTranscriptText;
-          this.lastGoodTranscriptMs = now;
-          this.onTranscript?.(rawTranscriptText);
-        }
+        // If transcript is empty (silence/noise) or mismatch, don't emit transcript/analysis updates,
+        // but NEVER early-return here (or responseInFlight can get stuck).
+        if (rawTranscriptText) {
+          const now = Date.now();
+          if (!(rawTranscriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
+            this.lastGoodTranscript = rawTranscriptText;
+            this.lastGoodTranscriptMs = now;
+            this.onTranscript?.(rawTranscriptText);
+          }
 
-        // Strip transcript fields out of aiAnalysis payload before forwarding.
-        const { rawTranscriptText: _rt, analysisTextUsed: _atu, transcriptText: _legacy, ...ai } = parsed || {};
-        this.onAiAnalysis(rawTranscriptText, ai);
+          // Strip transcript fields out of aiAnalysis payload before forwarding.
+          const { rawTranscriptText: _rt, analysisTextUsed: _atu, transcriptText: _legacy, ...ai } = parsed || {};
+          this.onAiAnalysis(rawTranscriptText, ai);
+        }
       }
       this.currentResponseText = '';
       this.responseInFlight = false;
