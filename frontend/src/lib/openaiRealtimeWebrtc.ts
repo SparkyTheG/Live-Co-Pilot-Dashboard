@@ -346,26 +346,95 @@ export class OpenAIRealtimeWebRTC {
   }
 
   #buildResponseInstructions() {
+    // Keep this closely aligned to the legacy multi-agent rubric (27 indicators + hot buttons + objections)
+    // so the realtime model behaves like the prior system.
     return (
       `Output ONLY valid JSON. No markdown.\n` +
-      `You are listening to LIVE AUDIO from the user.\n` +
-      `First, output rawTranscriptText as the VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
-      `STRICT TRANSCRIPTION RULES (no "improving"):\n` +
+      `You are a REAL-TIME sales call analyzer.\n` +
+      `CONTEXT: Calls between CLOSER (salesperson) and PROSPECT (potential customer).\n` +
+      (this.customScriptPrompt
+        ? `CUSTOM_SCRIPT_PROMPT: ${this.customScriptPrompt}\n`
+        : '') +
+      `\n` +
+      `SPEAKER DETECTION:\n` +
+      `- CLOSER: The salesperson asking questions, presenting offers, handling objections\n` +
+      `- PROSPECT: The potential customer responding, raising concerns, expressing interest or objections\n` +
+      `\n` +
+      `FIRST: return rawTranscriptText = VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
+      `STRICT TRANSCRIPTION RULES:\n` +
       `- Language: English.\n` +
       `- Preserve filler words, false starts, stutters, and informal phrasing.\n` +
       `- Do NOT correct grammar.\n` +
       `- Do NOT paraphrase.\n` +
-      `- Do NOT add information that wasn't spoken.\n` +
-      `- Do NOT add extra words.\n` +
-      `- Do NOT repeat the same phrase multiple times.\n` +
+      `- Do NOT add information not spoken.\n` +
       `- Do NOT repeat earlier segments.\n` +
       `- If unclear/silence/noise, set rawTranscriptText to "".\n` +
-      `Second, output analysisTextUsed which MUST be EXACTLY rawTranscriptText (character-for-character).\n` +
-      `Then output analysis based ONLY on analysisTextUsed.\n` +
-      `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
+      `SECOND: return analysisTextUsed which MUST EXACTLY equal rawTranscriptText (character-for-character).\n` +
+      `THIRD: return analysis based ONLY on analysisTextUsed.\n` +
+      `\n` +
+      `===== 27 INDICATORS (score 1-10, higher=stronger signal) =====\n` +
+      `P1-PAIN/DESIRE GAP:\n` +
+      `1-Pain Intensity\n` +
+      `2-Pain Awareness\n` +
+      `3-Desire Clarity\n` +
+      `4-Desire Priority\n` +
+      `\n` +
+      `P2-URGENCY:\n` +
+      `5-Time Pressure\n` +
+      `6-Cost of Delay\n` +
+      `7-Internal Timing\n` +
+      `8-Environmental Availability\n` +
+      `\n` +
+      `P3-DECISIVENESS:\n` +
+      `9-Decision Authority\n` +
+      `10-Decision Style\n` +
+      `11-Commitment to Decide\n` +
+      `12-Self-Permission\n` +
+      `\n` +
+      `P4-MONEY AVAILABILITY:\n` +
+      `13-Resource Access\n` +
+      `14-Resource Fluidity\n` +
+      `15-Investment Mindset\n` +
+      `16-Resourcefulness\n` +
+      `\n` +
+      `P5-OWNERSHIP:\n` +
+      `17-Problem Recognition\n` +
+      `18-Solution Ownership\n` +
+      `19-Locus of Control\n` +
+      `20-Action Integrity\n` +
+      `\n` +
+      `P6-PRICE SENSITIVITY (REVERSE - high score = LESS price sensitive):\n` +
+      `21-Emotional Response to Price\n` +
+      `22-Negotiation Reflex\n` +
+      `23-Structural Rigidity\n` +
+      `\n` +
+      `P7-TRUST:\n` +
+      `24-ROI Belief\n` +
+      `25-External Trust\n` +
+      `26-Internal Trust\n` +
+      `27-Risk Tolerance\n` +
+      `\n` +
+      `===== HOT BUTTONS (PROSPECT ONLY) =====\n` +
+      `IMPORTANT: Only detect hot buttons from what the PROSPECT says, NOT the closer!\n` +
+      `- Quote MUST be exact words the PROSPECT said (exact substring from analysisTextUsed or recent context)\n` +
+      `- Score 1-10 based on emotional intensity\n` +
+      `\n` +
+      `===== OBJECTIONS (PROSPECT ONLY) =====\n` +
+      `IMPORTANT: Only detect objections from what the PROSPECT says, NOT the closer!\n` +
+      `For each objection provide fear, whisper, rebuttalScript.\n` +
       (this.customScriptPrompt
-        ? `Use CUSTOM_SCRIPT_PROMPT (${this.customScriptPrompt}) to tailor rebuttalScript to the business/product.\n`
+        ? `Rebuttal scripts MUST incorporate CUSTOM_SCRIPT_PROMPT context.\n`
         : '') +
+      `\n` +
+      `===== TRUTH INDEX SIGNALS =====\n` +
+      `- coherenceSignals: contradictions, hesitations, deflections, confidence markers\n` +
+      `- overallCoherence: high|medium|low\n` +
+      `\n` +
+      `CRITICAL RULES:\n` +
+      `1. Score indicators based on ACTUAL evidence. If unknown, omit the key.\n` +
+      `2. Hot buttons and objections ONLY from PROSPECT speech.\n` +
+      `3. Output compact JSON only.\n` +
+      `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
       `Return JSON EXACTLY like:\n` +
       `{\n` +
       `  "rawTranscriptText":"verbatim transcript of the newest audio segment (English)",\n` +
