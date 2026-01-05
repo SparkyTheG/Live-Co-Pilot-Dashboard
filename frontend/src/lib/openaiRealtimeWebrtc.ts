@@ -32,6 +32,8 @@ export class OpenAIRealtimeWebRTC {
   private customScriptPrompt: string;
   private currentResponseText = '';
   private lastTranscript = '';
+  private responseInFlight = false;
+  private pendingTranscript: string | null = null;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
   private onAiAnalysis?: (transcriptText: string, ai: RealtimeAiAnalysis) => void;
@@ -140,12 +142,22 @@ export class OpenAIRealtimeWebRTC {
     this.dc = null;
     this.pc = null;
     this.mediaStream = null;
+    this.responseInFlight = false;
+    this.pendingTranscript = null;
   }
 
   requestAnalysisForTranscript(transcriptText: string) {
     const text = String(transcriptText || '').trim();
     if (!text) return;
+    // OpenAI Realtime only allows one active response at a time. If we're still
+    // waiting on the previous `response.create`, queue the latest transcript.
+    if (this.responseInFlight) {
+      this.pendingTranscript = text;
+      return;
+    }
+
     this.lastTranscript = text;
+    this.responseInFlight = true;
 
     // Make the transcript explicit as a conversation item, then request JSON analysis.
     this.#send({
@@ -227,7 +239,13 @@ export class OpenAIRealtimeWebRTC {
 
     const t = String(msg?.type || '');
     if (msg?.error) {
-      this.onError?.(new Error(msg.error?.message || 'OpenAI Realtime error'));
+      const errMsg = String(msg.error?.message || 'OpenAI Realtime error');
+      // If we accidentally tried to create a response while one is still active,
+      // keep the inFlight flag set and wait for the done event.
+      if (errMsg.toLowerCase().includes('active response')) {
+        this.responseInFlight = true;
+      }
+      this.onError?.(new Error(errMsg));
       return;
     }
 
@@ -272,6 +290,15 @@ export class OpenAIRealtimeWebRTC {
         this.onAiAnalysis(this.lastTranscript, parsed);
       }
       this.currentResponseText = '';
+      this.responseInFlight = false;
+
+      // If a newer transcript arrived while we were generating, run analysis again (latest wins).
+      if (this.pendingTranscript) {
+        const next = this.pendingTranscript;
+        this.pendingTranscript = null;
+        // Avoid deep recursion if events are synchronous; schedule next tick.
+        setTimeout(() => this.requestAnalysisForTranscript(next), 0);
+      }
     }
   }
 }
