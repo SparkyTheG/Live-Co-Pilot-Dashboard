@@ -12,6 +12,16 @@ import { RealtimeAnalysisSession } from './realtime/realtimeAnalysis.js';
 
 dotenv.config();
 
+// Build/version marker for runtime verification (set in Railway as BACKEND_BUILD_SHA)
+const BACKEND_BUILD_SHA = process.env.BACKEND_BUILD_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || 'unknown';
+console.log('[BOOT] backend starting', {
+  BACKEND_BUILD_SHA,
+  hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+  hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
+  hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL),
+  realtimeDisabled: process.env.OPENAI_REALTIME_DISABLED === 'true'
+});
+
 // #region agent log helper
 const DEBUG_LOG_PATH = '/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log';
 function debugLog(msg, data = {}) {
@@ -1050,7 +1060,7 @@ app.post('/api/analyze', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), backendBuildSha: BACKEND_BUILD_SHA });
 });
 
 // Start server
