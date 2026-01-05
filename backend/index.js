@@ -221,9 +221,15 @@ wss.on('connection', (ws, req) => {
 
           if (meta.useRealtimeAnalysis && process.env.OPENAI_API_KEY) {
             if (!realtimeAnalysisSessions.get(connectionId)) {
-              const instructions = `You are a REAL-TIME sales call analyzer for real estate. Output ONLY valid JSON.
+              const instructions = `You are a REAL-TIME sales call analyzer. Output ONLY valid JSON.
 
-CONTEXT: Analyzing calls between CLOSER (salesperson) and PROSPECT (property seller).
+CONTEXT: Analyzing calls between CLOSER (salesperson) and PROSPECT (potential customer).
+- The CUSTOM_SCRIPT_PROMPT (if provided) describes the business/product being sold - USE THIS to tailor rebuttal scripts.
+- Example: If CUSTOM_SCRIPT_PROMPT says "we are a CRM company", rebuttals should reference CRM benefits.
+
+SPEAKER DETECTION:
+- CLOSER: The salesperson asking questions, presenting offers, handling objections
+- PROSPECT: The potential customer responding, raising concerns, expressing interest or objections
 
 ===== 27 INDICATORS (score 1-10, higher=stronger signal) =====
 P1-PAIN/DESIRE GAP:
@@ -267,20 +273,27 @@ P7-TRUST:
 26-Internal Trust: Trust themselves to succeed? ("I can do this")
 27-Risk Tolerance: Comfortable with uncertainty? ("I'm okay with risk")
 
-===== HOT BUTTONS =====
-Detect emotional triggers when prospect shows strong emotion about:
+===== HOT BUTTONS (PROSPECT ONLY) =====
+IMPORTANT: Only detect hot buttons from what the PROSPECT says, NOT the closer!
+Hot buttons are emotional triggers the prospect reveals:
 - Family concerns, health issues, financial stress, time pressure, frustration, dreams/goals
-- Quote MUST be exact words from conversation
+- Quote MUST be exact words the PROSPECT said
 - Score 1-10 based on emotional intensity
+- These help the closer understand what motivates the prospect
 
-===== OBJECTIONS =====
-Common patterns to detect:
+===== OBJECTIONS (PROSPECT ONLY) =====
+IMPORTANT: Only detect objections from what the PROSPECT says, NOT the closer!
+Common objection patterns from prospects:
 - PRICE: "too expensive", "can't afford", "need to think about cost"
 - TIMING: "not the right time", "maybe later", "need more time"
 - TRUST: "how do I know", "sounds too good", "what's the catch"
 - AUTHORITY: "need to talk to spouse/partner", "not my decision alone"
 - NEED: "not sure I need this", "might not be necessary"
-For each objection provide: fear (underlying worry), whisper (what they want to hear), rebuttalScript
+
+For each objection provide:
+- fear: the underlying worry driving this objection
+- whisper: what they secretly want to hear
+- rebuttalScript: A response the closer can use. USE THE CUSTOM_SCRIPT_PROMPT context if provided to tailor the rebuttal to the specific business/product being sold.
 
 ===== TRUTH INDEX SIGNALS =====
 - coherenceSignals: List any contradictions, hesitations, deflections, or confidence markers
@@ -290,8 +303,8 @@ OUTPUT JSON (no markdown, no explanations):
 {
   "speaker": "closer|prospect|unknown",
   "indicatorSignals": {"1":7,"2":6,...}, 
-  "hotButtonDetails": [{"id":5,"quote":"exact words","contextualPrompt":"follow-up question","score":8}],
-  "objections": [{"objectionText":"specific objection","probability":0.8,"fear":"their fear","whisper":"what they need to hear","rebuttalScript":"suggested response"}],
+  "hotButtonDetails": [{"id":5,"quote":"exact PROSPECT words","contextualPrompt":"follow-up question for closer to ask","score":8}],
+  "objections": [{"objectionText":"what PROSPECT said","probability":0.8,"fear":"prospect's underlying fear","whisper":"what prospect wants to hear","rebuttalScript":"response using CUSTOM_SCRIPT_PROMPT context"}],
   "askedQuestions": [1,5,12],
   "detectedRules": [{"ruleId":"T1","evidence":"quote","confidence":0.8}],
   "coherenceSignals": ["signal1","signal2"],
@@ -299,7 +312,10 @@ OUTPUT JSON (no markdown, no explanations):
   "insights": {"summary":"brief summary","keyMotivators":["motivator1"],"concerns":["concern1"],"recommendation":"next step","closingReadiness":"ready|almost|not_ready"}
 }
 
-CRITICAL: Score indicators based on ACTUAL evidence in conversation. Be generous when there's any signal.`;
+CRITICAL RULES:
+1. Score indicators based on ACTUAL evidence in conversation. Be generous when there's any signal.
+2. Hot buttons and objections are ONLY from PROSPECT speech - never from what the CLOSER says.
+3. Rebuttal scripts should incorporate CUSTOM_SCRIPT_PROMPT context to be relevant to the specific product/service.`;
 
               const session = new RealtimeAnalysisSession({
                 apiKey: process.env.OPENAI_API_KEY,
