@@ -853,6 +853,18 @@ async function startRealtimeListening(connectionId, config) {
     });
 
     const realtimeConnection = await createRealtimeConnection({
+      // Called when a new transcript chunk is committed (VAD-based) - send to frontend for display
+      onChunk: (chunkText) => {
+        console.log(`[${connectionId}] Sending transcript chunk to frontend:`, chunkText.slice(0, 60));
+        sendToClient(connectionId, {
+          type: 'transcript_chunk',
+          data: {
+            speaker: 'UNKNOWN',
+            text: chunkText,
+            ts: Date.now()
+          }
+        });
+      },
       onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
         try {
           console.log(`[${connectionId}] Analyzing transcript (${transcript.length} chars), prospectType: ${prospectType}`);

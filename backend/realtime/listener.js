@@ -216,7 +216,7 @@ class ElevenLabsScribeRealtime {
   }
 }
 
-export async function createRealtimeConnection({ onTranscript, onError }) {
+export async function createRealtimeConnection({ onTranscript, onChunk, onError }) {
   let conversationHistory = '';
   let isConnected = true;
   // Cap history so long sessions don't grow prompt size unbounded (prevents slowdown)
@@ -287,6 +287,15 @@ function sanitizeTranscript(text) {
     if (looksLikeHallucination(cleaned)) return;
     
     console.log('[SCRIBE-COMMIT] Accepted', { len: cleaned.length, preview: cleaned.slice(0, 80) });
+    
+    // Send chunk to frontend for display (via onChunk callback)
+    if (onChunk && isConnected) {
+      try {
+        onChunk(cleaned);
+      } catch (e) {
+        console.error('[SCRIBE-COMMIT] onChunk error:', e);
+      }
+    }
     
     // Add to conversation history
     conversationHistory += cleaned + ' ';
