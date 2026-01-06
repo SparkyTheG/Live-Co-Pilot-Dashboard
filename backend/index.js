@@ -909,7 +909,7 @@ async function handleIncomingTextChunk(connectionId, {
   let pending = meta?._analysisPending || false;
 
   // #region debug log
-  try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:910',message:'Throttle check',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS,pendingDuration:pendingStartMs?now-pendingStartMs:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
+  const log1={location:'index.js:910',message:'Throttle check',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS,pendingDuration:pendingStartMs?now-pendingStartMs:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'};console.log('[DEBUG]',JSON.stringify(log1));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log1)+'\n');}catch(e){}
   // #endregion
 
   // Stuck detection: if pending for too long, force clear it
@@ -951,7 +951,7 @@ async function handleIncomingTextChunk(connectionId, {
         console.log(`[${connectionId.slice(-6)}] Running AI analysis (${transcriptSnapshot.length} chars)`);
         const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
         // #region debug log
-        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:949',message:'Analysis completed',data:{hasAnalysis:!!analysis,hotButtonsCount:analysis?.hotButtons?.length||0,objectionsCount:analysis?.objections?.length||0,truthIndexScore:analysis?.truthIndex?.score||0,fromCache:analysis?.fromCache||false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D,E'})+'\n');}catch(e){}
+        const log2={location:'index.js:949',message:'Analysis completed',data:{hasAnalysis:!!analysis,hotButtonsCount:analysis?.hotButtons?.length||0,objectionsCount:analysis?.objections?.length||0,truthIndexScore:analysis?.truthIndex?.score||0,fromCache:analysis?.fromCache||false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D,E'};console.log('[DEBUG]',JSON.stringify(log2));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log2)+'\n');}catch(e){}
         // #endregion
         if (analysis) {
           sendToClient(connectionId, {
@@ -963,7 +963,7 @@ async function handleIncomingTextChunk(connectionId, {
             }
           });
           // #region debug log
-          try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:960',message:'Sent analysis to client',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,truthIndexScore:analysis.truthIndex?.score||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})+'\n');}catch(e){}
+          const log3={location:'index.js:960',message:'Sent analysis to client',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,truthIndexScore:analysis.truthIndex?.score||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};console.log('[DEBUG]',JSON.stringify(log3));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log3)+'\n');}catch(e){}
           // #endregion
         }
       } catch (e) {
