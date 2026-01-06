@@ -61,7 +61,6 @@ export class ConversationWebSocket {
   private onError?: (error: Error) => void;
   private onConnect?: () => void;
   private onDisconnect?: () => void;
-  private onDebugAudioDump?: (payload: { wavBase64: string; sampleRate: number; seconds: number; stats?: any }) => void;
   private manuallyDisconnected = false; // Track if disconnect was intentional
   private lastMessageTime = Date.now();
   private lastSendTime = Date.now();
@@ -199,10 +198,6 @@ export class ConversationWebSocket {
               if (this.onTranscriptChunk) {
                 this.onTranscriptChunk(data.data);
               }
-            } else if (data.type === 'debug_audio_dump') {
-              if (this.onDebugAudioDump) {
-                this.onDebugAudioDump(data.data);
-              }
             } else if (data.type === 'error') {
               if (this.onError) {
                 this.onError(new Error(data.message));
@@ -276,10 +271,6 @@ export class ConversationWebSocket {
     }
     this.lastSendTime = Date.now();
     this.ws.send(JSON.stringify(payload));
-  }
-
-  requestDebugAudioDump(seconds = 5) {
-    this.sendRaw({ type: 'debug_request_audio_dump', seconds });
   }
 
   stopListening() {
@@ -386,10 +377,6 @@ export class ConversationWebSocket {
 
   setOnDisconnect(callback: () => void) {
     this.onDisconnect = callback;
-  }
-
-  setOnDebugAudioDump(callback: (payload: { wavBase64: string; sampleRate: number; seconds: number; stats?: any }) => void) {
-    this.onDebugAudioDump = callback;
   }
 
   isConnected(): boolean {

@@ -21,89 +21,7 @@ console.log('[BOOT] backend starting', {
   realtimeDisabled: process.env.OPENAI_REALTIME_DISABLED === 'true'
 });
 
-// #region agent log helper
-const DEBUG_LOG_PATH = '/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log';
-function debugLog(msg, data = {}) {
-  const line = JSON.stringify({ ts: Date.now(), msg, ...data }) + '\n';
-  try {
-    fs.appendFileSync(DEBUG_LOG_PATH, line);
-  } catch {
-    // In production (Railway), this path may not exist; never crash the server for logging.
-  }
-}
-// #endregion
-
-// #region agent debug-mode log (HTTP ingest) - keep tiny, no secrets
-const DEBUG_INGEST =
-  'http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a';
-function dbg(hypothesisId, location, message, data = {}) {
-  fetch(DEBUG_INGEST, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId: 'debug-session',
-      runId: 'scribe-v2',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now()
-    })
-  }).catch(() => {});
-}
-// #endregion
-
-// #region controlled-audio-test helpers (no secrets)
-function computePcm16Stats(pcmBuf) {
-  try {
-    const b = Buffer.isBuffer(pcmBuf) ? pcmBuf : Buffer.from(pcmBuf || []);
-    const n = Math.floor(b.length / 2);
-    if (n <= 0) return { samples: 0 };
-    let peak = 0;
-    let sumSq = 0;
-    let clipped = 0;
-    for (let i = 0; i < n; i++) {
-      const v = b.readInt16LE(i * 2);
-      const av = Math.abs(v);
-      if (av > peak) peak = av;
-      if (av >= 32760) clipped++;
-      const fv = v / 32768;
-      sumSq += fv * fv;
-    }
-    const rms = Math.sqrt(sumSq / n);
-    return { samples: n, peak, rms: Number(rms.toFixed(4)), clipped };
-  } catch {
-    return { samples: 0 };
-  }
-}
-
-function pcm16ToWavBase64(pcmBuf, sampleRate = 16000, channels = 1) {
-  try {
-    const pcm = Buffer.isBuffer(pcmBuf) ? pcmBuf : Buffer.from(pcmBuf || []);
-    const blockAlign = channels * 2;
-    const byteRate = sampleRate * blockAlign;
-    const wav = Buffer.alloc(44 + pcm.length);
-    let o = 0;
-    wav.write('RIFF', o); o += 4;
-    wav.writeUInt32LE(36 + pcm.length, o); o += 4;
-    wav.write('WAVE', o); o += 4;
-    wav.write('fmt ', o); o += 4;
-    wav.writeUInt32LE(16, o); o += 4;
-    wav.writeUInt16LE(1, o); o += 2;
-    wav.writeUInt16LE(channels, o); o += 2;
-    wav.writeUInt32LE(sampleRate, o); o += 4;
-    wav.writeUInt32LE(byteRate, o); o += 4;
-    wav.writeUInt16LE(blockAlign, o); o += 2;
-    wav.writeUInt16LE(16, o); o += 2;
-    wav.write('data', o); o += 4;
-    wav.writeUInt32LE(pcm.length, o); o += 4;
-    pcm.copy(wav, o);
-    return wav.toString('base64');
-  } catch {
-    return '';
-  }
-}
-// #endregion
+// Debug-mode instrumentation removed after verification.
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -258,9 +176,6 @@ process.on('SIGTERM', () => {
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
-  // #region agent log
-  debugLog('H-G: NEW WebSocket connection', { ip: req.socket.remoteAddress });
-  // #endregion
   const connectionId = `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   connections.set(connectionId, ws);
   connectionPersistence.set(connectionId, {
@@ -301,9 +216,6 @@ wss.on('connection', (ws, req) => {
       ws.isAlive = true;
 
       const data = JSON.parse(message.toString());
-      // #region agent log
-      debugLog('H-H: WS message received', { type: data.type, hasText: !!data.text, hasAudio: !!data.audio });
-      // #endregion
 
       if (data.type === 'start_listening') {
         // Start real-time conversation listening
@@ -414,9 +326,6 @@ wss.on('connection', (ws, req) => {
           }
         }
       } else if (data.type === 'stop_listening') {
-        // #region debug log H1,H3
-        try{require('fs').appendFileSync('/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log',JSON.stringify({location:'index.js:364',message:'Received stop_listening from client',data:{connectionId:connectionId.slice(-6)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3'})+'\n');}catch(e){}
-        // #endregion
         // Stop listening
         stopListening(connectionId);
         // Mark session ended and generate final summary
@@ -531,80 +440,10 @@ wss.on('connection', (ws, req) => {
           }
           // Convert base64 to buffer if needed
           const audioBuffer = Buffer.from(data.audio, 'base64');
-          // #region agent log
-          dbg('A2', 'backend/index.js:audio_chunk', 'Audio chunk received', {
-            bytes: audioBuffer.length,
-            mimeType
-          });
-          // #endregion
-
-          // Controlled test + quality gate:
-          // Compute quick stats and (optionally) skip very-low-energy chunks that are likely just noise.
-          // This reduces VAD false-positives → fewer hallucinated transcripts.
-          const isPcm16kStrict = mimeType.includes('pcm_16000');
-          const gateRms = Number(process.env.SCRIBE_AUDIO_GATE_RMS || '0'); // 0 disables gating
-          if (isPcm16kStrict) {
-            const chunkStats = computePcm16Stats(audioBuffer);
-            // #region agent log
-            dbg('H2', 'backend/index.js:audio_chunk', 'PCM chunk stats', { gateRms, chunkStats });
-            // #endregion
-            if (gateRms > 0 && (chunkStats.rms ?? 0) < gateRms) {
-              // Still update "last seen" for debugging, but do not forward to Scribe.
-              const m = connectionPersistence.get(connectionId);
-              if (m) {
-                m._debugLastMimeType = mimeType.slice(0, 80);
-                m._debugLastAudioAtMs = Date.now();
-                connectionPersistence.set(connectionId, m);
-              }
-              return;
-            }
-          }
-
-          // Controlled test: keep a rolling 5s PCM ring buffer so we can download and listen to what we sent.
-          // NOTE: be tolerant of mimeType formatting (e.g. "pcm_16000" vs "pcm_16000;codec=...").
-          if (mimeType.includes('pcm_16000')) {
-            const m = connectionPersistence.get(connectionId);
-            if (m) {
-              const maxBytes = 16000 * 2 * 5; // 5 seconds of PCM16 mono @16k
-              const prev = Buffer.isBuffer(m._debugPcmRing) ? m._debugPcmRing : Buffer.alloc(0);
-              const next = Buffer.concat([prev, audioBuffer]);
-              m._debugPcmRing = next.length > maxBytes ? next.slice(next.length - maxBytes) : next;
-              m._debugPcmStats = computePcm16Stats(m._debugPcmRing);
-              m._debugLastMimeType = mimeType.slice(0, 80);
-              m._debugLastAudioAtMs = Date.now();
-              connectionPersistence.set(connectionId, m);
-            }
-          }
-
           // Feed audio to Scribe. Committed transcripts are handled via the connection's onChunk callback (VAD-based),
           // which then calls handleIncomingTextChunk and updates the UI.
           await realtimeConnection.sendAudio(audioBuffer, mimeType);
         }
-      } else if (data.type === 'debug_request_audio_dump') {
-        // Controlled test: send the last few seconds of PCM as a WAV download via WS.
-        const seconds = Math.max(1, Math.min(10, Number(data.seconds || 5)));
-        const m = connectionPersistence.get(connectionId);
-        const ring = Buffer.isBuffer(m?._debugPcmRing) ? m._debugPcmRing : Buffer.alloc(0);
-        const stats = m?._debugPcmStats || computePcm16Stats(ring);
-        const wavBase64 = pcm16ToWavBase64(ring, 16000, 1);
-        const metaInfo = {
-          bytes: ring.length,
-          lastMimeType: m?._debugLastMimeType || null,
-          lastAudioAtMs: m?._debugLastAudioAtMs || null
-        };
-        if (!wavBase64 || ring.length === 0) {
-          sendToClient(connectionId, {
-            type: 'error',
-            message: `Debug audio dump is empty (bytes=${ring.length}). Start recording, speak for ~3s, then click the button while recording.`
-          });
-        }
-        sendToClient(connectionId, {
-          type: 'debug_audio_dump',
-          data: { wavBase64, sampleRate: 16000, seconds, stats: { ...stats, ...metaInfo } }
-        });
-        // #region agent log
-        debugLog('debug_audio_dump_sent', { runId: 'audio-dump-v2', connectionId: connectionId.slice(-8), ...metaInfo, stats });
-        // #endregion
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change
         // Store prospect type in connection meta for summaries
@@ -778,16 +617,9 @@ async function handleIncomingTextChunk(connectionId, {
   const pendingStartMs = meta?._analysisPendingStart || 0;
   let pending = meta?._analysisPending || false;
 
-  // #region debug log
-  const log1={location:'index.js:910',message:'Throttle check',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS,pendingDuration:pendingStartMs?now-pendingStartMs:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'};console.log('[DEBUG]',JSON.stringify(log1));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log1)+'\n');}catch(e){}
-  // #endregion
-
   // Stuck detection: if pending for too long, force clear it
   if (pending && pendingStartMs && (now - pendingStartMs) > MAX_PENDING_MS) {
     console.warn(`[${connectionId.slice(-6)}] Analysis stuck for ${now - pendingStartMs}ms, force clearing`);
-    // #region debug log
-    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:917',message:'Stuck detected, force clearing',data:{pendingDuration:now-pendingStartMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
-    // #endregion
     pending = false;
     if (meta) {
       meta._analysisPending = false;
@@ -798,9 +630,6 @@ async function handleIncomingTextChunk(connectionId, {
 
   // Skip if already running or too soon
   if (!pending && (now - lastRun) >= THROTTLE_MS) {
-    // #region debug log
-    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:928',message:'Starting analysis',data:{transcriptLen:meta?.plainTranscript?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
-    // #endregion
     // Capture current state for the async task
     const transcriptSnapshot = meta?.plainTranscript || text;
     const ptSnapshot = prospectType || meta?.prospectType || null;
@@ -820,9 +649,6 @@ async function handleIncomingTextChunk(connectionId, {
       try {
         console.log(`[${connectionId.slice(-6)}] Running AI analysis (${transcriptSnapshot.length} chars)`);
         const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
-        // #region debug log
-        const log2={location:'index.js:949',message:'Analysis completed',data:{hasAnalysis:!!analysis,hotButtonsCount:analysis?.hotButtons?.length||0,objectionsCount:analysis?.objections?.length||0,truthIndexScore:analysis?.truthIndex?.score||0,fromCache:analysis?.fromCache||false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D,E'};console.log('[DEBUG]',JSON.stringify(log2));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log2)+'\n');}catch(e){}
-        // #endregion
         if (analysis) {
           sendToClient(connectionId, {
             type: 'analysis_update',
@@ -832,15 +658,9 @@ async function handleIncomingTextChunk(connectionId, {
               objections: Array.isArray(analysis.objections) ? analysis.objections : []
             }
           });
-          // #region debug log
-          const log3={location:'index.js:960',message:'Sent analysis to client',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,truthIndexScore:analysis.truthIndex?.score||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'};console.log('[DEBUG]',JSON.stringify(log3));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(log3)+'\n');}catch(e){}
-          // #endregion
         }
       } catch (e) {
         console.warn(`[WS] AI analysis failed: ${e.message}`);
-        // #region debug log
-        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:966',message:'Analysis failed',data:{error:e.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})+'\n');}catch(e){}
-        // #endregion
       } finally {
         const m = connectionPersistence.get(connectionId);
         if (m) {
@@ -848,15 +668,8 @@ async function handleIncomingTextChunk(connectionId, {
           m._analysisPendingStart = 0;
           connectionPersistence.set(connectionId, m);
         }
-        // #region debug log
-        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:976',message:'Analysis cleanup complete',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
-        // #endregion
       }
     });
-  } else {
-    // #region debug log
-    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:982',message:'Analysis skipped',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
-    // #endregion
   }
 
   // Also run conversation summary updates (independent of analysis pipeline)
