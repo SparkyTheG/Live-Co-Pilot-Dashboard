@@ -842,6 +842,10 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const totalTime = Date.now() - startTime;
   console.log(`[MultiAgent] All done in ${totalTime}ms`);
   console.log(`[MultiAgent] Indicators scored: ${Object.keys(pillarsResult.indicatorSignals || {}).length}/27`);
+  
+  // #region debug log
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:845',message:'Agents completed',data:{totalTimeMs:totalTime,hotButtonsCount:hotButtonsResult?.hotButtonDetails?.length||0,objectionsCount:objectionsResult?.objections?.length||0,truthIndexRules:truthIndexResult?.detectedRules?.length||0,truthIndexCoherence:truthIndexResult?.overallCoherence,agentStatuses:settled.map((r,i)=>({idx:i,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   console.log(`[MultiAgent] Truth Index: ${(truthIndexResult.detectedRules || []).length} incoherence rules`);
   
   return {

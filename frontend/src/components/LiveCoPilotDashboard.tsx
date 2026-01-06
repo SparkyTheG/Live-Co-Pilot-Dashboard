@@ -80,7 +80,7 @@ export default function LiveCoPilotDashboard() {
   const [askedQuestionsHistory, setAskedQuestionsHistory] = useState<Set<number>>(new Set());
   // Use ref to track latest value (avoids stale closure issues)
   const askedQuestionsRef = useRef<Set<number>>(new Set());
-  
+
   // Track best lubometer and truth index scores for stability (prevents wild fluctuations)
   const [bestLubometerScore, setBestLubometerScore] = useState<number>(0);
   const [bestTruthIndexScore, setBestTruthIndexScore] = useState<number>(0);
@@ -400,16 +400,17 @@ export default function LiveCoPilotDashboard() {
                     // append with a separator unless it already ends with punctuation
                     const sep = prev && !/[.!?]$/.test(prev.trim()) ? ' • ' : ' ';
                     const combined = (prev ? prev + sep : '') + next;
-                    return combined.length > 600 ? combined.slice(-600) : combined;
+                    // Increased from 600 to 3000 chars to keep more history
+                    return combined.length > 3000 ? combined.slice(-3000) : combined;
                   });
                 }}
                 onAnalysisUpdate={handleAnalysisUpdate}
               />
 
-              {/* Live transcript (from backend) */}
+              {/* Live transcript (from backend) - Scrollable */}
               <div className="max-w-[520px] px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">
-                <div className="text-xs text-gray-400 mb-1">Live transcript (backend)</div>
-                <div className="text-sm text-gray-200 leading-snug line-clamp-3">
+                <div className="text-xs text-gray-400 mb-1">Live transcript (backend) - scroll to view all</div>
+                <div className="text-sm text-gray-200 leading-snug max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
                   {liveTranscript || 'Waiting for speech…'}
                 </div>
               </div>
