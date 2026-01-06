@@ -81,7 +81,9 @@ export default function RecordingButton({
   }, []);
 
   useEffect(() => {
+    console.log('[RecordingButton] mounted');
     return () => {
+      console.log('[RecordingButton] unmount cleanup -> stopRecording()');
       // Cleanup on unmount
       stopRecording();
       if (wsRef.current) {
@@ -354,7 +356,8 @@ export default function RecordingButton({
   };
 
   const stopRecording = () => {
-    console.log('🛑 Frontend: Stopping recording...');
+    const stack = new Error('stopRecording called').stack;
+    console.log('🛑 Frontend: Stopping recording...', { stack });
 
     // CRITICAL: Update ref FIRST to prevent restart loops
     isRecordingRef.current = false;
@@ -408,6 +411,7 @@ export default function RecordingButton({
 
     if (wsRef.current) {
       try {
+        console.log('[RecordingButton] stopRecording -> sending stop_listening + disconnect');
         wsRef.current.stopListening();
         wsRef.current.disconnect();
         console.log('✅ Frontend: WebSocket disconnected');
@@ -422,6 +426,7 @@ export default function RecordingButton({
   };
 
   const handleToggle = () => {
+    console.log('[RecordingButton] mic button clicked', { isRecording });
     if (isRecording) {
       stopRecording();
     } else {

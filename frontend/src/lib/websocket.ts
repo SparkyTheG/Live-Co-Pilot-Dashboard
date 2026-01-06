@@ -203,8 +203,9 @@ export class ConversationWebSocket {
           reject(error);
         };
 
-        this.ws.onclose = () => {
-          console.log('WebSocket disconnected');
+        this.ws.onclose = (event) => {
+          const ce: any = event as any;
+          console.log('WebSocket disconnected', { code: ce?.code, reason: ce?.reason, manuallyDisconnected: this.manuallyDisconnected });
           this.stopKeepalive(); // Stop keepalive on disconnect
           this.stopConnectionCheck();
           if (this.onDisconnect) this.onDisconnect();
