@@ -14,39 +14,141 @@
  */
 
 import { runAllAgents } from './aiAgents.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // ----------------------------------------------------------------------------
 // Indicator metadata (for UI display)
 // ----------------------------------------------------------------------------
-const INDICATOR_META = {
-  1: { name: 'Pain intensity', description: 'How severe is the prospect’s pain/problem?' },
-  2: { name: 'Pain awareness', description: 'Do they understand the root cause and consequences?' },
-  3: { name: 'Desire clarity', description: 'How specific is what they want instead?' },
-  4: { name: 'Desire priority', description: 'How important is solving this right now?' },
-  5: { name: 'Time pressure', description: 'Is there a real deadline driving urgency?' },
-  6: { name: 'Cost of delay', description: 'What do they lose by waiting longer?' },
-  7: { name: 'Internal timing', description: 'Are they at a breaking point / “can’t keep doing this”?' },
-  8: { name: 'Availability', description: 'Are they ready/able to take action now?' },
-  9: { name: 'Authority', description: 'Are they the decision maker?' },
-  10: { name: 'Decision style', description: 'How quickly do they decide once convinced?' },
-  11: { name: 'Commitment', description: 'How committed are they to a next step?' },
-  12: { name: 'Self-permission', description: 'Do they trust themselves to decide?' },
-  13: { name: 'Resource access', description: 'Do they have access to money/resources?' },
-  14: { name: 'Resource fluidity', description: 'Can they reallocate money if needed?' },
-  15: { name: 'Investment mindset', description: 'Do they view it as investment vs cost?' },
-  16: { name: 'Resourcefulness', description: 'Do they find ways when committed?' },
-  17: { name: 'Problem recognition', description: 'Do they acknowledge their role vs blaming others?' },
-  18: { name: 'Solution ownership', description: 'Are they taking responsibility to change it?' },
-  19: { name: 'Locus of control', description: 'Do they believe they control outcomes?' },
-  20: { name: 'Desire ↔ action alignment', description: 'Do their words match their actions?' },
-  21: { name: 'Price sensitivity', description: 'Are they focused on price/discounts?' },
-  22: { name: 'Value skepticism', description: 'Do they question whether it’s worth it?' },
-  23: { name: 'Comparison shopping', description: 'Are they comparing options to find cheaper/better?' },
-  24: { name: 'Skepticism', description: 'Do they doubt the solution will work?' },
-  25: { name: 'Proof required', description: 'Do they ask for evidence, track record, guarantees?' },
-  26: { name: 'Trust deficit', description: 'Do they hesitate to trust you/process/offer?' },
-  27: { name: 'Outcome fear', description: 'Fear it won’t work for them / risk of failure.' }
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && ch === ',') {
+      row.push(field);
+      field = '';
+      continue;
+    }
+
+    if (!inQuotes && (ch === '\n' || ch === '\r')) {
+      if (ch === '\r' && next === '\n') i++;
+      row.push(field);
+      field = '';
+      // Skip completely empty rows
+      if (row.some((c) => String(c || '').trim().length > 0)) rows.push(row);
+      row = [];
+      continue;
+    }
+
+    field += ch;
+  }
+
+  // last field
+  row.push(field);
+  if (row.some((c) => String(c || '').trim().length > 0)) rows.push(row);
+  return rows;
+}
+
+function loadIndicatorNamesFromCsv() {
+  // Canonical source: "Indicators and Objection Matrix.csv"
+  const csvPath = path.resolve(__dirname, '..', 'data', 'Copy of Zero-Stress Sales Logic - Dec 2025 V1 - Indicators and Objection Matrix.csv');
+  try {
+    const raw = fs.readFileSync(csvPath, 'utf8');
+    const rows = parseCsv(raw);
+    if (!rows.length) return {};
+
+    // Find header row containing required columns (some files start with blank lines)
+    let headerIdx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].map((c) => String(c || '').trim());
+      if (r.includes('ID') && r.includes('Pillar & Indicator')) {
+        headerIdx = i;
+        break;
+      }
+    }
+    if (headerIdx < 0) return {};
+
+    const header = rows[headerIdx].map((c) => String(c || '').trim());
+    const idCol = header.indexOf('ID');
+    const nameCol = header.indexOf('Pillar & Indicator');
+    if (idCol < 0 || nameCol < 0) return {};
+
+    const out = {};
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const id = Number(String(r[idCol] || '').trim());
+      const name = String(r[nameCol] || '').trim();
+      if (!Number.isFinite(id) || id < 1 || id > 27) continue;
+      if (!name) continue;
+      out[id] = { name };
+    }
+    return out;
+  } catch (e) {
+    console.warn('[Engine] Failed to load indicator names from CSV:', e?.message || e);
+    return {};
+  }
+}
+
+// Default descriptions (UI helper line). Names will be overwritten from CSV for accuracy.
+const INDICATOR_META = (() => {
+  const base = {
+    1: { name: '', description: 'How severe is the prospect’s pain/problem?' },
+    2: { name: '', description: 'Do they understand the root cause and consequences?' },
+    3: { name: '', description: 'How specific is what they want instead?' },
+    4: { name: '', description: 'How important is solving this right now?' },
+    5: { name: '', description: 'Is there a real deadline driving urgency?' },
+    6: { name: '', description: 'What do they lose by waiting longer?' },
+    7: { name: '', description: 'Are they at a breaking point / “can’t keep doing this”?' },
+    8: { name: '', description: 'Are they ready/able to take action now?' },
+    9: { name: '', description: 'Are they the decision maker?' },
+    10: { name: '', description: 'How quickly do they decide once convinced?' },
+    11: { name: '', description: 'How committed are they to a next step?' },
+    12: { name: '', description: 'Do they trust themselves to decide?' },
+    13: { name: '', description: 'Do they have access to money/resources?' },
+    14: { name: '', description: 'Can they reallocate money if needed?' },
+    15: { name: '', description: 'Do they view it as investment vs cost?' },
+    16: { name: '', description: 'Do they find ways when committed?' },
+    17: { name: '', description: 'Do they acknowledge their role vs blaming others?' },
+    18: { name: '', description: 'Are they taking responsibility to change it?' },
+    19: { name: '', description: 'Do they believe they control outcomes?' },
+    20: { name: '', description: 'Do their words match their actions?' },
+    21: { name: '', description: 'Are they focused on price/discounts?' },
+    22: { name: '', description: 'Do they question whether it’s worth it?' },
+    23: { name: '', description: 'Are they comparing options to find cheaper/better?' },
+    24: { name: '', description: 'Do they doubt the solution will work?' },
+    25: { name: '', description: 'Do they ask for evidence, track record, guarantees?' },
+    26: { name: '', description: 'Do they hesitate to trust you/process/offer?' },
+    27: { name: '', description: 'Fear it won’t work for them / risk of failure.' }
+  };
+
+  const csvNames = loadIndicatorNamesFromCsv();
+  for (const [idStr, v] of Object.entries(csvNames)) {
+    const id = Number(idStr);
+    if (!base[id]) base[id] = { name: '', description: '' };
+    base[id] = { ...base[id], name: String(v?.name || '').trim() };
+  }
+  return base;
+})();
 
 function normalizeHotButtons(hotButtonDetails) {
   const arr = Array.isArray(hotButtonDetails) ? hotButtonDetails : [];
