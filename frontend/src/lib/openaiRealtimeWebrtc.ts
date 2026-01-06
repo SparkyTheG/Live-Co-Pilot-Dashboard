@@ -46,9 +46,7 @@ function sanitizeTranscript(text: string): string {
   return t;
 }
 
-function requireExactMatch(a: string, b: string): boolean {
-  return String(a || '').trim() === String(b || '').trim();
-}
+// requireExactMatch removed: analysis now uses authoritative input_audio_transcription transcript
 
 function extractTextFromResponseDone(msg: any): string {
   // Some Realtime implementations put final text in response.output[].content[]
@@ -104,7 +102,6 @@ export class OpenAIRealtimeWebRTC {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private vadRaf: number | null = null;
-  private lastSpeechMs = 0;
   private lastLoudMs = 0;
   private wsUrl: string;
   private authToken: string;
@@ -120,6 +117,8 @@ export class OpenAIRealtimeWebRTC {
   private analysisTickTimer: number | null = null; // backup only
   private watchdogTimer: number | null = null;
   private lastResponseStartMs = 0;
+  private lastTranscriptForAnalysis = '';
+  private transcriptBuf = '';
   private deviceId: string | null = null;
   private onError?: (err: Error) => void;
   private onTranscript?: (text: string) => void;
@@ -245,7 +244,6 @@ export class OpenAIRealtimeWebRTC {
           const now = Date.now();
           if (rms > THRESH) {
             this.lastLoudMs = now;
-            this.lastSpeechMs = now;
           } else {
             // If we had loud audio recently and now we're in silence, trigger an analysis tick once.
             if (this.lastLoudMs && (now - this.lastLoudMs) > SILENCE_MS) {
@@ -294,20 +292,14 @@ export class OpenAIRealtimeWebRTC {
           turn_detection: { type: 'server_vad' },
           // OpenAI Realtime enforces minimum temperature >= 0.6
           temperature: 0.6,
+          // Use OpenAI's transcription stream (not Whisper) to get audio-grounded transcript events.
+          input_audio_transcription: { model: 'gpt-4o-transcribe', language: 'en' },
           instructions: this.#buildInstructions()
         }
       });
 
-      // Backup: periodic analysis tick, only if we saw speech within the last few seconds.
-      // If local VAD is working, it will trigger analysis faster and this will do almost nothing.
-      this.analysisTickTimer = window.setInterval(() => {
-        if (!this.responseInFlight) {
-          const now = Date.now();
-          if (this.lastSpeechMs && (now - this.lastSpeechMs) < 5000) {
-            this.requestAnalysisTick();
-          }
-        }
-      }, 2500);
+      // Disable periodic analysis ticks: analysis is triggered by transcription completion events.
+      // Keep interval slot unused to avoid extra churn on silence.
 
       // Watchdog: if a response gets stuck (no response.done), unblock and continue.
       this.watchdogTimer = window.setInterval(() => {
@@ -370,7 +362,6 @@ export class OpenAIRealtimeWebRTC {
     } catch {}
     this.audioCtx = null;
     this.analyser = null;
-    this.lastSpeechMs = 0;
     this.lastLoudMs = 0;
   }
 
@@ -406,6 +397,7 @@ export class OpenAIRealtimeWebRTC {
     }
 
     this.responseInFlight = true;
+    this.lastTranscriptForAnalysis = text;
 
     // Make the transcript explicit as a conversation item, then request JSON analysis.
     this.#send({
@@ -453,7 +445,7 @@ export class OpenAIRealtimeWebRTC {
     return (
       `You are a REAL-TIME sales call analyzer. ` +
       `Calls are between CLOSER (sales) and PROSPECT (customer). ` +
-      `Transcribe audio accurately.`
+      `Wait for input audio transcription events; do not invent transcript text.`
     );
   }
 
@@ -472,17 +464,8 @@ export class OpenAIRealtimeWebRTC {
       `- CLOSER: The salesperson asking questions, presenting offers, handling objections\n` +
       `- PROSPECT: The potential customer responding, raising concerns, expressing interest or objections\n` +
       `\n` +
-      `FIRST: return rawTranscriptText = VERBATIM transcript of ONLY the newest audio segment you just heard.\n` +
-      `STRICT TRANSCRIPTION RULES:\n` +
-      `- Language: English.\n` +
-      `- Preserve filler words, false starts, stutters, and informal phrasing.\n` +
-      `- Do NOT correct grammar.\n` +
-      `- Do NOT paraphrase.\n` +
-      `- Do NOT add information not spoken.\n` +
-      `- Do NOT repeat earlier segments.\n` +
-      `- If unclear/silence/noise, set rawTranscriptText to "".\n` +
-      `SECOND: return analysisTextUsed which MUST EXACTLY equal rawTranscriptText (character-for-character).\n` +
-      `THIRD: return analysis based ONLY on analysisTextUsed.\n` +
+      `IMPORTANT: The transcript is provided as NEW_AUDIO_TRANSCRIPT.\n` +
+      `Analyze ONLY what is in NEW_AUDIO_TRANSCRIPT. Do not add or rewrite it.\n` +
       `\n` +
       `===== 27 INDICATORS (score 1-10, higher=stronger signal) =====\n` +
       `P1-PAIN/DESIRE GAP:\n` +
@@ -546,11 +529,8 @@ export class OpenAIRealtimeWebRTC {
       `1. Score indicators based on ACTUAL evidence. If unknown, omit the key.\n` +
       `2. Hot buttons and objections ONLY from PROSPECT speech.\n` +
       `3. Output compact JSON only.\n` +
-      `Rules: Objections + hot buttons ONLY from PROSPECT speech.\n` +
       `Return JSON EXACTLY like:\n` +
       `{\n` +
-      `  "rawTranscriptText":"verbatim transcript of the newest audio segment (English)",\n` +
-      `  "analysisTextUsed":"MUST EXACTLY equal rawTranscriptText",\n` +
       `  "speaker":"closer|prospect|unknown",\n` +
       `  "indicatorSignals":{"1":7},\n` +
       `  "hotButtonDetails":[{"id":5,"quote":"exact PROSPECT words","contextualPrompt":"follow-up question","score":8}],\n` +
@@ -596,6 +576,43 @@ export class OpenAIRealtimeWebRTC {
       return;
     }
 
+    // === Input audio transcription events (audio-grounded transcript) ===
+    if (t.includes('input_audio_transcription')) {
+      const delta =
+        (typeof msg?.delta === 'string' && msg.delta) ||
+        (typeof msg?.delta?.transcript === 'string' && msg.delta.transcript) ||
+        (typeof msg?.delta?.text === 'string' && msg.delta.text) ||
+        null;
+      const isDelta = t.includes('delta');
+      const isDone = t.includes('completed') || t.includes('done') || t.includes('final');
+      if (isDelta && delta) {
+        this.transcriptBuf += delta;
+        return;
+      }
+      if (isDone) {
+        const full =
+          (typeof msg?.transcript === 'string' && msg.transcript) ||
+          (typeof msg?.transcription?.text === 'string' && msg.transcription.text) ||
+          this.transcriptBuf;
+        this.transcriptBuf = '';
+        const transcript = sanitizeTranscript(collapseConsecutiveSentenceRepeats(String(full || '').trim()));
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:transcription',message:'input_audio_transcription done',data:{type:t,len:transcript.length,preview:transcript.slice(0,120)},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run2',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
+        if (transcript) {
+          const now = Date.now();
+          if (!(transcript === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
+            this.lastGoodTranscript = transcript;
+            this.lastGoodTranscriptMs = now;
+            this.onTranscript?.(transcript);
+          }
+          this.requestAnalysisForTranscript(transcript);
+        }
+        return;
+      }
+      return;
+    }
+
     // VAD / speech state events. Trigger analysis when speech stops.
     if (/speech_stopped|speech_end|speech_ended/i.test(t)) {
       if (!this.responseInFlight) {
@@ -632,36 +649,8 @@ export class OpenAIRealtimeWebRTC {
       const parsed = safeJsonParse(this.currentResponseText);
       this.#dbg('response', 'response.done received', { type: t, textLen: (this.currentResponseText || '').length, parsedOk: !!parsed });
       if (parsed && this.onAiAnalysis) {
-        const rawTranscriptTextRaw = String(parsed?.rawTranscriptText || '').trim();
-        const analysisTextUsedRaw = String(parsed?.analysisTextUsed || '').trim();
-
-        // Enforce that analysisTextUsed is EXACTLY the transcript we display (no "improving" before analysis).
-        const ok = requireExactMatch(rawTranscriptTextRaw, analysisTextUsedRaw);
-        const rawTranscriptText = ok ? sanitizeTranscript(collapseConsecutiveSentenceRepeats(rawTranscriptTextRaw)) : '';
-        this.#dbg('transcript', 'parsed transcript', { ok, rawLen: rawTranscriptTextRaw.length, finalLen: rawTranscriptText.length });
-
-        if (!ok && this.debug) {
-          // eslint-disable-next-line no-console
-          console.warn('[OAI-RT] analysisTextUsed mismatch; dropping for safety', {
-            rawTranscriptTextRaw,
-            analysisTextUsedRaw
-          });
-        }
-
-        // If transcript is empty (silence/noise) or mismatch, don't emit transcript/analysis updates,
-        // but NEVER early-return here (or responseInFlight can get stuck).
-        if (rawTranscriptText) {
-          const now = Date.now();
-          if (!(rawTranscriptText === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
-            this.lastGoodTranscript = rawTranscriptText;
-            this.lastGoodTranscriptMs = now;
-            this.onTranscript?.(rawTranscriptText);
-          }
-
-          // Strip transcript fields out of aiAnalysis payload before forwarding.
-          const { rawTranscriptText: _rt, analysisTextUsed: _atu, transcriptText: _legacy, ...ai } = parsed || {};
-          this.onAiAnalysis(rawTranscriptText, ai);
-        }
+        // Analysis-only payload. Transcript comes from input_audio_transcription events.
+        this.onAiAnalysis(this.lastTranscriptForAnalysis || this.lastGoodTranscript || '', parsed);
       }
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished',data:{type:t,parsedOk:!!parsed,textLen:(this.currentResponseText||'').length,preview:String(this.currentResponseText||'').slice(0,220)},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H4'})}).catch(()=>{});
