@@ -22,8 +22,8 @@ const ELEVENLABS_URL =
   `&language_code=en` +
   `&audio_format=pcm_16000` +
   `&commit_strategy=vad` +
-  `&vad_silence_threshold_secs=1.0` +  // Wait longer for natural pauses
-  `&vad_threshold=0.3`;  // Lower threshold = more sensitive to speech
+  `&vad_silence_threshold_secs=0.5` +  // Shorter pause = faster commits
+  `&vad_threshold=0.2`;  // Very sensitive - catch all speech
 
 class ElevenLabsScribeRealtime {
   constructor({ onError, onTranscript } = {}) {

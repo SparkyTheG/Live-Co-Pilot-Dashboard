@@ -260,39 +260,39 @@ export default function RecordingButton({
         const inSampleRate = audioContext.sampleRate;
         const outSampleRate = 16000;
 
-        // High-quality resampling using OfflineAudioContext (browser's native resampler)
-        const resampleHighQuality = async (input: Float32Array, fromRate: number, toRate: number): Promise<Float32Array> => {
-          if (fromRate === toRate) return input;
-          
-          const offlineCtx = new OfflineAudioContext(1, Math.ceil(input.length * toRate / fromRate), toRate);
-          const buffer = offlineCtx.createBuffer(1, input.length, fromRate);
-          buffer.copyToChannel(input, 0);
-          
-          const source = offlineCtx.createBufferSource();
-          source.buffer = buffer;
-          source.connect(offlineCtx.destination);
-          source.start();
-          
-          const resampled = await offlineCtx.startRendering();
-          return resampled.getChannelData(0);
+        // Simple but correct linear resampling - synchronous, no timing issues
+        const resample = (input: Float32Array, inRate: number, outRate: number): Float32Array => {
+          if (inRate === outRate) return input;
+          const ratio = inRate / outRate;
+          const outLength = Math.round(input.length / ratio);
+          const output = new Float32Array(outLength);
+          for (let i = 0; i < outLength; i++) {
+            const srcPos = i * ratio;
+            const srcIdx = Math.floor(srcPos);
+            const frac = srcPos - srcIdx;
+            const s1 = input[srcIdx] || 0;
+            const s2 = input[Math.min(srcIdx + 1, input.length - 1)] || s1;
+            output[i] = s1 + (s2 - s1) * frac;
+          }
+          return output;
         };
 
-        const floatTo16BitPCM = (input: Float32Array) => {
+        const floatTo16BitPCM = (input: Float32Array): ArrayBuffer => {
           const buffer = new ArrayBuffer(input.length * 2);
           const view = new DataView(buffer);
-          let offset = 0;
-          for (let i = 0; i < input.length; i++, offset += 2) {
-            let s = Math.max(-1, Math.min(1, input[i]));
-            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+          for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            const val = s < 0 ? Math.floor(s * 0x8000) : Math.floor(s * 0x7fff);
+            view.setInt16(i * 2, val, true);
           }
           return buffer;
         };
 
-        processor.onaudioprocess = async (e) => {
+        processor.onaudioprocess = (e) => {
           if (!isRecordingRef.current || !wsRef.current?.isConnected()) return;
 
           const input = e.inputBuffer.getChannelData(0);
-          const resampled = await resampleHighQuality(input, inSampleRate, outSampleRate);
+          const resampled = resample(input, inSampleRate, outSampleRate);
           const pcm16 = floatTo16BitPCM(resampled);
           wsRef.current?.sendAudioChunk(pcm16, 'pcm_16000');
         };
