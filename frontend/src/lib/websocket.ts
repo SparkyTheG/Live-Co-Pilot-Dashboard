@@ -70,14 +70,26 @@ export class ConversationWebSocket {
 
   constructor(url?: string) {
     // Use environment variable or default to localhost for development
-    // In production, if no URL is provided, the connection will fail gracefully
+    // In production, if no URL is provided, fall back to same-origin /ws (works on Railway single-service deploys)
     const envUrl = import.meta.env.VITE_WS_URL;
     const defaultUrl = import.meta.env.DEV ? 'ws://localhost:3001/ws' : undefined;
+
+    const derivedUrl = (() => {
+      try {
+        if (typeof window === 'undefined') return undefined;
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${proto}//${window.location.host}/ws`;
+      } catch {
+        return undefined;
+      }
+    })();
     
-    this.url = url || envUrl || defaultUrl || '';
+    this.url = url || envUrl || defaultUrl || derivedUrl || '';
     
     if (!this.url) {
       console.warn('⚠️ No WebSocket URL configured. Set VITE_WS_URL environment variable for production.');
+    } else {
+      console.log('[WS] Using WebSocket URL:', this.url);
     }
   }
 
@@ -164,6 +176,9 @@ export class ConversationWebSocket {
           this.lastMessageTime = Date.now();
           this.startConnectionCheck();
           this.startKeepalive(); // Start sending keepalive messages
+          try {
+            this.ws?.send(JSON.stringify({ type: 'debug_event', tag: 'ws_connected', message: 'frontend ws connected', data: { url: this.url }, ts: Date.now() }));
+          } catch {}
           if (this.onConnect) this.onConnect();
           resolve();
         };
