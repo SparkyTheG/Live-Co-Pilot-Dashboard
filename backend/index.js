@@ -186,6 +186,14 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
+// Process-level crash visibility (Railway will restart the container)
+process.on('unhandledRejection', (reason) => {
+  console.error('[PROC] unhandledRejection', { reason: String(reason || '') });
+});
+process.on('uncaughtException', (err) => {
+  console.error('[PROC] uncaughtException', { message: err?.message, stack: err?.stack });
+});
+
 process.on('SIGTERM', () => {
   clearInterval(pingInterval);
   wss.close();
@@ -698,8 +706,11 @@ CRITICAL RULES:
     }
   });
 
-  ws.on('close', () => {
-    console.log(`WebSocket connection closed: ${connectionId}`);
+  ws.on('close', (code, reason) => {
+    const reasonStr = (() => {
+      try { return Buffer.isBuffer(reason) ? reason.toString() : String(reason || ''); } catch { return ''; }
+    })();
+    console.log(`[WS] Connection closed: ${connectionId}`, { code, reason: reasonStr });
     connections.delete(connectionId);
     // Close realtime analysis session if present
     const rt = realtimeAnalysisSessions.get(connectionId);
@@ -773,7 +784,7 @@ CRITICAL RULES:
   });
 
   ws.on('error', (error) => {
-    console.error(`WebSocket error for ${connectionId}:`, error);
+    console.error(`[WS] Error for ${connectionId}:`, { message: error?.message, name: error?.name });
     connections.delete(connectionId);
     connectionPersistence.delete(connectionId);
   });

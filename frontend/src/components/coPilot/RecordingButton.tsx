@@ -36,6 +36,8 @@ export default function RecordingButton({
   // Keepalive interval for WebSocket
   const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Persist the last start_listening config so we can re-send it after reconnects
+  const startListeningConfigRef = useRef<any>(null);
 
   // Refs for stopping media (if used)
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -161,9 +163,35 @@ export default function RecordingButton({
 
       ws.setOnError((err) => {
         console.error('WebSocket error:', err);
-        setError(err.message);
-        setIsRecording(false);
-        isRecordingRef.current = false;
+        // Do NOT stop recording on transient WS errors (Railway can drop idle sockets).
+        // Keep transcription running; websocket.ts will attempt reconnect automatically.
+        setError('WebSocket connection error — reconnecting…');
+        setIsConnecting(true);
+      });
+
+      ws.setOnDisconnect(() => {
+        // If we're recording, treat disconnect as transient and wait for auto-reconnect
+        if (isRecordingRef.current) {
+          setError('WebSocket disconnected — reconnecting…');
+          setIsConnecting(true);
+        }
+      });
+
+      ws.setOnConnect(() => {
+        // On reconnect, re-send start_listening so backend resumes session updates
+        if (isRecordingRef.current) {
+          try {
+            const cfg = startListeningConfigRef.current;
+            if (cfg) {
+              ws.startListening(cfg);
+              console.log('✅ Frontend: Re-sent start_listening after reconnect');
+            }
+            setError(null);
+            setIsConnecting(false);
+          } catch (e) {
+            console.warn('Failed to restart listening after reconnect:', e);
+          }
+        }
       });
 
       await ws.connect();
@@ -172,11 +200,13 @@ export default function RecordingButton({
       ws.setAuthToken(session?.access_token ?? null);
       ws.setProspectType(prospectType); // Set initial prospect type
       // Pass settings. Browser transcribes via Web Speech API, sends text to backend for 15 agents analysis.
-      ws.startListening({
+      const startCfg = {
         customScriptPrompt,
         pillarWeights,
         clientMode: useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'
-      });
+      };
+      startListeningConfigRef.current = startCfg;
+      ws.startListening(startCfg);
       wsRef.current = ws;
       console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'})`);
 
