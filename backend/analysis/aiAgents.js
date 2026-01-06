@@ -23,11 +23,20 @@
 
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 8000,  // 8s timeout for faster failure detection
-  maxRetries: 0   // No retries - fail fast to prevent freezing
-});
+let openaiClient = null;
+function getOpenAIClient() {
+  if (openaiClient) return openaiClient;
+  const apiKey = String(process.env.OPENAI_API_KEY || '');
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY missing');
+  }
+  openaiClient = new OpenAI({
+    apiKey,
+    timeout: 8000, // 8s timeout for faster failure detection
+    maxRetries: 0 // No retries - fail fast to prevent freezing
+  });
+  return openaiClient;
+}
 
 const MODEL = 'gpt-4o-mini';
 
@@ -72,6 +81,7 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   const timeoutMs = Number(opts.timeoutMs ?? 4000);   // Fast 4s timeout
 
   const doCall = async () => {
+    const openai = getOpenAIClient();
     const baseReq = {
       model: MODEL,
       messages: [
@@ -684,36 +694,7 @@ Return: {
   return await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 600);
 }
 
-// ============================================================================
-// AGENT 6: SPEAKER DETECTION AGENT
-// Analyzes transcript to determine who is speaking (closer vs prospect)
-// Uses conversation context to classify each new chunk
-// ============================================================================
-export async function runSpeakerDetectionAgent(newChunk, conversationHistory) {
-  // Provide context about what this app is for
-  const appContext = `Real estate sales conversation. CLOSER = salesperson asking questions. PROSPECT = seller sharing problems.`;
-
-  // Limit history to last 8000 chars for context
-  const maxHistoryChars = 8000;
-  const trimmedHistory = conversationHistory.length > maxHistoryChars 
-    ? conversationHistory.slice(-maxHistoryChars) 
-    : conversationHistory;
-
-  const systemPrompt = `${appContext}
-
-Classify WHO is speaking:
-
-CLOSER: asks questions, presents solutions, professional tone, empathy
-PROSPECT: shares problems, personal info, objections, answers questions, emotional
-
-If closer just asked a question, next text is likely prospect answering.
-
-Return ONLY: {"speaker":"closer"} or {"speaker":"prospect"}`;
-
-  const userPrompt = `HISTORY:\n${trimmedHistory}\n\nNEW TEXT: "${newChunk}"`;
-
-  return await callAI(systemPrompt, userPrompt, 'SpeakerDetectionAgent', 50);
-}
+// NOTE: Speaker detection agent removed (not used; backend uses a simple heuristic).
 
 // ============================================================================
 // AGENT 7: INSIGHTS AGENT
@@ -850,9 +831,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   console.log(`[MultiAgent] All done in ${totalTime}ms`);
   console.log(`[MultiAgent] Indicators scored: ${Object.keys(pillarsResult.indicatorSignals || {}).length}/27`);
   
-  // #region debug log
-  const logA={location:'aiAgents.js:845',message:'Agents completed',data:{totalTimeMs:totalTime,hotButtonsCount:hotButtonsResult?.hotButtonDetails?.length||0,objectionsCount:objectionsResult?.objections?.length||0,truthIndexRules:truthIndexResult?.detectedRules?.length||0,truthIndexCoherence:truthIndexResult?.overallCoherence,agentStatuses:settled.map((r,i)=>({idx:i,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logA));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logA)+'\n');}catch(e){}
-  // #endregion
   console.log(`[MultiAgent] Truth Index: ${(truthIndexResult.detectedRules || []).length} incoherence rules`);
   
   return {

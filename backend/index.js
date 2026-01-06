@@ -3,11 +3,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import fs from 'fs';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
-import { runSpeakerDetectionAgent, runConversationSummaryAgent } from './analysis/aiAgents.js';
+import { runConversationSummaryAgent } from './analysis/aiAgents.js';
 
 dotenv.config();
 
@@ -29,82 +28,6 @@ const WS_PORT = process.env.WS_PORT || 3002;
 
 app.use(cors());
 app.use(express.json());
-
-// Mint an ephemeral OpenAI Realtime token for browser WebRTC clients.
-// Browser WebSocket can't set auth headers, so we use WebRTC + ephemeral token.
-app.post('/api/openai/realtime-token', async (req, res) => {
-  try {
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OPENAI_API_KEY missing on server' });
-    }
-
-    // Require Supabase auth token to mint token (prevents public abuse)
-    const authHeader = String(req.headers.authorization || '');
-    const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : '';
-    const authToken = bearer || String(req.body?.authToken || '');
-    if (!authToken) {
-      return res.status(401).json({ error: 'Missing Authorization bearer token' });
-    }
-
-    if (isSupabaseConfigured()) {
-      const supabase = createUserSupabaseClient(authToken);
-      if (supabase) {
-        const { error: userError } = await supabase.auth.getUser();
-        if (userError) {
-          return res.status(401).json({ error: 'Invalid auth token' });
-        }
-      }
-    }
-
-    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview';
-    const r = await fetch('https://api.openai.com/v1/realtime/sessions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model,
-        // Client will do session.update with detailed instructions.
-        modalities: ['text']
-      })
-    });
-
-    const data = await r.json().catch(() => null);
-    if (!r.ok) {
-      console.error('[OPENAI] realtime-token mint failed', { status: r.status, data });
-      return res.status(500).json({ error: 'Failed to mint realtime token', status: r.status });
-    }
-
-    return res.json({ ok: true, model, ...data });
-  } catch (e) {
-    console.error('[OPENAI] realtime-token exception', { msg: e?.message || String(e) });
-    return res.status(500).json({ error: 'Failed to mint realtime token' });
-  }
-});
-
-// Test endpoint to verify analysis works
-app.post('/api/test-analysis', async (req, res) => {
-  try {
-    const { transcript, prospectType } = req.body;
-    const analysis = await analyzeConversation(transcript || 'I am 3 months behind on my mortgage payments. The auction is in 2 weeks and I am terrified of losing my home.', prospectType || 'foreclosure');
-    res.json({
-      success: true,
-      analysis: {
-        hotButtonsCount: analysis.hotButtons?.length || 0,
-        objectionsCount: analysis.objections?.length || 0,
-        lubometerScore: analysis.lubometer?.score,
-        truthIndexScore: analysis.truthIndex?.score,
-        hotButtons: analysis.hotButtons,
-        objections: analysis.objections,
-        diagnosticQuestions: analysis.diagnosticQuestions
-      }
-    });
-  } catch (error) {
-    console.error('Test analysis error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -915,23 +838,6 @@ function stopListening(connectionId) {
     message: 'Stopped listening to conversation'
   });
 }
-
-// REST API endpoint for manual analysis
-app.post('/api/analyze', async (req, res) => {
-  try {
-    const { transcript, prospectType } = req.body;
-
-    if (!transcript) {
-      return res.status(400).json({ error: 'Transcript is required' });
-    }
-
-    const analysis = await analyzeConversation(transcript, prospectType);
-    res.json(analysis);
-  } catch (error) {
-    console.error('Analysis error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

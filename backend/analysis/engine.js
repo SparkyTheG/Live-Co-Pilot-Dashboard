@@ -13,14 +13,6 @@
  * from the Pillars Agent's indicator scores.
  */
 
-import { analyzePillars } from './pillars.js';
-import { calculateLubometer } from './lubometer.js';
-import { calculateTruthIndex } from './truthIndex.js';
-import { extractHotButtons } from './hotButtons.js';
-import { detectObjections } from './objections.js';
-import { detectProspectType } from './prospectType.js';
-import { loadProspectFile } from './prospectFiles.js';
-import { detectAskedDiagnosticQuestions } from './diagnosticQuestions.js';
 import { runAllAgents } from './aiAgents.js';
 
 // Simple in-memory cache to avoid duplicate API calls
@@ -48,10 +40,9 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
 
   // Clean transcript early for cache key
   const cleanedTranscript = cleanTranscriptForAI(transcript);
-  const lowerTranscript = transcript.toLowerCase();
-
-  // 1. Detect or use provided prospect type
-  const prospectType = prospectTypeOverride || detectProspectType(lowerTranscript);
+  // Prospect type is always chosen in the Live Dashboard and sent to backend.
+  // Keep a safe fallback.
+  const prospectType = prospectTypeOverride || 'foreclosure';
 
   // Create cache key from transcript hash + prospect type + pillar weights hash
   const weightsHash = pillarWeights ? simpleHash(JSON.stringify(pillarWeights)) : 'default';
@@ -94,7 +85,6 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
 
   const result = await buildFinalResultFromAiAnalysis({
     cleanedTranscript,
-    lowerTranscript,
     prospectType,
     pillarWeights,
     aiAnalysis,
@@ -117,25 +107,100 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
  * indicatorSignals/hotButtonDetails/objections/etc, while we keep deterministic
  * Lubometer + Truth Index calculations and frontend payload shape.
  */
-export async function analyzeConversationFromAiAnalysis(transcript, prospectTypeOverride = null, pillarWeights = null, aiAnalysis) {
-  const startTime = Date.now();
-  if (!transcript || transcript.trim().length === 0) return getEmptyAnalysis();
+// NOTE: analyzeConversationFromAiAnalysis removed (legacy Realtime path no longer used).
 
-  const cleanedTranscript = cleanTranscriptForAI(transcript);
-  const lowerTranscript = transcript.toLowerCase();
-  const prospectType = prospectTypeOverride || detectProspectType(lowerTranscript);
-
-  return buildFinalResultFromAiAnalysis({
-    cleanedTranscript,
-    lowerTranscript,
-    prospectType,
-    pillarWeights,
-    aiAnalysis,
-    startTime
-  });
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
 }
 
-async function buildFinalResultFromAiAnalysis({ cleanedTranscript, lowerTranscript, prospectType, pillarWeights, aiAnalysis, startTime }) {
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function computePillarAverages(indicatorSignals) {
+  const ranges = {
+    P1: [1, 4],
+    P2: [5, 8],
+    P3: [9, 12],
+    P4: [13, 16],
+    P5: [17, 20],
+    P6: [21, 23],
+    P7: [24, 27]
+  };
+  const res = {};
+  for (const [pid, [a, b]] of Object.entries(ranges)) {
+    let sum = 0;
+    let cnt = 0;
+    for (let i = a; i <= b; i++) {
+      const v = toNum(indicatorSignals?.[String(i)]);
+      if (v > 0) {
+        sum += clamp(v, 0, 10);
+        cnt++;
+      }
+    }
+    res[pid] = cnt ? sum / cnt : 0;
+  }
+  return res;
+}
+
+function computeLubometer(indicatorSignals, pillarWeights) {
+  const pillarAvg = computePillarAverages(indicatorSignals);
+  const defaultWeights = { P1: 1.2, P2: 1.1, P3: 1.0, P4: 1.0, P5: 0.9, P6: 0.8, P7: 1.0 };
+  const weightsUsed = { ...defaultWeights };
+  if (Array.isArray(pillarWeights)) {
+    for (const w of pillarWeights) {
+      if (w?.id && typeof w.weight === 'number') weightsUsed[w.id] = w.weight;
+    }
+  }
+  let num = 0;
+  let den = 0;
+  for (const [pid, avg] of Object.entries(pillarAvg)) {
+    const wt = toNum(weightsUsed[pid] ?? 1);
+    num += avg * wt;
+    den += wt;
+  }
+  const weightedAvg = den ? num / den : 0; // 0..10
+  const score = Math.round(clamp((weightedAvg / 10) * 90, 0, 90));
+  const level = score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low';
+  const interpretation =
+    level === 'high'
+      ? 'High readiness: prospect signals strong pain/urgency and openness.'
+      : level === 'medium'
+        ? 'Moderate readiness: keep clarifying pain, timeline, and decision path.'
+        : 'Low readiness: build pain, urgency, and trust before closing.';
+  const action =
+    level === 'high'
+      ? 'Move to next-step commitment and confirm decision timeline.'
+      : level === 'medium'
+        ? 'Ask diagnostic questions to sharpen pain and urgency.'
+        : 'Do not close yet; deepen pain/urgency and establish trust.';
+  return { score, maxScore: 90, level, interpretation, action, pillarScores: pillarAvg, weightsUsed };
+}
+
+function computeTruthIndex(aiAnalysis) {
+  const coherence = String(aiAnalysis?.overallCoherence || 'medium').toLowerCase();
+  const base = coherence === 'high' ? 80 : coherence === 'low' ? 45 : 60;
+  const rules = Array.isArray(aiAnalysis?.detectedRules) ? aiAnalysis.detectedRules : [];
+  const penalty = clamp(rules.length * 4, 0, 30);
+  const score = clamp(base - penalty, 0, 100);
+  const signals = Array.isArray(aiAnalysis?.coherenceSignals) ? aiAnalysis.coherenceSignals : [];
+  const redFlags = rules.map((r) => (typeof r === 'string' ? r : r?.rule || r?.name || 'incoherence')).slice(0, 8);
+  const penalties = rules.slice(0, 8).map((r) => ({
+    rule: typeof r === 'string' ? r : (r?.rule || r?.name || 'incoherence'),
+    description: typeof r === 'string' ? r : (r?.evidence || r?.description || ''),
+    penalty: 4,
+    details: typeof r === 'string' ? '' : (r?.evidence || '')
+  }));
+  return { score, signals, redFlags, penalties };
+}
+
+function normalizeDiagnosticQuestions(aiAnalysis) {
+  const asked = Array.isArray(aiAnalysis?.askedQuestions) ? aiAnalysis.askedQuestions.filter((n) => Number.isInteger(n)) : [];
+  return { asked, total: 0, completion: 0 };
+}
+
+async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType, pillarWeights, aiAnalysis, startTime }) {
   // Log agent results summary
   console.log(`[Engine] Agent Results Summary:`);
   console.log(`  - Pillars: ${Object.keys(aiAnalysis.indicatorSignals || {}).length} indicators scored`);
@@ -145,36 +210,11 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, lowerTranscri
   console.log(`  - Truth Index: ${aiAnalysis.overallCoherence || 'unknown'} coherence`);
   console.log(`  - Insights: ${aiAnalysis.closingReadiness || 'unknown'} readiness`);
 
-  // 3. Calculate Pillars from AI indicator scores
-  const pillarScores = await analyzePillars(lowerTranscript, prospectType, aiAnalysis);
-
-  // 4. Calculate Truth Index (uses pillar scores + AI-detected rules)
-  // Pass AI Truth Index result so it can detect T4 (Claims Authority + Reveals Need for Approval)
-  // which requires conversation analysis, not just indicator scores
-  const aiTruthIndexResult = {
-    detectedRules: aiAnalysis.detectedRules || [],
-    coherenceSignals: aiAnalysis.coherenceSignals || [],
-    overallCoherence: aiAnalysis.overallCoherence || 'medium'
-  };
-  const truthIndex = calculateTruthIndex(pillarScores, lowerTranscript, aiTruthIndexResult);
-
-  // 5. Calculate Lubometer (uses pillar scores + truth index penalties + custom weights)
-  const lubometer = calculateLubometer(pillarScores, pillarWeights);
-
-  // 6. Extract Hot Buttons (uses AI hot button details)
-  let hotButtons = extractHotButtons(lowerTranscript, prospectType, aiAnalysis, pillarScores);
-  if (!Array.isArray(hotButtons)) {
-    hotButtons = [];
-  }
-
-  // 7. Detect Objections (uses AI objections)
-  let objections = detectObjections(lowerTranscript, prospectType, aiAnalysis);
-  if (!Array.isArray(objections)) {
-    objections = [];
-  }
-
-  // 8. Get diagnostic questions status (uses AI detected questions)
-  const diagnosticQuestions = detectAskedDiagnosticQuestions(lowerTranscript, prospectType, aiAnalysis);
+  const lubometer = computeLubometer(aiAnalysis.indicatorSignals || {}, pillarWeights);
+  const truthIndex = computeTruthIndex(aiAnalysis);
+  const hotButtons = Array.isArray(aiAnalysis.hotButtonDetails) ? aiAnalysis.hotButtonDetails : [];
+  const objections = Array.isArray(aiAnalysis.objections) ? aiAnalysis.objections : [];
+  const diagnosticQuestions = normalizeDiagnosticQuestions(aiAnalysis);
 
   // 9. Build final result
   const result = {
@@ -187,9 +227,9 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, lowerTranscri
       action: lubometer.action,
       pillarScores: lubometer.pillarScores,
       weightsUsed: lubometer.weightsUsed,
-      weightedScores: lubometer.weightedScores,
-      totalBeforePenalties: lubometer.totalBeforePenalties,
-      penalties: lubometer.penalties
+      weightedScores: {},
+      totalBeforePenalties: lubometer.score,
+      penalties: []
     },
     truthIndex: {
       score: truthIndex.score,
@@ -197,7 +237,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, lowerTranscri
       redFlags: truthIndex.redFlags,
       penalties: truthIndex.penalties
     },
-    pillars: pillarScores,
+    pillars: lubometer.pillarScores,
     hotButtons: Array.isArray(hotButtons) ? hotButtons : [],
     objections: Array.isArray(objections) ? objections : [],
     dials: extractDials(),
@@ -292,7 +332,7 @@ function extractDials() {
  */
 function getEmptyAnalysis() {
   return {
-    prospectType: 'creative-seller-financing',
+    prospectType: 'foreclosure',
     lubometer: {
       score: 0,
       level: 'low',
@@ -300,7 +340,7 @@ function getEmptyAnalysis() {
       action: 'Start conversation to begin analysis'
     },
     truthIndex: {
-      score: 45,
+      score: 0,
       signals: [],
       redFlags: [],
       penalties: []
