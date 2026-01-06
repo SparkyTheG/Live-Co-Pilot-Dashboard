@@ -194,6 +194,13 @@ process.on('uncaughtException', (err) => {
   console.error('[PROC] uncaughtException', { message: err?.message, stack: err?.stack });
 });
 
+// Helpful boot log to correlate with Railway container restarts (no secrets)
+console.log('[BOOT] backend started', {
+  ts: new Date().toISOString(),
+  hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
+  hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY)
+});
+
 process.on('SIGTERM', () => {
   clearInterval(pingInterval);
   wss.close();
@@ -423,12 +430,16 @@ CRITICAL RULES:
           realtimeConnections.delete(connectionId);
         }
 
-        // Only start backend transcription if client is streaming audio to backend.
+        // Only start backend transcription if the client is streaming audio to backend.
+        // For clientMode=websocket_transcribe, the browser sends text transcripts (Web Speech API),
+        // so we must NOT start ElevenLabs/Realtime STT.
         const metaAfterConfig = connectionPersistence.get(connectionId);
-        if (metaAfterConfig?.clientMode !== 'openai_webrtc') {
+        const cm = metaAfterConfig?.clientMode || 'backend_transcribe';
+        if (cm === 'backend_transcribe') {
+          console.log(`[WS] clientMode=backend_transcribe: starting backend STT`);
           await startRealtimeListening(connectionId, data.config);
         } else {
-          console.log(`[WS] clientMode=openai_webrtc: skipping backend transcription startup`);
+          console.log(`[WS] clientMode=${cm}: skipping backend STT (no ElevenLabs)`);
         }
 
         // Create a call session in Supabase (if configured + authed)
