@@ -15,15 +15,15 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'scribe_v2_realtime';
 // Use VAD commit strategy - Scribe commits on natural pauses in speech.
 // This produces much better transcription quality than manual commits which fragment words.
-// Lowered thresholds for more sensitive speech detection.
+// NOTE: Too-low VAD thresholds can treat noise as speech → hallucinated transcripts.
 const ELEVENLABS_URL =
   `wss://api.elevenlabs.io/v1/speech-to-text/realtime?` +
   `model_id=${encodeURIComponent(ELEVENLABS_MODEL_ID)}` +
   `&language_code=en` +
   `&audio_format=pcm_16000` +
   `&commit_strategy=vad` +
-  `&vad_silence_threshold_secs=0.5` +  // Shorter pause = faster commits
-  `&vad_threshold=0.2`;  // Very sensitive - catch all speech
+  `&vad_silence_threshold_secs=0.6` +
+  `&vad_threshold=0.35`;
 
 class ElevenLabsScribeRealtime {
   constructor({ onError, onTranscript } = {}) {
@@ -193,17 +193,15 @@ class ElevenLabsScribeRealtime {
     // reset partial before sending
     this.lastPartial = '';
 
-    // ElevenLabs Scribe API: previous_text can ONLY be set on the FIRST audio chunk
-    const includeContext = !this.sentFirstChunk && previousText;
-    this.sentFirstChunk = true;
-
     const payload = {
       message_type: 'input_audio_chunk',
       audio_base_64: Buffer.from(pcmBuffer).toString('base64'),
       sample_rate: 16000,
       // Don't include commit:true - using VAD-based commits for better quality
-      ...(includeContext ? { previous_text: String(previousText).slice(-500) } : {})
     };
+    // IMPORTANT: do NOT send previous_text. It can bias the model and cause unrelated phrases
+    // to appear when noise/VAD triggers. We want pure audio-only transcription.
+    this.sentFirstChunk = true;
 
     // #region agent log
     dbg('S2', 'backend/realtime/listener.js:sendPcmChunk', 'Sending PCM chunk', {

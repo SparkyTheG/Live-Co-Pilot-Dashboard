@@ -538,6 +538,28 @@ wss.on('connection', (ws, req) => {
           });
           // #endregion
 
+          // Controlled test + quality gate:
+          // Compute quick stats and (optionally) skip very-low-energy chunks that are likely just noise.
+          // This reduces VAD false-positives → fewer hallucinated transcripts.
+          const isPcm16k = mimeType.includes('pcm_16000');
+          const gateRms = Number(process.env.SCRIBE_AUDIO_GATE_RMS || '0'); // 0 disables gating
+          if (isPcm16k) {
+            const chunkStats = computePcm16Stats(audioBuffer);
+            // #region agent log
+            dbg('H2', 'backend/index.js:audio_chunk', 'PCM chunk stats', { gateRms, chunkStats });
+            // #endregion
+            if (gateRms > 0 && (chunkStats.rms ?? 0) < gateRms) {
+              // Still update "last seen" for debugging, but do not forward to Scribe.
+              const m = connectionPersistence.get(connectionId);
+              if (m) {
+                m._debugLastMimeType = mimeType.slice(0, 80);
+                m._debugLastAudioAtMs = Date.now();
+                connectionPersistence.set(connectionId, m);
+              }
+              return;
+            }
+          }
+
           // Controlled test: keep a rolling 5s PCM ring buffer so we can download and listen to what we sent.
           // NOTE: be tolerant of mimeType formatting (e.g. "pcm_16000" vs "pcm_16000;codec=...").
           if (mimeType.includes('pcm_16000')) {
