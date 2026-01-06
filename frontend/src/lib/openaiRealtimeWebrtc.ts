@@ -109,6 +109,7 @@ export class OpenAIRealtimeWebRTC {
   private prospectType: string;
   private customScriptPrompt: string;
   private currentResponseText = '';
+  private finalizedResponseText = ''; // Text finalized from response.text.done
   private lastGoodTranscript = '';
   private lastGoodTranscriptMs = 0;
   private responseInFlight = false;
@@ -312,6 +313,7 @@ export class OpenAIRealtimeWebRTC {
         if (Date.now() - this.lastResponseStartMs > 12000) {
           this.responseInFlight = false;
           this.currentResponseText = '';
+          this.finalizedResponseText = '';
           this.#send({ type: 'response.cancel' });
         }
       }, 1000);
@@ -373,6 +375,7 @@ export class OpenAIRealtimeWebRTC {
     if (this.responseInFlight) return;
     this.responseInFlight = true;
     this.currentResponseText = '';
+    this.finalizedResponseText = '';
     this.lastResponseStartMs = Date.now();
     this.#dbg('response', 'response.create start', { dcState: this.dc?.readyState || 'none' });
     // #region agent log
@@ -422,6 +425,7 @@ export class OpenAIRealtimeWebRTC {
     });
 
     this.currentResponseText = '';
+    this.finalizedResponseText = '';
     // Defensive: if OpenAI thinks a response is still active (event shape differences),
     // cancel before starting a new one.
     this.#send({ type: 'response.cancel' });
@@ -638,33 +642,38 @@ export class OpenAIRealtimeWebRTC {
       this.currentResponseText = fullText;
     }
 
-    // Accumulate text from intermediate "done" events but only finalize on response.done
+    // On response.text.done, finalize the text and clear accumulator to prevent corruption
     if (t === 'response.text.done' || t === 'response.output_text.done') {
       // Text streaming finished - extract if we don't have accumulated deltas
       if (!this.currentResponseText || !this.currentResponseText.trim()) {
         const extracted = extractTextFromResponseDone(msg);
         if (extracted) this.currentResponseText = extracted;
       }
-      // Don't process yet - wait for final response.done
+      // Save finalized text and clear accumulator so new response deltas don't corrupt it
+      this.finalizedResponseText = this.currentResponseText;
+      this.currentResponseText = '';
+      // Don't call onAiAnalysis yet - wait for final response.done
       return;
     }
 
     if (t === 'response.done' || t === 'response.completed' || t === 'response.cancelled') {
-      // Final event - extract text if needed
-      if (!this.currentResponseText || !this.currentResponseText.trim()) {
+      // Use finalized text if available, otherwise try extraction from this event
+      let textToParse = this.finalizedResponseText || this.currentResponseText;
+      if (!textToParse || !textToParse.trim()) {
         const extracted = extractTextFromResponseDone(msg);
-        if (extracted) this.currentResponseText = extracted;
+        if (extracted) textToParse = extracted;
       }
-      const parsed = safeJsonParse(this.currentResponseText);
-      this.#dbg('response', 'response.done received', { type: t, textLen: (this.currentResponseText || '').length, parsedOk: !!parsed });
+      const parsed = safeJsonParse(textToParse);
+      this.#dbg('response', 'response.done received', { type: t, textLen: (textToParse || '').length, parsedOk: !!parsed });
       if (parsed && this.onAiAnalysis) {
         // Analysis-only payload. Transcript comes from input_audio_transcription events.
         this.onAiAnalysis(this.lastTranscriptForAnalysis || this.lastGoodTranscript || '', parsed);
       }
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished (final)',data:{type:t,parsedOk:!!parsed,textLen:(this.currentResponseText||'').length,calledOnAiAnalysis:!!(parsed&&this.onAiAnalysis)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H6'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished (final)',data:{type:t,parsedOk:!!parsed,textLen:(textToParse||'').length,calledOnAiAnalysis:!!(parsed&&this.onAiAnalysis)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H7'})}).catch(()=>{});
       // #endregion
       this.currentResponseText = '';
+      this.finalizedResponseText = '';
       this.responseInFlight = false;
       this.lastResponseStartMs = 0;
 
