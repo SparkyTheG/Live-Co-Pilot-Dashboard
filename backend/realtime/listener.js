@@ -277,8 +277,8 @@ function sanitizeTranscript(text) {
     if (idx !== -1 && (cutAt === -1 || idx < cutAt)) cutAt = idx;
   }
   const trimmed = (cutAt === -1 ? raw : raw.slice(0, cutAt)).trim();
-  // If what's left is too small, treat as noise.
-  if (trimmed.split(/\s+/).filter(Boolean).length < 3) return '';
+  // If what's left is too small, treat as noise. Allow single words (e.g., "Hello", "Yes", "No")
+  if (trimmed.split(/\s+/).filter(Boolean).length < 1) return '';
   return trimmed;
 }
 
