@@ -156,8 +156,7 @@ export default function RecordingButton({
 
       ws.setOnTranscriptChunk((chunk) => {
         // Show live transcript from backend (what is actually being analyzed)
-        // Skip if using OpenAI WebRTC mode since onTranscript callback already updates the UI
-        if (!useOpenAIWebRTC && onTranscriptUpdate && chunk?.text) {
+        if (onTranscriptUpdate && chunk?.text) {
           onTranscriptUpdate(chunk.text);
         }
       });
