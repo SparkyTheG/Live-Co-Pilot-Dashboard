@@ -283,8 +283,8 @@ export class OpenAIRealtimeWebRTC {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:dc.onopen',message:'datachannel open; sending session.update',data:{model:this.model,temperature:0.6},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
       // #endregion
-      // Configure session: server VAD. We DO NOT use a separate transcription model (no Whisper/gpt-4o-transcribe).
-      // Instead, we ask the realtime model itself to output transcriptText + aiAnalysis JSON.
+      // Configure session: server VAD + gpt-4o-transcribe for audio-grounded transcription events.
+      // Analysis is triggered when transcription completes, using the exact transcript text.
       this.#send({
         type: 'session.update',
         session: {
