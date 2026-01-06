@@ -23,7 +23,9 @@ const ELEVENLABS_URL =
   `&audio_format=pcm_16000` +
   `&commit_strategy=vad` +
   // Balance: too-low threshold can hallucinate; too-high can miss speech (no transcripts).
-  `&vad_silence_threshold_secs=0.5` +
+  // Controlled-test evidence: our audio often has <0.5s pauses (e.g. 0.4s max quiet in a 5s window),
+  // so 0.5s can prevent commits entirely. Use 0.3s to ensure commits happen.
+  `&vad_silence_threshold_secs=0.3` +
   `&vad_threshold=0.25`;
 
 class ElevenLabsScribeRealtime {
