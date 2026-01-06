@@ -33,7 +33,7 @@ const MODEL = 'gpt-4o-mini';
 
 // Request queue to prevent rate limiting
 let activeRequests = 0;
-const MAX_CONCURRENT = 8; // Max 8 concurrent OpenAI requests (balanced for speed + stability)
+const MAX_CONCURRENT = 6; // Max 6 concurrent OpenAI requests (balanced for speed + stability)
 const requestQueue = [];
 
 async function throttledRequest(fn) {
@@ -812,12 +812,12 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const startTime = Date.now();
 
   // Token control: Balanced windows for accuracy (need enough context)
-  const tPillars = String(transcript || '').slice(-1200);     // Last ~200 words
-  const tHotButtons = String(transcript || '').slice(-1000);  // Last ~165 words
-  const tObjections = String(transcript || '').slice(-1200);  // Last ~200 words
-  const tDiagnostic = String(transcript || '').slice(-800);   // Last ~130 words
-  const tTruth = String(transcript || '').slice(-1200);       // Last ~200 words
-  const tInsights = String(transcript || '').slice(-1000);    // Last ~165 words
+  const tPillars = String(transcript || '').slice(-800);      // Last ~130 words
+  const tHotButtons = String(transcript || '').slice(-800);   // Last ~130 words
+  const tObjections = String(transcript || '').slice(-800);   // Last ~130 words
+  const tDiagnostic = String(transcript || '').slice(-600);   // Last ~100 words
+  const tTruth = String(transcript || '').slice(-800);        // Last ~130 words
+  const tInsights = String(transcript || '').slice(-800);     // Last ~130 words
 
   // #region debug log
   const logInput={location:'aiAgents.js:810',message:'Agent inputs',data:{fullTranscriptLen:transcript?.length||0,tPillarsLen:tPillars.length,tHotButtonsLen:tHotButtons.length,tHotButtonsPreview:tHotButtons.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logInput));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logInput)+'\n');}catch(e){}

@@ -84,7 +84,7 @@ export async function analyzeConversation(transcript, prospectTypeOverride = nul
   try {
     aiAnalysis = await Promise.race([
       runAllAgents(cleanedTranscript, prospectType, customScriptPrompt),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Multi-agent timeout')), 15000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Multi-agent timeout')), 25000))
     ]);
   } catch (error) {
     console.error(`[Engine] CRITICAL: Multi-agent analysis failed: ${error.message}`);
