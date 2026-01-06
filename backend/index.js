@@ -539,7 +539,8 @@ wss.on('connection', (ws, req) => {
           // #endregion
 
           // Controlled test: keep a rolling 5s PCM ring buffer so we can download and listen to what we sent.
-          if (mimeType === 'pcm_16000') {
+          // NOTE: be tolerant of mimeType formatting (e.g. "pcm_16000" vs "pcm_16000;codec=...").
+          if (mimeType.includes('pcm_16000')) {
             const m = connectionPersistence.get(connectionId);
             if (m) {
               const maxBytes = 16000 * 2 * 5; // 5 seconds of PCM16 mono @16k
@@ -547,6 +548,8 @@ wss.on('connection', (ws, req) => {
               const next = Buffer.concat([prev, audioBuffer]);
               m._debugPcmRing = next.length > maxBytes ? next.slice(next.length - maxBytes) : next;
               m._debugPcmStats = computePcm16Stats(m._debugPcmRing);
+              m._debugLastMimeType = mimeType.slice(0, 80);
+              m._debugLastAudioAtMs = Date.now();
               connectionPersistence.set(connectionId, m);
             }
           }
@@ -562,12 +565,23 @@ wss.on('connection', (ws, req) => {
         const ring = Buffer.isBuffer(m?._debugPcmRing) ? m._debugPcmRing : Buffer.alloc(0);
         const stats = m?._debugPcmStats || computePcm16Stats(ring);
         const wavBase64 = pcm16ToWavBase64(ring, 16000, 1);
+        const metaInfo = {
+          bytes: ring.length,
+          lastMimeType: m?._debugLastMimeType || null,
+          lastAudioAtMs: m?._debugLastAudioAtMs || null
+        };
+        if (!wavBase64 || ring.length === 0) {
+          sendToClient(connectionId, {
+            type: 'error',
+            message: `Debug audio dump is empty (bytes=${ring.length}). Start recording, speak for ~3s, then click the button while recording.`
+          });
+        }
         sendToClient(connectionId, {
           type: 'debug_audio_dump',
-          data: { wavBase64, sampleRate: 16000, seconds, stats }
+          data: { wavBase64, sampleRate: 16000, seconds, stats: { ...stats, ...metaInfo } }
         });
         // #region agent log
-        debugLog('debug_audio_dump_sent', { connectionId: connectionId.slice(-8), bytes: ring.length, stats });
+        debugLog('debug_audio_dump_sent', { runId: 'audio-dump-v2', connectionId: connectionId.slice(-8), ...metaInfo, stats });
         // #endregion
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change

@@ -105,7 +105,13 @@ export default function RecordingButton({
     const handler = (evt: any) => {
       const seconds = Number(evt?.detail?.seconds || 5);
       try {
-        wsRef.current?.requestDebugAudioDump(seconds);
+        if (!wsRef.current || !wsRef.current.isConnected()) {
+          console.warn('[DEBUG] audio dump requested but websocket is not connected');
+          setError('Debug audio dump: start recording first, then click the button while recording.');
+          return;
+        }
+        console.log('[DEBUG] requesting audio dump', { seconds });
+        wsRef.current.requestDebugAudioDump(seconds);
       } catch {}
     };
     window.addEventListener('debug_request_audio_dump', handler as any);
@@ -182,7 +188,11 @@ export default function RecordingButton({
       ws.setOnDebugAudioDump((payload) => {
         try {
           const b64 = payload?.wavBase64 || '';
-          if (!b64) return;
+          if (!b64) {
+            console.warn('[DEBUG] audio dump payload empty', { stats: payload?.stats, seconds: payload?.seconds, sampleRate: payload?.sampleRate });
+            setError(`Debug audio dump empty. stats=${JSON.stringify(payload?.stats || {})}`);
+            return;
+          }
           const byteChars = atob(b64);
           const byteNumbers = new Array(byteChars.length);
           for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
