@@ -541,9 +541,9 @@ wss.on('connection', (ws, req) => {
           // Controlled test + quality gate:
           // Compute quick stats and (optionally) skip very-low-energy chunks that are likely just noise.
           // This reduces VAD false-positives → fewer hallucinated transcripts.
-          const isPcm16k = mimeType.includes('pcm_16000');
+          const isPcm16kStrict = mimeType.includes('pcm_16000');
           const gateRms = Number(process.env.SCRIBE_AUDIO_GATE_RMS || '0'); // 0 disables gating
-          if (isPcm16k) {
+          if (isPcm16kStrict) {
             const chunkStats = computePcm16Stats(audioBuffer);
             // #region agent log
             dbg('H2', 'backend/index.js:audio_chunk', 'PCM chunk stats', { gateRms, chunkStats });
