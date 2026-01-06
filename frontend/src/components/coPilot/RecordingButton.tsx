@@ -356,8 +356,8 @@ export default function RecordingButton({
   };
 
   const stopRecording = () => {
-    const stack = new Error('stopRecording called').stack;
-    console.log('🛑 Frontend: Stopping recording...', { stack });
+    const stack = String(new Error('stopRecording called').stack || '');
+    console.log('🛑 Frontend: Stopping recording...\n' + stack);
 
     // CRITICAL: Update ref FIRST to prevent restart loops
     isRecordingRef.current = false;
@@ -425,8 +425,26 @@ export default function RecordingButton({
     console.log('✅ Frontend: Recording stopped and cleaned up');
   };
 
-  const handleToggle = () => {
-    console.log('[RecordingButton] mic button clicked', { isRecording });
+  const handleToggle = (e?: any) => {
+    const ne = e?.nativeEvent ?? e;
+    const isTrusted = typeof ne?.isTrusted === 'boolean' ? ne.isTrusted : undefined;
+    const detail = typeof ne?.detail === 'number' ? ne.detail : undefined;
+    const pointerType = ne?.pointerType;
+    const key = ne?.key;
+    const activeEl = (() => {
+      try {
+        const a = document.activeElement as any;
+        return a ? { tag: a.tagName, id: a.id, cls: a.className } : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    console.log('[RecordingButton] mic toggle', { isRecording, isTrusted, detail, pointerType, key, activeEl });
+
+    // Guard: ignore programmatic clicks (we only want explicit user interaction)
+    if (isTrusted === false) return;
+
     if (isRecording) {
       stopRecording();
     } else {
@@ -482,6 +500,14 @@ export default function RecordingButton({
       )}
       <button
         onClick={handleToggle}
+        onKeyDown={(e) => {
+          // Prevent accidental keyboard toggles from stopping a live session.
+          if (isRecording && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[RecordingButton] prevented keyboard stop', { key: e.key });
+          }
+        }}
         disabled={isConnecting}
         className={`relative flex items-center justify-center w-14 h-14 rounded-full transition-all ${isRecording
           ? 'bg-red-500 hover:bg-red-600 animate-pulse'
