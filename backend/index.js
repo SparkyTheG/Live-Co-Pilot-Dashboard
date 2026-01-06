@@ -53,6 +53,58 @@ function dbg(hypothesisId, location, message, data = {}) {
 }
 // #endregion
 
+// #region controlled-audio-test helpers (no secrets)
+function computePcm16Stats(pcmBuf) {
+  try {
+    const b = Buffer.isBuffer(pcmBuf) ? pcmBuf : Buffer.from(pcmBuf || []);
+    const n = Math.floor(b.length / 2);
+    if (n <= 0) return { samples: 0 };
+    let peak = 0;
+    let sumSq = 0;
+    let clipped = 0;
+    for (let i = 0; i < n; i++) {
+      const v = b.readInt16LE(i * 2);
+      const av = Math.abs(v);
+      if (av > peak) peak = av;
+      if (av >= 32760) clipped++;
+      const fv = v / 32768;
+      sumSq += fv * fv;
+    }
+    const rms = Math.sqrt(sumSq / n);
+    return { samples: n, peak, rms: Number(rms.toFixed(4)), clipped };
+  } catch {
+    return { samples: 0 };
+  }
+}
+
+function pcm16ToWavBase64(pcmBuf, sampleRate = 16000, channels = 1) {
+  try {
+    const pcm = Buffer.isBuffer(pcmBuf) ? pcmBuf : Buffer.from(pcmBuf || []);
+    const blockAlign = channels * 2;
+    const byteRate = sampleRate * blockAlign;
+    const wav = Buffer.alloc(44 + pcm.length);
+    let o = 0;
+    wav.write('RIFF', o); o += 4;
+    wav.writeUInt32LE(36 + pcm.length, o); o += 4;
+    wav.write('WAVE', o); o += 4;
+    wav.write('fmt ', o); o += 4;
+    wav.writeUInt32LE(16, o); o += 4;
+    wav.writeUInt16LE(1, o); o += 2;
+    wav.writeUInt16LE(channels, o); o += 2;
+    wav.writeUInt32LE(sampleRate, o); o += 4;
+    wav.writeUInt32LE(byteRate, o); o += 4;
+    wav.writeUInt16LE(blockAlign, o); o += 2;
+    wav.writeUInt16LE(16, o); o += 2;
+    wav.write('data', o); o += 4;
+    wav.writeUInt32LE(pcm.length, o); o += 4;
+    pcm.copy(wav, o);
+    return wav.toString('base64');
+  } catch {
+    return '';
+  }
+}
+// #endregion
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const WS_PORT = process.env.WS_PORT || 3002;
@@ -485,10 +537,38 @@ wss.on('connection', (ws, req) => {
             mimeType
           });
           // #endregion
+
+          // Controlled test: keep a rolling 5s PCM ring buffer so we can download and listen to what we sent.
+          if (mimeType === 'pcm_16000') {
+            const m = connectionPersistence.get(connectionId);
+            if (m) {
+              const maxBytes = 16000 * 2 * 5; // 5 seconds of PCM16 mono @16k
+              const prev = Buffer.isBuffer(m._debugPcmRing) ? m._debugPcmRing : Buffer.alloc(0);
+              const next = Buffer.concat([prev, audioBuffer]);
+              m._debugPcmRing = next.length > maxBytes ? next.slice(next.length - maxBytes) : next;
+              m._debugPcmStats = computePcm16Stats(m._debugPcmRing);
+              connectionPersistence.set(connectionId, m);
+            }
+          }
+
           // Feed audio to Scribe. Committed transcripts are handled via the connection's onChunk callback (VAD-based),
           // which then calls handleIncomingTextChunk and updates the UI.
           await realtimeConnection.sendAudio(audioBuffer, mimeType);
         }
+      } else if (data.type === 'debug_request_audio_dump') {
+        // Controlled test: send the last few seconds of PCM as a WAV download via WS.
+        const seconds = Math.max(1, Math.min(10, Number(data.seconds || 5)));
+        const m = connectionPersistence.get(connectionId);
+        const ring = Buffer.isBuffer(m?._debugPcmRing) ? m._debugPcmRing : Buffer.alloc(0);
+        const stats = m?._debugPcmStats || computePcm16Stats(ring);
+        const wavBase64 = pcm16ToWavBase64(ring, 16000, 1);
+        sendToClient(connectionId, {
+          type: 'debug_audio_dump',
+          data: { wavBase64, sampleRate: 16000, seconds, stats }
+        });
+        // #region agent log
+        debugLog('debug_audio_dump_sent', { connectionId: connectionId.slice(-8), bytes: ring.length, stats });
+        // #endregion
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change
         // Store prospect type in connection meta for summaries

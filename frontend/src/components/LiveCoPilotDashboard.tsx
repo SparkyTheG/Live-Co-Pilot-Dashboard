@@ -413,6 +413,21 @@ export default function LiveCoPilotDashboard() {
                 <div className="text-sm text-gray-200 leading-snug max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
                   {liveTranscript || 'Waiting for speech…'}
                 </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => {
+                      try {
+                        // Ask RecordingButton's active websocket to send a 5s audio dump via the backend.
+                        // We emit a window event; RecordingButton listens and forwards to its ws instance.
+                        window.dispatchEvent(new CustomEvent('debug_request_audio_dump', { detail: { seconds: 5 } }));
+                      } catch {}
+                    }}
+                    className="text-[11px] text-gray-400 hover:text-gray-200 transition-colors"
+                    title="Debug: download last 5 seconds of audio as WAV"
+                  >
+                    Download last 5s audio (debug)
+                  </button>
+                </div>
               </div>
 
               {/* Truth Index Display */}

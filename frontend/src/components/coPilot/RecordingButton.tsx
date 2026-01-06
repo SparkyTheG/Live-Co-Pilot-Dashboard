@@ -100,6 +100,18 @@ export default function RecordingButton({
     };
   }, []);
 
+  // Listen for debug requests from the dashboard to fetch a WAV dump of the last audio.
+  useEffect(() => {
+    const handler = (evt: any) => {
+      const seconds = Number(evt?.detail?.seconds || 5);
+      try {
+        wsRef.current?.requestDebugAudioDump(seconds);
+      } catch {}
+    };
+    window.addEventListener('debug_request_audio_dump', handler as any);
+    return () => window.removeEventListener('debug_request_audio_dump', handler as any);
+  }, []);
+
   // Start WebSocket keepalive - sends a ping every 30 seconds to prevent timeout
   const startKeepalive = useCallback(() => {
     // Clear any existing keepalive
@@ -164,6 +176,28 @@ export default function RecordingButton({
         // Show live transcript from backend (what is actually being analyzed)
         if (onTranscriptUpdate && chunk?.text) {
           onTranscriptUpdate(chunk.text);
+        }
+      });
+
+      ws.setOnDebugAudioDump((payload) => {
+        try {
+          const b64 = payload?.wavBase64 || '';
+          if (!b64) return;
+          const byteChars = atob(b64);
+          const byteNumbers = new Array(byteChars.length);
+          for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+          const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'audio/wav' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `audio_dump_${Date.now()}_${payload.sampleRate || 16000}hz_${payload.seconds || 5}s.wav`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          console.log('[DEBUG] Downloaded audio dump', { seconds: payload.seconds, sampleRate: payload.sampleRate, stats: payload.stats });
+        } catch (e) {
+          console.warn('[DEBUG] Failed to download audio dump', e);
         }
       });
 
