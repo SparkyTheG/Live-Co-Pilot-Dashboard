@@ -25,8 +25,8 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 25000,
-  maxRetries: 2
+  timeout: 10000, // Reduced from 25s to 10s for faster failures
+  maxRetries: 1   // Reduced from 2 to 1 for faster response
 });
 
 const MODEL = 'gpt-4o-mini';
@@ -49,8 +49,8 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
     ? { maxTokens: maxTokensOrOptions }
     : (maxTokensOrOptions || {});
 
-  const maxTokens = Number(opts.maxTokens ?? 800);
-  const timeoutMs = Number(opts.timeoutMs ?? 12000);
+  const maxTokens = Number(opts.maxTokens ?? 400);    // Reduced from 800
+  const timeoutMs = Number(opts.timeoutMs ?? 6000);   // Reduced from 12000
 
   const doCall = async () => {
     const baseReq = {
@@ -776,24 +776,24 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
 
-  // Token control: different windows per agent (big latency win)
-  const tPillars = String(transcript || '').slice(-2500);
-  const tHotButtons = String(transcript || '').slice(-1600);
-  const tObjections = String(transcript || '').slice(-1800);
-  const tDiagnostic = String(transcript || '').slice(-1400);
-  const tTruth = String(transcript || '').slice(-3500);
-  const tInsights = String(transcript || '').slice(-2200);
+  // Token control: smaller windows for faster responses
+  const tPillars = String(transcript || '').slice(-1500);     // Reduced from 2500
+  const tHotButtons = String(transcript || '').slice(-1000);  // Reduced from 1600
+  const tObjections = String(transcript || '').slice(-1200);  // Reduced from 1800
+  const tDiagnostic = String(transcript || '').slice(-800);   // Reduced from 1400
+  const tTruth = String(transcript || '').slice(-2000);       // Reduced from 3500
+  const tInsights = String(transcript || '').slice(-1200);    // Reduced from 2200
 
-  // Run all agents in parallel BUT don't let one straggler block everything
+  // Run all agents in parallel with tighter timeouts (5-8s instead of 9-14s)
   // Note: runAllPillarAgents internally runs 7 agents in parallel
   // Note: runObjectionsAgents internally runs 4 objection agents (1 sequential + 3 parallel)
   const tasks = [
-    withTimeout(runAllPillarAgents(tPillars), 14000, { indicatorSignals: {}, pillarErrors: {} }),
-    withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
-    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 12000, { objections: [] }),
-    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 7000, { askedQuestions: [] }),
-    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
-    withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
+    withTimeout(runAllPillarAgents(tPillars), 8000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runHotButtonsAgent(tHotButtons), 5000, { hotButtonDetails: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 7000, { objections: [] }),
+    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 4000, { askedQuestions: [] }),
+    withTimeout(runTruthIndexAgent(tTruth), 5000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    withTimeout(runInsightsAgent(tInsights, prospectType), 5000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
   ];
 
   const settled = await Promise.allSettled(tasks);
