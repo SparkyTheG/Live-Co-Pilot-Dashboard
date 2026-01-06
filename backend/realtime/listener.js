@@ -232,9 +232,16 @@ export async function createRealtimeConnection({ onTranscript, onChunk, onError 
   let isConnected = true;
   // Cap history so long sessions don't grow prompt size unbounded (prevents slowdown)
   const MAX_HISTORY_CHARS = Number(process.env.MAX_TRANSCRIPT_CHARS || 8000);
-  const AUDIO_MIN_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 250);
-  let lastAudioTranscribeMs = 0;
+  // IMPORTANT:
+  // Frontend streams ~85ms frames (4096@48k → resampled to 16k). If we "throttle" by returning early,
+  // we DROP audio and Scribe hears chopped speech → hallucinations / wrong transcripts.
+  // Instead, we BUFFER all audio and FLUSH at a configurable interval.
+  const AUDIO_FLUSH_INTERVAL_MS = Number(process.env.AUDIO_MIN_INTERVAL_MS || 250);
+  const AUDIO_MAX_PENDING_MS = Number(process.env.AUDIO_MAX_PENDING_MS || 600);
+  const AUDIO_MAX_PENDING_BYTES = Number(process.env.AUDIO_MAX_PENDING_BYTES || (16000 * 2 * 1)); // 1s of PCM16@16k
+  let lastAudioFlushMs = 0;
   let audioChunkCount = 0;
+  let pendingPcm = Buffer.alloc(0);
 
   function looksLikeHallucination(text) {
     const t = String(text || '').trim().toLowerCase();
@@ -340,18 +347,34 @@ function sanitizeTranscript(text) {
         });
         try {
           const now = Date.now();
-          if (now - lastAudioTranscribeMs < AUDIO_MIN_INTERVAL_MS) {
+          // Always buffer audio; do NOT drop frames.
+          const buf = Buffer.isBuffer(audioData) ? audioData : Buffer.from(audioData || []);
+          pendingPcm = pendingPcm.length ? Buffer.concat([pendingPcm, buf]) : buf;
+
+          const pendingAgeMs = lastAudioFlushMs ? (now - lastAudioFlushMs) : 0;
+          const shouldFlush =
+            !lastAudioFlushMs ||
+            (now - lastAudioFlushMs) >= AUDIO_FLUSH_INTERVAL_MS ||
+            pendingPcm.length >= AUDIO_MAX_PENDING_BYTES ||
+            pendingAgeMs >= AUDIO_MAX_PENDING_MS;
+
+          if (!shouldFlush) {
             return { text: '' };
           }
-          lastAudioTranscribeMs = now;
+
+          const pcmToSend = pendingPcm;
+          pendingPcm = Buffer.alloc(0);
+          lastAudioFlushMs = now;
+          console.log('[A1] flushing audio to Scribe', {
+            bytes: pcmToSend.length,
+            flushIntervalMs: AUDIO_FLUSH_INTERVAL_MS,
+            maxPendingMs: AUDIO_MAX_PENDING_MS,
+            maxPendingBytes: AUDIO_MAX_PENDING_BYTES
+          });
 
           // Expect PCM16@16k from frontend. Ignore mimeType; kept for backward compatibility.
-          // Avoid feeding bad hallucinated context back into Scribe as previous_text.
-          const safePrev =
-            conversationHistory && !looksLikeHallucination(conversationHistory)
-              ? conversationHistory
-              : '';
-          const text = await scribe.sendPcmChunk(audioData, safePrev);
+          // We intentionally do NOT send previous_text to Scribe (see sendPcmChunk).
+          const text = await scribe.sendPcmChunk(pcmToSend, '');
           const trimmed = String(text || '').trim();
           console.log(`[A2] Scribe returned for chunk #${chunkNum}`, {
             textLen: trimmed.length,
