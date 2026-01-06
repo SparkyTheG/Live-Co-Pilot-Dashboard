@@ -900,12 +900,24 @@ async function handleIncomingTextChunk(connectionId, {
     }
   });
 
-  // Option B: use realtime single-session analysis to update frontend quickly
-  // Run the 15 AI agents with simple throttling
+  // Run the 15 AI agents with throttling + stuck detection
   const THROTTLE_MS = 5000; // Min 5 seconds between analyses
+  const MAX_PENDING_MS = 20000; // Force-clear pending after 20s (stuck detection)
   const now = Date.now();
   const lastRun = meta?._lastAnalysisMs || 0;
-  const pending = meta?._analysisPending || false;
+  const pendingStartMs = meta?._analysisPendingStart || 0;
+  let pending = meta?._analysisPending || false;
+
+  // Stuck detection: if pending for too long, force clear it
+  if (pending && pendingStartMs && (now - pendingStartMs) > MAX_PENDING_MS) {
+    console.warn(`[${connectionId.slice(-6)}] Analysis stuck for ${now - pendingStartMs}ms, force clearing`);
+    pending = false;
+    if (meta) {
+      meta._analysisPending = false;
+      meta._analysisPendingStart = 0;
+      connectionPersistence.set(connectionId, meta);
+    }
+  }
 
   // Skip if already running or too soon
   if (!pending && (now - lastRun) >= THROTTLE_MS) {
@@ -915,9 +927,10 @@ async function handleIncomingTextChunk(connectionId, {
     const csSnapshot = customScriptPrompt || meta?.customScriptPrompt || '';
     const pwSnapshot = pillarWeights ?? meta?.pillarWeights ?? null;
     
-    // Mark as running
+    // Mark as running with timestamp
     if (meta) {
       meta._analysisPending = true;
+      meta._analysisPendingStart = now;
       meta._lastAnalysisMs = now;
       connectionPersistence.set(connectionId, meta);
     }
@@ -943,6 +956,7 @@ async function handleIncomingTextChunk(connectionId, {
         const m = connectionPersistence.get(connectionId);
         if (m) {
           m._analysisPending = false;
+          m._analysisPendingStart = 0;
           connectionPersistence.set(connectionId, m);
         }
       }
