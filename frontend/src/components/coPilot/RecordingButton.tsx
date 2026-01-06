@@ -248,35 +248,29 @@ export default function RecordingButton({
       const recognition = new SpeechRecognitionCtor();
       recognitionRef.current = recognition;
       recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.interimResults = false; // Only get final results to prevent duplicates
       recognition.lang = 'en-US';
 
-      let finalTranscript = '';
-      let interimTranscript = '';
+      // Track last sent transcript to prevent duplicates
+      let lastSentText = '';
 
       recognition.onresult = (event: any) => {
         if (!isRecordingRef.current) return;
 
-        interimTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
           if (result.isFinal) {
             const text = result[0].transcript.trim();
-            if (text) {
-              finalTranscript += (finalTranscript ? ' ' : '') + text;
+            // Deduplicate: don't send the same text twice
+            if (text && text !== lastSentText) {
+              lastSentText = text;
+              console.log('[SpeechRecognition] Final transcript:', text);
               // Send final transcript to backend for analysis
               wsRef.current?.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
-              // Update UI
-              if (onTranscriptUpdate) onTranscriptUpdate(text);
+              // DON'T update UI here - let backend's transcript_chunk handle it
+              // This prevents double-updating
             }
-          } else {
-            interimTranscript += result[0].transcript;
           }
-        }
-
-        // Show interim results with ellipsis
-        if (interimTranscript && onTranscriptUpdate) {
-          onTranscriptUpdate(interimTranscript + '…');
         }
       };
 
