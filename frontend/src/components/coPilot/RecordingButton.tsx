@@ -47,6 +47,9 @@ export default function RecordingButton({
   // Mode: Use Web Speech API (browser) for transcription + 15 GPT-4o mini agents for analysis
   // This is free and doesn't require ElevenLabs or OpenAI Realtime API
   const useOpenAIWebRTC = false;
+  // Mode: Use ElevenLabs Scribe v2 Realtime STT via backend (streams PCM16@16k over WS)
+  // Note: requires ELEVENLABS_API_KEY configured on the backend (Railway env var).
+  const useScribeRealtime = true;
 
   // Update prospect type when it changes
   useEffect(() => {
@@ -205,12 +208,12 @@ export default function RecordingButton({
       const startCfg = {
         customScriptPrompt,
         pillarWeights,
-        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'
+        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : (useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe')
       };
       startListeningConfigRef.current = startCfg;
       ws.startListening(startCfg);
       wsRef.current = ws;
-      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'})`);
+      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : (useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe')})`);
 
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
@@ -266,6 +269,83 @@ export default function RecordingButton({
         setIsConnecting(false);
               return;
             }
+
+      // If using ElevenLabs Scribe via backend, stream PCM16@16k mic audio to backend
+      if (useScribeRealtime && !useOpenAIWebRTC) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: selectedMicId === 'default' ? undefined : { exact: selectedMicId },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1
+          }
+        });
+        mediaStreamRef.current = stream;
+
+        // Create audio context (browser decides sample rate, typically 48k)
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(stream);
+
+        // Use ScriptProcessorNode for broad compatibility (deprecated but works).
+        // Buffer size 4096 gives stable ~85ms frames at 48k.
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+
+        const inSampleRate = audioContext.sampleRate;
+        const outSampleRate = 16000;
+        let lastSentAt = 0;
+
+        const floatTo16BitPCM = (input: Float32Array) => {
+          const buffer = new ArrayBuffer(input.length * 2);
+          const view = new DataView(buffer);
+          let offset = 0;
+          for (let i = 0; i < input.length; i++, offset += 2) {
+            let s = Math.max(-1, Math.min(1, input[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+          }
+          return buffer;
+        };
+
+        const resampleLinear = (input: Float32Array, inRate: number, outRate: number) => {
+          if (inRate === outRate) return input;
+          const ratio = inRate / outRate;
+          const outLength = Math.max(1, Math.floor(input.length / ratio));
+          const output = new Float32Array(outLength);
+          for (let i = 0; i < outLength; i++) {
+            const pos = i * ratio;
+            const idx = Math.floor(pos);
+            const frac = pos - idx;
+            const s0 = input[idx] ?? 0;
+            const s1 = input[Math.min(idx + 1, input.length - 1)] ?? s0;
+            output[i] = s0 + (s1 - s0) * frac;
+          }
+          return output;
+        };
+
+        processor.onaudioprocess = (e) => {
+          if (!isRecordingRef.current) return;
+          const now = Date.now();
+          // Throttle sends (backend also throttles). Aim ~250ms.
+          if (now - lastSentAt < 220) return;
+          lastSentAt = now;
+
+          const input = e.inputBuffer.getChannelData(0);
+          const resampled = resampleLinear(input, inSampleRate, outSampleRate);
+          const pcm16 = floatTo16BitPCM(resampled);
+          wsRef.current?.sendAudioChunk(pcm16, 'pcm_16000');
+        };
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        setIsRecording(true);
+        isRecordingRef.current = true;
+        setIsConnecting(false);
+        console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)');
+        return;
+      }
 
       // Use Web Speech API for transcription (free, runs in browser)
       const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
