@@ -812,6 +812,7 @@ async function handleIncomingTextChunk(connectionId, {
   clientTsMs = null
 }) {
   const text = String(chunkText || '').trim();
+  console.log(`[handleIncomingTextChunk] Received text: length=${text.length}, preview="${text.slice(0,100)}"`);
   if (!text) return;
   
   // Debug: Log what we received including custom script prompt
