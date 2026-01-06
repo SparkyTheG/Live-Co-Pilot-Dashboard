@@ -22,8 +22,9 @@ const ELEVENLABS_URL =
   `&language_code=en` +
   `&audio_format=pcm_16000` +
   `&commit_strategy=vad` +
-  `&vad_silence_threshold_secs=0.6` +
-  `&vad_threshold=0.35`;
+  // Balance: too-low threshold can hallucinate; too-high can miss speech (no transcripts).
+  `&vad_silence_threshold_secs=0.5` +
+  `&vad_threshold=0.25`;
 
 class ElevenLabsScribeRealtime {
   constructor({ onError, onTranscript } = {}) {
