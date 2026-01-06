@@ -63,6 +63,7 @@ export class ConversationWebSocket {
   private onDisconnect?: () => void;
   private manuallyDisconnected = false; // Track if disconnect was intentional
   private lastMessageTime = Date.now();
+  private lastSendTime = Date.now();
   private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
   private authToken: string | null = null;
@@ -94,10 +95,15 @@ export class ConversationWebSocket {
         return;
       }
       
-      // If no message received in 45 seconds and not manually disconnected, connection might be stale
-      const timeSinceLastMessage = Date.now() - this.lastMessageTime;
-      if (timeSinceLastMessage > 45000 && !this.manuallyDisconnected) {
-        console.log('⚠️ WebSocket appears stale, no messages in 45s, attempting reconnect...');
+      // If no send/receive activity for a while, connection might be stale.
+      // Note: on Railway, server might not send anything for long stretches, so we
+      // consider outgoing keepalives as activity too.
+      const now = Date.now();
+      const timeSinceLastRecv = now - this.lastMessageTime;
+      const timeSinceLastSend = now - this.lastSendTime;
+      const idleMs = Math.min(timeSinceLastRecv, timeSinceLastSend);
+      if (idleMs > 120000 && !this.manuallyDisconnected) {
+        console.log('⚠️ WebSocket appears stale (no send/recv in 120s), attempting reconnect...');
         this.ws.close();
         this.connect().catch(console.error);
       }
@@ -123,6 +129,7 @@ export class ConversationWebSocket {
           text: '',
           keepalive: true
         }));
+        this.lastSendTime = Date.now();
         console.log('💓 Keepalive sent');
       }
     }, 8000);
@@ -246,6 +253,7 @@ export class ConversationWebSocket {
       console.warn('WebSocket is not connected, cannot sendRaw');
       return;
     }
+    this.lastSendTime = Date.now();
     this.ws.send(JSON.stringify(payload));
   }
 
@@ -272,6 +280,7 @@ export class ConversationWebSocket {
       return;
     }
 
+    this.lastSendTime = Date.now();
     this.ws.send(JSON.stringify({
       type: 'transcript',
       text: text,

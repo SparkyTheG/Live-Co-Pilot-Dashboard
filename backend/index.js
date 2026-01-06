@@ -549,6 +549,8 @@ CRITICAL RULES:
         // Ignore empty transcripts (used for keepalive)
         if (!data.text || data.text.trim().length === 0) {
           console.log(`[WS] Received keepalive ping from ${connectionId}`);
+          // Respond so the browser client updates its lastMessageTime and doesn't consider the socket "stale"
+          sendToClient(connectionId, { type: 'keepalive_ack', ts: Date.now() });
           return;
         }
         const meta = connectionPersistence.get(connectionId);
