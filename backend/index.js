@@ -909,14 +909,14 @@ async function handleIncomingTextChunk(connectionId, {
   let pending = meta?._analysisPending || false;
 
   // #region debug log
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:910',message:'Throttle check',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS,pendingDuration:pendingStartMs?now-pendingStartMs:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+  try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:910',message:'Throttle check',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS,pendingDuration:pendingStartMs?now-pendingStartMs:0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
   // #endregion
 
   // Stuck detection: if pending for too long, force clear it
   if (pending && pendingStartMs && (now - pendingStartMs) > MAX_PENDING_MS) {
     console.warn(`[${connectionId.slice(-6)}] Analysis stuck for ${now - pendingStartMs}ms, force clearing`);
     // #region debug log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:917',message:'Stuck detected, force clearing',data:{pendingDuration:now-pendingStartMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:917',message:'Stuck detected, force clearing',data:{pendingDuration:now-pendingStartMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
     // #endregion
     pending = false;
     if (meta) {
@@ -929,7 +929,7 @@ async function handleIncomingTextChunk(connectionId, {
   // Skip if already running or too soon
   if (!pending && (now - lastRun) >= THROTTLE_MS) {
     // #region debug log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:928',message:'Starting analysis',data:{transcriptLen:meta?.plainTranscript?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:928',message:'Starting analysis',data:{transcriptLen:meta?.plainTranscript?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
     // #endregion
     // Capture current state for the async task
     const transcriptSnapshot = meta?.plainTranscript || text;
@@ -951,7 +951,7 @@ async function handleIncomingTextChunk(connectionId, {
         console.log(`[${connectionId.slice(-6)}] Running AI analysis (${transcriptSnapshot.length} chars)`);
         const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
         // #region debug log
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:949',message:'Analysis completed',data:{hasAnalysis:!!analysis,hotButtonsCount:analysis?.hotButtons?.length||0,objectionsCount:analysis?.objections?.length||0,truthIndexScore:analysis?.truthIndex?.score||0,fromCache:analysis?.fromCache||false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D,E'})}).catch(()=>{});
+        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:949',message:'Analysis completed',data:{hasAnalysis:!!analysis,hotButtonsCount:analysis?.hotButtons?.length||0,objectionsCount:analysis?.objections?.length||0,truthIndexScore:analysis?.truthIndex?.score||0,fromCache:analysis?.fromCache||false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,C,D,E'})+'\n');}catch(e){}
         // #endregion
         if (analysis) {
           sendToClient(connectionId, {
@@ -963,13 +963,13 @@ async function handleIncomingTextChunk(connectionId, {
             }
           });
           // #region debug log
-          fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:960',message:'Sent analysis to client',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,truthIndexScore:analysis.truthIndex?.score||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+          try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:960',message:'Sent analysis to client',data:{hotButtonsCount:analysis.hotButtons?.length||0,objectionsCount:analysis.objections?.length||0,truthIndexScore:analysis.truthIndex?.score||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})+'\n');}catch(e){}
           // #endregion
         }
       } catch (e) {
         console.warn(`[WS] AI analysis failed: ${e.message}`);
         // #region debug log
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:966',message:'Analysis failed',data:{error:e.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:966',message:'Analysis failed',data:{error:e.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})+'\n');}catch(e){}
         // #endregion
       } finally {
         const m = connectionPersistence.get(connectionId);
@@ -979,13 +979,13 @@ async function handleIncomingTextChunk(connectionId, {
           connectionPersistence.set(connectionId, m);
         }
         // #region debug log
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:976',message:'Analysis cleanup complete',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:976',message:'Analysis cleanup complete',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
         // #endregion
       }
     });
   } else {
     // #region debug log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:982',message:'Analysis skipped',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify({location:'index.js:982',message:'Analysis skipped',data:{pending,timeSinceLastRun:now-lastRun,throttleMs:THROTTLE_MS},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})+'\n');}catch(e){}
     // #endregion
   }
 
