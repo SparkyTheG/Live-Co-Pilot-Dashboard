@@ -379,11 +379,9 @@ Return 2-4 most important triggers. If truly nothing detected, return empty arra
 
   const userPrompt = `Transcript:\n"${transcript}"`;
 
+  console.log(`[HotButtonsAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 400);
-  
-  // #region debug log
-  const logHB={location:'aiAgents.js:380',message:'HotButtons result',data:{transcriptLen:transcript?.length||0,resultKeys:Object.keys(result||{}),hotButtonDetailsCount:result?.hotButtonDetails?.length||0,hasError:!!result?.error,errorMsg:result?.error||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logHB));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logHB)+'\n');}catch(e){}
-  // #endregion
+  console.log(`[HotButtonsAgent] OUTPUT: hotButtonDetails=${result?.hotButtonDetails?.length||0}, error=${result?.error||'none'}, keys=${Object.keys(result||{}).join(',')}`);
   
   return result;
 }
@@ -417,11 +415,9 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
 
   const userPrompt = `Detect objections:\n"${transcript}"`;
 
+  console.log(`[ObjectionDetectionAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
-  
-  // #region debug log
-  const logObj={location:'aiAgents.js:422',message:'Objections result',data:{transcriptLen:transcript?.length||0,resultKeys:Object.keys(result||{}),detectedCount:result?.detectedObjections?.length||0,hasError:!!result?.error,errorMsg:result?.error||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logObj));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logObj)+'\n');}catch(e){}
-  // #endregion
+  console.log(`[ObjectionDetectionAgent] OUTPUT: detectedObjections=${result?.detectedObjections?.length||0}, error=${result?.error||'none'}`);
   
   return result;
 }
@@ -808,6 +804,8 @@ ${isFinal ? 'Provide the FINAL comprehensive summary of this completed conversat
 // ============================================================================
 export async function runAllAgents(transcript, prospectType, customScriptPrompt = '') {
   console.log(`\n[MultiAgent] Starting parallel analysis...`);
+  console.log(`[MultiAgent] Full transcript length: ${transcript?.length||0} chars`);
+  console.log(`[MultiAgent] Transcript preview: "${String(transcript||'').slice(0,150)}..."`);
   console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
 
@@ -818,10 +816,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const tDiagnostic = String(transcript || '').slice(-600);   // Last ~100 words
   const tTruth = String(transcript || '').slice(-800);        // Last ~130 words
   const tInsights = String(transcript || '').slice(-800);     // Last ~130 words
-
-  // #region debug log
-  const logInput={location:'aiAgents.js:810',message:'Agent inputs',data:{fullTranscriptLen:transcript?.length||0,tPillarsLen:tPillars.length,tHotButtonsLen:tHotButtons.length,tHotButtonsPreview:tHotButtons.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logInput));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logInput)+'\n');}catch(e){}
-  // #endregion
 
   // Run all agents in parallel with FAST timeouts (2-4s max)
   // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
