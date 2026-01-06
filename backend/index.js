@@ -722,66 +722,9 @@ CRITICAL RULES:
       } catch {}
       realtimeAnalysisSessions.delete(connectionId);
     }
-    // Mark session ended and generate final summary if we have one
-    const meta = connectionPersistence.get(connectionId);
-    if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
-      const supabase = createUserSupabaseClient(meta.authToken);
-      if (supabase) {
-        // Use prospect type from meta (set during session)
-        const closeProspectType = meta.prospectType || '';
-        console.log(`[${connectionId}] WebSocket closing, saving final state with prospectType: ${closeProspectType}`);
-
-        // Update session end time
-        void supabase
-          .from('call_sessions')
-          .update({ 
-            ended_at: new Date().toISOString(), 
-            updated_at: new Date().toISOString(),
-            prospect_type: closeProspectType // Ensure it's saved
-          })
-          .eq('id', meta.sessionId)
-          .eq('user_id', meta.userId)
-          .then(({ error }) => {
-            if (error) console.warn(`[WS] Failed to update session on close: ${error.message}`);
-          })
-          .catch(() => {});
-
-        // Generate FINAL summary of entire conversation
-        const formattedTranscript = meta.conversationHistory || '';
-        if (formattedTranscript.length > 100) {
-          console.log(`[${connectionId}] Generating FINAL conversation summary on close with prospectType: ${closeProspectType}`);
-          runConversationSummaryAgent(formattedTranscript, closeProspectType, true)
-            .then((summaryResult) => {
-              if (summaryResult && !summaryResult.error) {
-                const summaryData = {
-                  session_id: meta.sessionId,
-                  user_id: meta.userId,
-                  user_email: meta.userEmail || '',
-                  prospect_type: closeProspectType,
-                  summary_json: summaryResult,
-                  is_final: true,
-                  updated_at: new Date().toISOString()
-                };
-
-                void supabase
-                  .from('call_summaries')
-                  .upsert(summaryData, { onConflict: 'session_id' })
-                  .then(({ error }) => {
-                    if (error) {
-                      console.warn(`[WS] Final summary upsert failed: ${error.message}`);
-                    } else {
-                      console.log(`[${connectionId}] Final summary generated and saved on close`);
-                    }
-                  })
-                  .catch(() => {});
-              }
-            })
-            .catch((err) => {
-              console.warn(`[${connectionId}] Final summary generation error: ${err.message}`);
-            });
-        }
-      }
-    }
+    // IMPORTANT: Do NOT finalize/end sessions on transient WS close.
+    // Railway/proxies can drop websockets; we only finalize on explicit stop_listening.
+    console.log(`[WS] Close cleanup complete (no finalization) for ${connectionId}`);
     connectionPersistence.delete(connectionId);
   });
 
