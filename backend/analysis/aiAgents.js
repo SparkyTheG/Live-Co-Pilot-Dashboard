@@ -80,7 +80,7 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   const maxTokens = Number(opts.maxTokens ?? 200);    // Small focused outputs
   const timeoutMs = Number(opts.timeoutMs ?? 4000);   // Fast 4s timeout
 
-  const doCall = async () => {
+  const doCall = async (signal) => {
     const openai = getOpenAIClient();
     const baseReq = {
       model: MODEL,
@@ -97,11 +97,12 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
       // Prefer strict JSON output if supported by the API/model
       response = await openai.chat.completions.create({
         ...baseReq,
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        signal
       });
     } catch (e) {
       // Fallback for older API behavior: no response_format
-      response = await openai.chat.completions.create(baseReq);
+      response = await openai.chat.completions.create({ ...baseReq, signal });
     }
 
     let content = response?.choices?.[0]?.message?.content ?? '{}';
@@ -118,17 +119,38 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   };
 
   try {
-    // Throttle to prevent rate limiting (max 5 concurrent)
-    const result = await withTimeout(
-      throttledRequest(() => doCall()),
-      timeoutMs,
-      { error: `timeout after ${timeoutMs}ms` }
-    );
+    // IMPORTANT: Use AbortController so timeouts actually cancel the underlying request.
+    // Without abort, hung requests can occupy concurrency slots forever and the app "stops updating".
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      try { controller.abort(); } catch {}
+    }, timeoutMs);
+
+    let result;
+    try {
+      result = await throttledRequest(() => doCall(controller.signal));
+    } finally {
+      clearTimeout(timer);
+    }
+
     console.log(`[${agentName}] Done in ${Date.now() - startTime}ms`);
     return result;
   } catch (error) {
-    console.error(`[${agentName}] Error: ${error.message}`);
-    return { error: error.message };
+    const msg = String(error?.message || error || '');
+    const name = String(error?.name || '');
+    const isAbort =
+      name === 'AbortError' ||
+      msg.toLowerCase().includes('aborted') ||
+      msg.toLowerCase().includes('abort') ||
+      msg.toLowerCase().includes('timeout');
+
+    if (isAbort) {
+      console.warn(`[${agentName}] Timeout/Abort after ${timeoutMs}ms`);
+      return { error: `timeout after ${timeoutMs}ms` };
+    }
+
+    console.error(`[${agentName}] Error: ${msg}`);
+    return { error: msg };
   }
 }
 
