@@ -165,9 +165,6 @@ export class OpenAIRealtimeWebRTC {
 
   async connect() {
     this.#dbg('connect', 'connect() start', { model: this.model, deviceId: this.deviceId || 'default' });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:connect',message:'connect() start',data:{model:this.model,hasAuthToken:!!this.authToken,deviceId:this.deviceId||'default'},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     // 1) Get ephemeral client_secret from backend
     const httpBase = wsUrlToHttpBase(this.wsUrl);
     this.#dbg('token', 'minting ephemeral token', { httpBase });
@@ -182,9 +179,6 @@ export class OpenAIRealtimeWebRTC {
     const tokenJson = await tokenResp.json().catch(() => null);
     if (!tokenResp.ok) {
       this.#dbg('token', 'token mint failed', { status: tokenResp.status, body: tokenJson });
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:token',message:'token mint failed',data:{status:tokenResp.status,hasBody:!!tokenJson},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       throw new Error(`Failed to mint realtime token (${tokenResp.status})`);
     }
     const clientSecret =
@@ -196,9 +190,6 @@ export class OpenAIRealtimeWebRTC {
     if (!clientSecret) throw new Error('Realtime token missing client_secret.value');
     this.model = model;
     this.#dbg('token', 'token mint ok', { model: this.model });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:token',message:'token mint ok',data:{model:this.model,hasClientSecret:true},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
 
     // 2) Get mic stream and create peer connection
     // Use strong constraints to improve transcription quality and avoid system-audio/echo issues.
@@ -213,9 +204,6 @@ export class OpenAIRealtimeWebRTC {
     }
     this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
     this.#dbg('media', 'gotUserMedia ok', { audioTrackCount: this.mediaStream?.getAudioTracks?.().length || 0 });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:connect',message:'gotUserMedia ok',data:{trackCount:this.mediaStream?.getTracks?.().length||0,audioTrackCount:this.mediaStream?.getAudioTracks?.().length||0,deviceId:this.deviceId||'default',constraints:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
 
     // Local VAD (no Whisper): use an analyser to detect when the user stops speaking.
     // This prevents us from requesting analysis on silence, which causes hallucinated/repeated transcripts.
@@ -252,9 +240,6 @@ export class OpenAIRealtimeWebRTC {
               this.lastLoudMs = 0;
               if (!this.responseInFlight && this.dc && this.dc.readyState === 'open') {
                 this.#dbg('vad', 'local VAD triggered analysis tick', { THRESH, SILENCE_MS });
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:VAD',message:'local VAD triggered analysis tick',data:{rms,THRESH,SILENCE_MS,responseInFlight:this.responseInFlight,dcState:this.dc?.readyState||'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
-                // #endregion
                 this.requestAnalysisTick();
               }
             }
@@ -281,9 +266,6 @@ export class OpenAIRealtimeWebRTC {
     dc.onmessage = (ev) => this.#onDataMessage(ev.data);
     dc.onopen = () => {
       this.#dbg('dc', 'datachannel open', { temperature: 0.6 });
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:dc.onopen',message:'datachannel open; sending session.update',data:{model:this.model,temperature:0.6},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       // Configure session: server VAD + gpt-4o-transcribe for audio-grounded transcription events.
       // Analysis is triggered when transcription completes, using the exact transcript text.
       this.#send({
@@ -378,9 +360,6 @@ export class OpenAIRealtimeWebRTC {
     this.finalizedResponseText = '';
     this.lastResponseStartMs = Date.now();
     this.#dbg('response', 'response.create start', { dcState: this.dc?.readyState || 'none' });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:requestAnalysisTick',message:'response.create start',data:{dcState:this.dc?.readyState||'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     // Cancel any ghost response then request a new one.
     this.#send({ type: 'response.cancel' });
     this.#send({
@@ -568,9 +547,6 @@ export class OpenAIRealtimeWebRTC {
     if (msg?.error) {
       const errMsg = String(msg.error?.message || 'OpenAI Realtime error');
       this.#dbg('error', 'OpenAI error event', { type: t, errMsg: errMsg.slice(0, 180) });
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:#onDataMessage',message:'OpenAI error event',data:{type:t,errMsg:errMsg.slice(0,160)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       // Benign: cancel can fail if nothing is active; don't spam UI.
       if (errMsg.toLowerCase().includes('no active response')) {
         return;
@@ -604,9 +580,6 @@ export class OpenAIRealtimeWebRTC {
           this.transcriptBuf;
         this.transcriptBuf = '';
         const transcript = sanitizeTranscript(collapseConsecutiveSentenceRepeats(String(full || '').trim()));
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:transcription',message:'input_audio_transcription done',data:{type:t,len:transcript.length,preview:transcript.slice(0,120)},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run2',hypothesisId:'H2'})}).catch(()=>{});
-        // #endregion
         if (transcript) {
           const now = Date.now();
           if (!(transcript === this.lastGoodTranscript && now - this.lastGoodTranscriptMs < 2500)) {
@@ -669,9 +642,6 @@ export class OpenAIRealtimeWebRTC {
         // Analysis-only payload. Transcript comes from input_audio_transcription events.
         this.onAiAnalysis(this.lastTranscriptForAnalysis || this.lastGoodTranscript || '', parsed);
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished (final)',data:{type:t,parsedOk:!!parsed,textLen:(textToParse||'').length,calledOnAiAnalysis:!!(parsed&&this.onAiAnalysis)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v3',hypothesisId:'H7'})}).catch(()=>{});
-      // #endregion
       this.currentResponseText = '';
       this.finalizedResponseText = '';
       this.responseInFlight = false;

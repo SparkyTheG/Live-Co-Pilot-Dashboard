@@ -228,9 +228,6 @@ export default function RecordingButton({
           customScriptPrompt,
           deviceId: selectedMicId,
           onTranscript: (text) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:onTranscript',message:'onTranscript callback',data:{textLen:text?.length||0,preview:(text||'').slice(0,80)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H4'})}).catch(()=>{});
-            // #endregion
             if (onTranscriptUpdate) onTranscriptUpdate(text);
             // Immediately push transcript into backend so it's persisted (but NOT re-echoed to UI)
             wsRef.current?.sendRaw({
@@ -241,9 +238,6 @@ export default function RecordingButton({
             });
           },
           onAiAnalysis: (transcriptText, aiAnalysis) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:onAiAnalysis',message:'onAiAnalysis callback',data:{textLen:transcriptText?.length||0,hasAnalysis:!!aiAnalysis,keys:Object.keys(aiAnalysis||{}).slice(0,8)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H5'})}).catch(()=>{});
-            // #endregion
             wsRef.current?.sendRaw({
               type: 'realtime_ai_update',
               transcriptText,
@@ -257,21 +251,6 @@ export default function RecordingButton({
           }
         });
         openAiRealtimeRef.current = openAi;
-
-        // #region agent log
-        // Forward debug events to backend so they show up in Railway logs (no secrets).
-        (window as any).__OAI_DEBUG_SINK__ = (payload: any) => {
-          try {
-            wsRef.current?.sendRaw({
-              type: 'debug_event',
-              tag: payload?.tag || '',
-              message: payload?.message || '',
-              data: payload?.data || null,
-              ts: payload?.ts || Date.now()
-            });
-          } catch {}
-        };
-        // #endregion
 
         await openAi.connect();
         console.log('✅ OpenAI Realtime WebRTC connected');
