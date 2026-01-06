@@ -981,20 +981,28 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
-  // IMPORTANT: If Realtime is enabled but did not return usable JSON for this chunk,
-  // fall back to the legacy analysis pipeline so the UI keeps updating.
-  if (useRealtime && !aiAnalysisFromRealtime) {
+  // When NOT using realtime, run the 15 AI agents directly for analysis
+  if (!useRealtime) {
     try {
-      let realtimeConnection = realtimeConnections.get(connectionId);
-      if (!realtimeConnection) {
-        await startRealtimeListening(connectionId, {});
-        realtimeConnection = realtimeConnections.get(connectionId);
-      }
-      if (realtimeConnection) {
-        await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
+      console.log(`[${connectionId}] Running 15 AI agents analysis (no realtime)`);
+      const analysis = await analyzeConversation(
+        meta?.plainTranscript || text,
+        prospectType || meta?.prospectType || null,
+        customScriptPrompt || meta?.customScriptPrompt || '',
+        pillarWeights ?? meta?.pillarWeights ?? null
+      );
+      if (analysis) {
+        sendToClient(connectionId, {
+          type: 'analysis_update',
+          data: {
+            ...analysis,
+            hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
+            objections: Array.isArray(analysis.objections) ? analysis.objections : []
+          }
+        });
       }
     } catch (e) {
-      console.warn(`[WS] Legacy fallback analysis failed: ${e.message}`);
+      console.warn(`[WS] 15 agents analysis failed: ${e.message}`);
     }
   }
 

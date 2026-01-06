@@ -37,40 +37,14 @@ export default function RecordingButton({
   const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ElevenLabs Scribe expects PCM16 @ 16kHz. We capture mic audio and stream PCM chunks.
+  // Refs for stopping media (if used)
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const pcmPendingRef = useRef<Int16Array[]>([]);
-  const pcmPendingSamplesRef = useRef<number>(0);
 
-  // Mode: Use backend transcription (ElevenLabs Scribe) + 15 AI agents for analysis
-  // OpenAI Realtime WebRTC is disabled for cost savings
+  // Mode: Use Web Speech API (browser) for transcription + 15 GPT-4o mini agents for analysis
+  // This is free and doesn't require ElevenLabs or OpenAI Realtime API
   const useOpenAIWebRTC = false;
-
-  function resampleLinear(input: Float32Array, inRate: number, outRate: number) {
-    if (inRate === outRate) return input;
-    const ratio = inRate / outRate;
-    const outLength = Math.max(1, Math.floor(input.length / ratio));
-    const out = new Float32Array(outLength);
-    for (let i = 0; i < outLength; i++) {
-      const idx = i * ratio;
-      const i0 = Math.floor(idx);
-      const i1 = Math.min(input.length - 1, i0 + 1);
-      const frac = idx - i0;
-      out[i] = input[i0] * (1 - frac) + input[i1] * frac;
-    }
-    return out;
-  }
-
-  function floatToInt16PCM(input: Float32Array) {
-    const out = new Int16Array(input.length);
-    for (let i = 0; i < input.length; i++) {
-      const s = Math.max(-1, Math.min(1, input[i]));
-      out[i] = s < 0 ? (s * 0x8000) : (s * 0x7fff);
-    }
-    return out;
-  }
 
   // Update prospect type when it changes
   useEffect(() => {
@@ -197,14 +171,14 @@ export default function RecordingButton({
       // Provide auth token so backend can persist this call session under RLS
       ws.setAuthToken(session?.access_token ?? null);
       ws.setProspectType(prospectType); // Set initial prospect type
-      // Pass settings. In OpenAI WebRTC mode, backend will not transcribe; it will persist + fan out updates.
+      // Pass settings. Browser transcribes via Web Speech API, sends text to backend for 15 agents analysis.
       ws.startListening({
         customScriptPrompt,
         pillarWeights,
-        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : 'backend_transcribe'
+        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'
       });
       wsRef.current = ws;
-      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : 'backend_transcribe'})`);
+      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : 'websocket_transcribe'})`);
 
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
@@ -261,74 +235,77 @@ export default function RecordingButton({
               return;
             }
 
-      // Stream AUDIO to backend (server-side transcription) as PCM16 @ 16kHz for ElevenLabs Scribe v2 Realtime.
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setError('Microphone access not available in this browser.');
-        setIsConnecting(false);
-        setIsRecording(false);
-        isRecordingRef.current = false;
-                return;
-              }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-
-      const AudioContextCtor = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextCtor) {
-        setError('Web Audio API not available in this browser.');
+      // Use Web Speech API for transcription (free, runs in browser)
+      const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognitionCtor) {
+        setError('Speech recognition not available. Please use Chrome or Edge.');
         setIsConnecting(false);
         setIsRecording(false);
         isRecordingRef.current = false;
         return;
       }
 
-      const audioCtx: AudioContext = new AudioContextCtor();
-      audioContextRef.current = audioCtx;
+      const recognition = new SpeechRecognitionCtor();
+      recognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-      const source = audioCtx.createMediaStreamSource(stream);
-      // ScriptProcessorNode is deprecated but widely supported in Chromium (and simplest for PCM capture).
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+      let finalTranscript = '';
+      let interimTranscript = '';
 
-      const INPUT_RATE = audioCtx.sampleRate;
-      const TARGET_RATE = 16000;
-      // Send about ~0.6s per chunk at 16kHz (~9600 samples)
-      const TARGET_SAMPLES_PER_CHUNK = 9600;
-
-      processor.onaudioprocess = (evt) => {
+      recognition.onresult = (event: any) => {
         if (!isRecordingRef.current) return;
-        const input = evt.inputBuffer.getChannelData(0);
-        const resampled = resampleLinear(input, INPUT_RATE, TARGET_RATE);
-        const pcm16 = floatToInt16PCM(resampled);
 
-        pcmPendingRef.current.push(pcm16);
-        pcmPendingSamplesRef.current += pcm16.length;
-
-        if (pcmPendingSamplesRef.current >= TARGET_SAMPLES_PER_CHUNK) {
-          const total = pcmPendingSamplesRef.current;
-          const merged = new Int16Array(total);
-          let offset = 0;
-          for (const part of pcmPendingRef.current) {
-            merged.set(part, offset);
-            offset += part.length;
+        interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            const text = result[0].transcript.trim();
+            if (text) {
+              finalTranscript += (finalTranscript ? ' ' : '') + text;
+              // Send final transcript to backend for analysis
+              wsRef.current?.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
+              // Update UI
+              if (onTranscriptUpdate) onTranscriptUpdate(text);
+            }
+          } else {
+            interimTranscript += result[0].transcript;
           }
-          pcmPendingRef.current = [];
-          pcmPendingSamplesRef.current = 0;
+        }
 
-          // Optional UI preview to show activity
-          if (onTranscriptUpdate) onTranscriptUpdate('…');
-
-          // NOTE: sendAudioChunk expects ArrayBuffer. We send PCM16 little-endian at 16kHz.
-          wsRef.current?.sendAudioChunk(merged.buffer, 'pcm_16000');
+        // Show interim results with ellipsis
+        if (interimTranscript && onTranscriptUpdate) {
+          onTranscriptUpdate(interimTranscript + '…');
         }
       };
 
-      // Wire graph
-      source.connect(processor);
-      // Some browsers require processor be connected to destination to start processing.
-      processor.connect(audioCtx.destination);
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          // Ignore no-speech errors, just restart
+          return;
+        }
+        if (event.error === 'aborted') {
+          // Ignore aborted errors when stopping
+          return;
+        }
+        setError(`Speech recognition error: ${event.error}`);
+      };
 
-      console.log('✅ PCM streaming started (PCM16@16k) for ElevenLabs Scribe v2 Realtime');
+      recognition.onend = () => {
+        // Auto-restart if still recording (continuous mode can timeout)
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch (e) {
+            console.warn('Failed to restart speech recognition:', e);
+          }
+        }
+      };
+
+      recognition.start();
+      console.log('✅ Web Speech API started (browser-based transcription)');
 
       // Update both state and ref
       setIsRecording(true);
