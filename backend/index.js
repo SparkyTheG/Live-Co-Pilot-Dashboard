@@ -482,18 +482,9 @@ wss.on('connection', (ws, req) => {
             mimeType
           });
           // #endregion
-          const meta = connectionPersistence.get(connectionId);
-          const audioResult = await realtimeConnection.sendAudio(audioBuffer, mimeType);
-          const transcribedText = String(audioResult?.text || '').trim();
-          if (transcribedText) {
-            await handleIncomingTextChunk(connectionId, {
-              chunkText: transcribedText,
-              prospectType: (typeof data.prospectType === 'string' ? data.prospectType : '') || meta?.prospectType || '',
-              customScriptPrompt: meta?.customScriptPrompt || '',
-              pillarWeights: meta?.pillarWeights ?? null,
-              clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
-            });
-          }
+          // Feed audio to Scribe. Committed transcripts are handled via the connection's onChunk callback (VAD-based),
+          // which then calls handleIncomingTextChunk and updates the UI.
+          await realtimeConnection.sendAudio(audioBuffer, mimeType);
         }
       } else if (data.type === 'prospect_type_changed') {
         // Handle prospect type change

@@ -467,6 +467,13 @@ export default function RecordingButton({
     // Guard: ignore programmatic clicks (we only want explicit user interaction)
     if (isTrusted === false) return;
 
+    // Guard: prevent accidental single-click stop (we've seen spurious click events in prod).
+    // To stop while recording: double-click the mic button.
+    if (isRecording && typeof detail === 'number' && detail < 2) {
+      console.log('[RecordingButton] ignoring single-click stop (double-click to stop)');
+      return;
+    }
+
     if (isRecording) {
       stopRecording();
     } else {

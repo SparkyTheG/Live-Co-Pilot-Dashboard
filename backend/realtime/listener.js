@@ -126,7 +126,12 @@ class ElevenLabsScribeRealtime {
       return;
     }
 
-    if (t === 'committed_transcript' || t === 'committed_transcript_with_timestamps') {
+    if (
+      t === 'committed_transcript' ||
+      t === 'committed_transcript_with_timestamps' ||
+      t === 'final_transcript' ||
+      t === 'final_transcript_with_timestamps'
+    ) {
       const text = String(msg?.text || '').trim();
       if (!text) return;
 
