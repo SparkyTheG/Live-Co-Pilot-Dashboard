@@ -288,11 +288,7 @@ export default function RecordingButton({
         };
 
         processor.onaudioprocess = (e) => {
-          if (!isRecordingRef.current) return;
-          const now = Date.now();
-          // Throttle sends (backend also throttles). Aim ~250ms.
-          if (now - lastSentAt < 220) return;
-          lastSentAt = now;
+          if (!isRecordingRef.current || !wsRef.current?.isConnected()) return;
 
           const input = e.inputBuffer.getChannelData(0);
           const resampled = resampleLinear(input, inSampleRate, outSampleRate);
