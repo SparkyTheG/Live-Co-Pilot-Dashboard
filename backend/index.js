@@ -827,7 +827,6 @@ async function handleIncomingTextChunk(connectionId, {
   // Get connection metadata
   const meta = connectionPersistence.get(connectionId);
   const conversationHistory = meta?.conversationHistory || '';
-  const useRealtime = Boolean(meta?.useRealtimeAnalysis && realtimeAnalysisSessions.get(connectionId));
 
   // Maintain a plain transcript (for deterministic calculations)
   if (meta) {
@@ -863,53 +862,19 @@ async function handleIncomingTextChunk(connectionId, {
     connectionPersistence.set(connectionId, meta);
   }
 
+  // Skip speaker detection to save API calls - use simple heuristic instead
   let detectedSpeaker = 'unknown';
-  let aiAnalysisFromRealtime = null;
-
-  // #region agent log
-  debugLog('H-E: handleIncomingTextChunk', { useRealtime, hasSession: !!realtimeAnalysisSessions.get(connectionId), chunkTextLen: text.length });
-  // #endregion
-  // Runtime evidence in Railway logs (no secrets)
-  console.log('[A2] handleIncomingTextChunk', {
-    useRealtime,
-    hasSession: !!realtimeAnalysisSessions.get(connectionId),
-    chunkTextLen: text.length
-  });
-
-  if (useRealtime) {
-    try {
-      const session = realtimeAnalysisSessions.get(connectionId);
-      // #region agent log
-      debugLog('H-A,H-B: Calling analyzeChunk', { sessionConnected: session?.connected, sessionClosed: session?.closed, inFlight: session?.inFlight });
-      // #endregion
-      aiAnalysisFromRealtime = await session.analyzeChunk({
-        chunkText: text,
-        prospectType: prospectType || meta?.prospectType || '',
-        customScriptPrompt: customScriptPrompt || meta?.customScriptPrompt || ''
-      });
-      // #region agent log
-      debugLog('H-B,H-D: analyzeChunk returned', { isNull: aiAnalysisFromRealtime===null, hasIndicatorSignals: !!aiAnalysisFromRealtime?.indicatorSignals, hasHotButtonDetails: Array.isArray(aiAnalysisFromRealtime?.hotButtonDetails), hasObjections: Array.isArray(aiAnalysisFromRealtime?.objections), speaker: aiAnalysisFromRealtime?.speaker });
-      // #endregion
-      if (aiAnalysisFromRealtime?.speaker) {
-        detectedSpeaker = aiAnalysisFromRealtime.speaker;
-      }
-    } catch (e) {
-      // #region agent log
-      debugLog('H-A,H-C: analyzeChunk threw', { errorMsg: e.message });
-      // #endregion
-      console.warn(`[WS] Realtime analysis error: ${e.message}`);
-    }
-  } else {
-    // Fallback: Speaker detection via dedicated agent
-    try {
-      const speakerResult = await runSpeakerDetectionAgent(text, conversationHistory);
-      if (speakerResult && !speakerResult.error) {
-        detectedSpeaker = speakerResult.speaker || 'unknown';
-      }
-    } catch (speakerErr) {
-      console.warn(`[WS] Speaker detection agent error: ${speakerErr.message}`);
-    }
+  
+  // Simple speaker heuristic: questions are usually from closer, statements from prospect
+  const hasQuestion = text.includes('?');
+  const isShort = text.split(' ').length < 8;
+  if (hasQuestion && isShort) {
+    detectedSpeaker = 'closer';
+  } else if (text.length > 30) {
+    detectedSpeaker = 'prospect';
   }
+  
+  console.log(`[${connectionId.slice(-6)}] chunk: "${text.slice(0, 40)}..." speaker=${detectedSpeaker}`);
 
   // Format speaker label for transcript
   const speakerLabel = detectedSpeaker === 'closer' ? 'CLOSER' : detectedSpeaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
@@ -936,98 +901,52 @@ async function handleIncomingTextChunk(connectionId, {
   });
 
   // Option B: use realtime single-session analysis to update frontend quickly
-  if (useRealtime && aiAnalysisFromRealtime) {
-    // Log what realtime AI returned (especially objections with rebuttals)
-    console.log('[REALTIME-AI-RESULT]', {
-      hasObjections: Array.isArray(aiAnalysisFromRealtime.objections),
-      objectionCount: aiAnalysisFromRealtime.objections?.length || 0,
-      firstObjection: aiAnalysisFromRealtime.objections?.[0] || null,
-      hotButtonCount: aiAnalysisFromRealtime.hotButtonDetails?.length || 0
-    });
+  // Run the 15 AI agents with simple throttling
+  const THROTTLE_MS = 5000; // Min 5 seconds between analyses
+  const now = Date.now();
+  const lastRun = meta?._lastAnalysisMs || 0;
+  const pending = meta?._analysisPending || false;
+
+  // Skip if already running or too soon
+  if (!pending && (now - lastRun) >= THROTTLE_MS) {
+    // Capture current state for the async task
+    const transcriptSnapshot = meta?.plainTranscript || text;
+    const ptSnapshot = prospectType || meta?.prospectType || null;
+    const csSnapshot = customScriptPrompt || meta?.customScriptPrompt || '';
+    const pwSnapshot = pillarWeights ?? meta?.pillarWeights ?? null;
     
-    const normalizedAi = {
-      indicatorSignals: aiAnalysisFromRealtime.indicatorSignals || {},
-      hotButtonDetails: aiAnalysisFromRealtime.hotButtonDetails || [],
-      objections: aiAnalysisFromRealtime.objections || [],
-      askedQuestions: aiAnalysisFromRealtime.askedQuestions || [],
-      detectedRules: aiAnalysisFromRealtime.detectedRules || [],
-      coherenceSignals: aiAnalysisFromRealtime.coherenceSignals || [],
-      overallCoherence: aiAnalysisFromRealtime.overallCoherence || 'medium',
-      insights: aiAnalysisFromRealtime.insights?.summary || '',
-      keyMotivators: aiAnalysisFromRealtime.insights?.keyMotivators || [],
-      concerns: aiAnalysisFromRealtime.insights?.concerns || [],
-      recommendation: aiAnalysisFromRealtime.insights?.recommendation || '',
-      closingReadiness: aiAnalysisFromRealtime.insights?.closingReadiness || 'not_ready',
-      agentErrors: {}
-    };
-
-    try {
-      const final = await analyzeConversationFromAiAnalysis(
-        meta?.plainTranscript || text,
-        prospectType || meta?.prospectType || null,
-        pillarWeights ?? meta?.pillarWeights ?? null,
-        normalizedAi
-      );
-
-      const safeAnalysis = {
-        ...final,
-        hotButtons: Array.isArray(final.hotButtons) ? final.hotButtons : [],
-        objections: Array.isArray(final.objections) ? final.objections : []
-      };
-
-      sendToClient(connectionId, { type: 'analysis_update', data: safeAnalysis });
-    } catch (e) {
-      console.warn(`[WS] Failed to build analysis from realtime ai: ${e.message}`);
-    }
-  }
-
-  // When NOT using realtime, run the 15 AI agents with simple throttling
-  if (!useRealtime) {
-    const THROTTLE_MS = 4000; // Min 4 seconds between analyses
-    const now = Date.now();
-    const lastRun = meta._lastAnalysisMs || 0;
-    const pending = meta._analysisPending || false;
-
-    // Skip if already running or too soon
-    if (pending || (now - lastRun) < THROTTLE_MS) {
-      // Don't block - just skip this analysis cycle
-    } else {
-      // Mark as running and run analysis in background (non-blocking)
+    // Mark as running
+    if (meta) {
       meta._analysisPending = true;
       meta._lastAnalysisMs = now;
       connectionPersistence.set(connectionId, meta);
-
-      // Run in background - don't await
-      (async () => {
-        try {
-          console.log(`[${connectionId}] Running AI analysis`);
-          const analysis = await analyzeConversation(
-            meta?.plainTranscript || text,
-            prospectType || meta?.prospectType || null,
-            customScriptPrompt || meta?.customScriptPrompt || '',
-            pillarWeights ?? meta?.pillarWeights ?? null
-          );
-          if (analysis) {
-            sendToClient(connectionId, {
-              type: 'analysis_update',
-              data: {
-                ...analysis,
-                hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-                objections: Array.isArray(analysis.objections) ? analysis.objections : []
-              }
-            });
-          }
-        } catch (e) {
-          console.warn(`[WS] AI analysis failed: ${e.message}`);
-        } finally {
-          const m = connectionPersistence.get(connectionId);
-          if (m) {
-            m._analysisPending = false;
-            connectionPersistence.set(connectionId, m);
-          }
-        }
-      })();
     }
+
+    // Run in background - don't await
+    setImmediate(async () => {
+      try {
+        console.log(`[${connectionId.slice(-6)}] Running AI analysis (${transcriptSnapshot.length} chars)`);
+        const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
+        if (analysis) {
+          sendToClient(connectionId, {
+            type: 'analysis_update',
+            data: {
+              ...analysis,
+              hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
+              objections: Array.isArray(analysis.objections) ? analysis.objections : []
+            }
+          });
+        }
+      } catch (e) {
+        console.warn(`[WS] AI analysis failed: ${e.message}`);
+      } finally {
+        const m = connectionPersistence.get(connectionId);
+        if (m) {
+          m._analysisPending = false;
+          connectionPersistence.set(connectionId, m);
+        }
+      }
+    });
   }
 
   // Also run conversation summary updates (independent of analysis pipeline)
@@ -1099,18 +1018,6 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
-  // Legacy path: push transcript into analysis engine via realtimeConnection
-  if (!useRealtime) {
-    let realtimeConnection = realtimeConnections.get(connectionId);
-    if (!realtimeConnection) {
-      console.warn(`[WS] No realtime connection found for ${connectionId}, creating one...`);
-      await startRealtimeListening(connectionId, {});
-      realtimeConnection = realtimeConnections.get(connectionId);
-    }
-    if (realtimeConnection) {
-      await realtimeConnection.sendTranscript(text, prospectType, customScriptPrompt, pillarWeights);
-    }
-  }
 }
 
 async function startRealtimeListening(connectionId, config) {
