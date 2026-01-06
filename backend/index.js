@@ -551,49 +551,87 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
-  // Skip if already running or too soon
-  if (!pending && (now - lastRun) >= THROTTLE_MS) {
-    // Capture current state for the async task
-    const transcriptSnapshot = meta?.plainTranscript || text;
-    const ptSnapshot = prospectType || meta?.prospectType || null;
-    const csSnapshot = customScriptPrompt || meta?.customScriptPrompt || '';
-    const pwSnapshot = pillarWeights ?? meta?.pillarWeights ?? null;
-    
-    // Mark as running with timestamp
-    if (meta) {
-      meta._analysisPending = true;
-      meta._analysisPendingStart = now;
-      meta._lastAnalysisMs = now;
+  // If analysis is currently running or throttled, mark dirty so we run a catch-up pass ASAP.
+  if (meta) {
+    const tooSoon = (now - lastRun) < THROTTLE_MS;
+    if (pending || tooSoon) {
+      meta._analysisDirty = true;
+      meta._analysisDirtyTs = now;
       connectionPersistence.set(connectionId, meta);
     }
+  }
+
+  const startAnalysisRun = (force = false) => {
+    const m0 = connectionPersistence.get(connectionId);
+    if (!m0) return;
+    const now2 = Date.now();
+    const lastRun2 = m0._lastAnalysisMs || 0;
+    const pending2 = m0._analysisPending || false;
+    if (pending2) return;
+    if (!force && (now2 - lastRun2) < THROTTLE_MS) return;
+
+    // Capture current state for the async task (LATEST transcript)
+    const transcriptSnapshot = m0.plainTranscript || text;
+    const ptSnapshot = prospectType || m0.prospectType || null;
+    const csSnapshot = customScriptPrompt || m0.customScriptPrompt || '';
+    const pwSnapshot = pillarWeights ?? m0.pillarWeights ?? null;
+
+    // Sequence guard: ensures stale analysis results can't overwrite newer ones
+    m0._analysisSeq = (m0._analysisSeq || 0) + 1;
+    const seq = m0._analysisSeq;
+
+    // Mark as running with timestamp
+    m0._analysisPending = true;
+    m0._analysisPendingStart = now2;
+    m0._lastAnalysisMs = now2;
+    connectionPersistence.set(connectionId, m0);
 
     // Run in background - don't await
     setImmediate(async () => {
       try {
-        console.log(`[${connectionId.slice(-6)}] Running AI analysis (${transcriptSnapshot.length} chars)`);
+        console.log(`[${connectionId.slice(-6)}] Running AI analysis seq=${seq} (${transcriptSnapshot.length} chars)`);
         const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
-        if (analysis) {
+
+        // Only send if this is still the newest analysis run
+        const mCheck = connectionPersistence.get(connectionId);
+        if (mCheck && mCheck._analysisSeq === seq && analysis) {
           sendToClient(connectionId, {
             type: 'analysis_update',
             data: {
               ...analysis,
+              analysisSeq: seq,
               hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
               objections: Array.isArray(analysis.objections) ? analysis.objections : []
             }
           });
+        } else {
+          console.log(`[${connectionId.slice(-6)}] Dropping stale analysis seq=${seq} (newer seq present)`);
         }
       } catch (e) {
         console.warn(`[WS] AI analysis failed: ${e.message}`);
       } finally {
-        const m = connectionPersistence.get(connectionId);
-        if (m) {
-          m._analysisPending = false;
-          m._analysisPendingStart = 0;
-          connectionPersistence.set(connectionId, m);
+        const m1 = connectionPersistence.get(connectionId);
+        if (m1) {
+          m1._analysisPending = false;
+          m1._analysisPendingStart = 0;
+
+          // If new transcript arrived while we were analyzing, immediately run a catch-up pass.
+          const dirty = !!m1._analysisDirty;
+          m1._analysisDirty = false;
+          m1._analysisDirtyTs = 0;
+          connectionPersistence.set(connectionId, m1);
+
+          if (dirty) {
+            // Force=true so we don't sit behind THROTTLE_MS when we're already behind.
+            setImmediate(() => startAnalysisRun(true));
+          }
         }
       }
     });
-  }
+  };
+
+  // Start analysis if eligible (otherwise dirty flag above will trigger catch-up)
+  startAnalysisRun(false);
 
   // Also run conversation summary updates (independent of analysis pipeline)
   if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
