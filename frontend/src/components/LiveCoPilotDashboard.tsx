@@ -28,6 +28,7 @@ interface AnalysisData {
   hotButtons?: Array<{
     id: number;
     name: string;
+    description?: string;
     quote: string;
     score: number;
     prompt: string;
@@ -62,6 +63,7 @@ export default function LiveCoPilotDashboard() {
   const [hotButtonsHistory, setHotButtonsHistory] = useState<Array<{
     id: number;
     name: string;
+    description?: string;
     quote: string;
     score: number;
     prompt: string;
@@ -662,6 +664,11 @@ export default function LiveCoPilotDashboard() {
                             Score: {hotButton.score?.toFixed(1) || 'N/A'}
                           </div>
                         </div>
+                        {hotButton.description && (
+                          <p className="text-gray-300 text-xs mb-2">
+                            {hotButton.description}
+                          </p>
+                        )}
                         <p className="text-gray-100 text-sm italic font-medium mb-2 line-clamp-3">
                           "{hotButton.quote}"
                         </p>

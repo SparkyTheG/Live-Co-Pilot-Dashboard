@@ -15,6 +15,59 @@
 
 import { runAllAgents } from './aiAgents.js';
 
+// ----------------------------------------------------------------------------
+// Indicator metadata (for UI display)
+// ----------------------------------------------------------------------------
+const INDICATOR_META = {
+  1: { name: 'Pain intensity', description: 'How severe is the prospect’s pain/problem?' },
+  2: { name: 'Pain awareness', description: 'Do they understand the root cause and consequences?' },
+  3: { name: 'Desire clarity', description: 'How specific is what they want instead?' },
+  4: { name: 'Desire priority', description: 'How important is solving this right now?' },
+  5: { name: 'Time pressure', description: 'Is there a real deadline driving urgency?' },
+  6: { name: 'Cost of delay', description: 'What do they lose by waiting longer?' },
+  7: { name: 'Internal timing', description: 'Are they at a breaking point / “can’t keep doing this”?' },
+  8: { name: 'Availability', description: 'Are they ready/able to take action now?' },
+  9: { name: 'Authority', description: 'Are they the decision maker?' },
+  10: { name: 'Decision style', description: 'How quickly do they decide once convinced?' },
+  11: { name: 'Commitment', description: 'How committed are they to a next step?' },
+  12: { name: 'Self-permission', description: 'Do they trust themselves to decide?' },
+  13: { name: 'Resource access', description: 'Do they have access to money/resources?' },
+  14: { name: 'Resource fluidity', description: 'Can they reallocate money if needed?' },
+  15: { name: 'Investment mindset', description: 'Do they view it as investment vs cost?' },
+  16: { name: 'Resourcefulness', description: 'Do they find ways when committed?' },
+  17: { name: 'Problem recognition', description: 'Do they acknowledge their role vs blaming others?' },
+  18: { name: 'Solution ownership', description: 'Are they taking responsibility to change it?' },
+  19: { name: 'Locus of control', description: 'Do they believe they control outcomes?' },
+  20: { name: 'Desire ↔ action alignment', description: 'Do their words match their actions?' },
+  21: { name: 'Price sensitivity', description: 'Are they focused on price/discounts?' },
+  22: { name: 'Value skepticism', description: 'Do they question whether it’s worth it?' },
+  23: { name: 'Comparison shopping', description: 'Are they comparing options to find cheaper/better?' },
+  24: { name: 'Skepticism', description: 'Do they doubt the solution will work?' },
+  25: { name: 'Proof required', description: 'Do they ask for evidence, track record, guarantees?' },
+  26: { name: 'Trust deficit', description: 'Do they hesitate to trust you/process/offer?' },
+  27: { name: 'Outcome fear', description: 'Fear it won’t work for them / risk of failure.' }
+};
+
+function normalizeHotButtons(hotButtonDetails) {
+  const arr = Array.isArray(hotButtonDetails) ? hotButtonDetails : [];
+  return arr
+    .map((hb) => {
+      const idNum = Number(hb?.id);
+      const id = Number.isFinite(idNum) ? idNum : 0;
+      const meta = INDICATOR_META[id] || { name: '', description: '' };
+      return {
+        id,
+        name: String(hb?.name || meta.name || ''),
+        description: String(hb?.description || meta.description || ''),
+        quote: String(hb?.quote || ''),
+        score: Number(hb?.score ?? 0),
+        // Back-compat: agent uses contextualPrompt; frontend expects prompt
+        prompt: String(hb?.prompt || hb?.contextualPrompt || '')
+      };
+    })
+    .filter((hb) => hb.id >= 1 && hb.id <= 27 && (hb.quote || hb.prompt || hb.name));
+}
+
 // Simple in-memory cache to avoid duplicate API calls
 const analysisCache = new Map();
 const CACHE_TTL = 5000; // 5 seconds cache
@@ -212,7 +265,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
 
   const lubometer = computeLubometer(aiAnalysis.indicatorSignals || {}, pillarWeights);
   const truthIndex = computeTruthIndex(aiAnalysis);
-  const hotButtons = Array.isArray(aiAnalysis.hotButtonDetails) ? aiAnalysis.hotButtonDetails : [];
+  const hotButtons = normalizeHotButtons(aiAnalysis.hotButtonDetails);
   const objections = Array.isArray(aiAnalysis.objections) ? aiAnalysis.objections : [];
   const diagnosticQuestions = normalizeDiagnosticQuestions(aiAnalysis);
 
@@ -238,7 +291,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
       penalties: truthIndex.penalties
     },
     pillars: lubometer.pillarScores,
-    hotButtons: Array.isArray(hotButtons) ? hotButtons : [],
+    hotButtons,
     objections: Array.isArray(objections) ? objections : [],
     dials: extractDials(),
     diagnosticQuestions,
