@@ -1180,10 +1180,10 @@ async function startRealtimeListening(connectionId, config) {
     realtimeConnections.set(connectionId, realtimeConnection);
     console.log(`[WS] Realtime connection created for ${connectionId}, total connections: ${realtimeConnections.size}`);
   } catch (error) {
-    console.error('Error starting realtime listening:', error);
+    console.error('Error starting realtime listening:', { message: error?.message || String(error) });
     sendToClient(connectionId, {
       type: 'error',
-      message: `Failed to start listening: ${error.message}`
+      message: `Failed to start listening: ${error?.message || String(error)}`
     });
   }
 }

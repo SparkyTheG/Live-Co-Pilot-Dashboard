@@ -272,6 +272,7 @@ export default function RecordingButton({
 
       // If using ElevenLabs Scribe via backend, stream PCM16@16k mic audio to backend
       if (useScribeRealtime && !useOpenAIWebRTC) {
+        console.log('[ScribeMode] Starting mic stream...');
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: selectedMicId === 'default' ? undefined : { exact: selectedMicId },
@@ -286,6 +287,13 @@ export default function RecordingButton({
         // Create audio context (browser decides sample rate, typically 48k)
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         audioContextRef.current = audioContext;
+        try {
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+        } catch (e) {
+          console.warn('[ScribeMode] audioContext resume failed', e);
+        }
         const source = audioContext.createMediaStreamSource(stream);
 
         // Use ScriptProcessorNode for broad compatibility (deprecated but works).
@@ -343,7 +351,7 @@ export default function RecordingButton({
         setIsRecording(true);
         isRecordingRef.current = true;
         setIsConnecting(false);
-        console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)');
+        console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)', { inSampleRate });
         return;
       }
 
