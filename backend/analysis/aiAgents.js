@@ -379,7 +379,13 @@ Return 2-4 most important triggers. If truly nothing detected, return empty arra
 
   const userPrompt = `Transcript:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 400);
+  const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 400);
+  
+  // #region debug log
+  const logHB={location:'aiAgents.js:380',message:'HotButtons result',data:{transcriptLen:transcript?.length||0,resultKeys:Object.keys(result||{}),hotButtonDetailsCount:result?.hotButtonDetails?.length||0,hasError:!!result?.error,errorMsg:result?.error||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logHB));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logHB)+'\n');}catch(e){}
+  // #endregion
+  
+  return result;
 }
 
 // ============================================================================
@@ -411,7 +417,13 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
 
   const userPrompt = `Detect objections:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
+  const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
+  
+  // #region debug log
+  const logObj={location:'aiAgents.js:422',message:'Objections result',data:{transcriptLen:transcript?.length||0,resultKeys:Object.keys(result||{}),detectedCount:result?.detectedObjections?.length||0,hasError:!!result?.error,errorMsg:result?.error||null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logObj));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logObj)+'\n');}catch(e){}
+  // #endregion
+  
+  return result;
 }
 
 /**
@@ -806,6 +818,10 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const tDiagnostic = String(transcript || '').slice(-800);   // Last ~130 words
   const tTruth = String(transcript || '').slice(-1200);       // Last ~200 words
   const tInsights = String(transcript || '').slice(-1000);    // Last ~165 words
+
+  // #region debug log
+  const logInput={location:'aiAgents.js:810',message:'Agent inputs',data:{fullTranscriptLen:transcript?.length||0,tPillarsLen:tPillars.length,tHotButtonsLen:tHotButtons.length,tHotButtonsPreview:tHotButtons.slice(0,100)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'};console.log('[DEBUG]',JSON.stringify(logInput));try{require('fs').appendFileSync('.cursor/debug.log',JSON.stringify(logInput)+'\n');}catch(e){}
+  // #endregion
 
   // Run all agents in parallel with FAST timeouts (2-4s max)
   // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
