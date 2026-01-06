@@ -292,8 +292,12 @@ export class OpenAIRealtimeWebRTC {
           turn_detection: { type: 'server_vad' },
           // OpenAI Realtime enforces minimum temperature >= 0.6
           temperature: 0.6,
-          // Use OpenAI's transcription stream (not Whisper) to get audio-grounded transcript events.
-          input_audio_transcription: { model: 'gpt-4o-transcribe', language: 'en' },
+          // Use OpenAI's transcription stream to get audio-grounded transcript events.
+          input_audio_transcription: {
+            model: 'gpt-4o-transcribe',
+            language: 'en',
+            prompt: 'This is a real estate sales call. Transcribe exactly what is said, including filler words.'
+          },
           instructions: this.#buildInstructions()
         }
       });
@@ -634,14 +638,19 @@ export class OpenAIRealtimeWebRTC {
       this.currentResponseText = fullText;
     }
 
-    if (
-      t === 'response.done' ||
-      t === 'response.completed' ||
-      t === 'response.text.done' ||
-      t === 'response.output_text.done' ||
-      t === 'response.cancelled'
-    ) {
-      // If we didn't accumulate deltas, attempt to extract text from response output.
+    // Accumulate text from intermediate "done" events but only finalize on response.done
+    if (t === 'response.text.done' || t === 'response.output_text.done') {
+      // Text streaming finished - extract if we don't have accumulated deltas
+      if (!this.currentResponseText || !this.currentResponseText.trim()) {
+        const extracted = extractTextFromResponseDone(msg);
+        if (extracted) this.currentResponseText = extracted;
+      }
+      // Don't process yet - wait for final response.done
+      return;
+    }
+
+    if (t === 'response.done' || t === 'response.completed' || t === 'response.cancelled') {
+      // Final event - extract text if needed
       if (!this.currentResponseText || !this.currentResponseText.trim()) {
         const extracted = extractTextFromResponseDone(msg);
         if (extracted) this.currentResponseText = extracted;
@@ -653,7 +662,7 @@ export class OpenAIRealtimeWebRTC {
         this.onAiAnalysis(this.lastTranscriptForAnalysis || this.lastGoodTranscript || '', parsed);
       }
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished',data:{type:t,parsedOk:!!parsed,textLen:(this.currentResponseText||'').length,preview:String(this.currentResponseText||'').slice(0,220)},timestamp:Date.now(),sessionId:'debug-session',runId:'railway-run1',hypothesisId:'H4'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'openaiRealtimeWebrtc.ts:response.done',message:'response finished (final)',data:{type:t,parsedOk:!!parsed,textLen:(this.currentResponseText||'').length,calledOnAiAnalysis:!!(parsed&&this.onAiAnalysis)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix-v2',hypothesisId:'H6'})}).catch(()=>{});
       // #endregion
       this.currentResponseText = '';
       this.responseInFlight = false;
