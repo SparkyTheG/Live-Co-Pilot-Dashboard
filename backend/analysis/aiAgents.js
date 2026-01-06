@@ -33,7 +33,7 @@ const MODEL = 'gpt-4o-mini';
 
 // Request queue to prevent rate limiting
 let activeRequests = 0;
-const MAX_CONCURRENT = 5; // Max 5 concurrent OpenAI requests to prevent rate limiting
+const MAX_CONCURRENT = 8; // Max 8 concurrent OpenAI requests (balanced for speed + stability)
 const requestQueue = [];
 
 async function throttledRequest(fn) {
@@ -132,70 +132,70 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
  * Weight: 1.5x - MOST IMPORTANT
  */
 async function runP1Agent(transcript) {
-  const systemPrompt = `Score PILLAR 1: PAIN & DESIRE from PROSPECT speech only.
+  const systemPrompt = `Score PILLAR 1: PAIN & DESIRE from prospect statements.
 
 INDICATORS (1-10 scale):
-1. Pain Intensity: 1=no pain mentioned, 5=some concern, 10=desperate/crisis
-2. Pain Awareness: 1=unaware, 5=some understanding, 10=deep clarity on root cause
-3. Desire Clarity: 1=no desire stated, 5=vague wants, 10=specific vivid outcome
-4. Desire Priority: 1=not important, 5=would be nice, 10=must solve now
+1. Pain Intensity: How severe? (1=no pain, 5=moderate concern, 10=crisis)
+2. Pain Awareness: Do they understand root cause? (1=confused, 5=some clarity, 10=crystal clear)
+3. Desire Clarity: How specific? (1=vague, 5=some goals, 10=vivid vision)
+4. Desire Priority: How important? (1=low, 5=moderate, 10=urgent priority)
 
-SCORING RULES:
-- Default to 5 if indicator not mentioned
-- 7-9 only if EXPLICIT strong signal in text
-- 1-4 if opposite signal present
-- Only score what you can EVIDENCE from the text
+WHAT TO LOOK FOR:
+- Pain words: worried, stressed, frustrated, can't, problem, issue, struggling
+- Desire words: want, need, looking for, hope, goal, wish, must have
+- Score 6-8 for clear signals, 4-6 for moderate, 7-10 for strong
 
-Return ONLY: {"1":5,"2":5,"3":5,"4":5}`;
+Return ONLY: {"1":6,"2":5,"3":7,"4":6}`;
 
-  const userPrompt = `Score from prospect speech:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P1-PainDesire', 100);
+  const userPrompt = `Score:\n"${transcript}"`;
+  return await callAI(systemPrompt, userPrompt, 'P1-PainDesire', 150);
 }
 
 /**
  * P2 AGENT: Urgency (indicators 5-8)
  */
 async function runP2Agent(transcript) {
-  const systemPrompt = `Score PILLAR 2: URGENCY from PROSPECT speech only.
+  const systemPrompt = `Score PILLAR 2: URGENCY from prospect speech.
 
 INDICATORS (1-10 scale):
-5. Time Pressure: 1=no deadline, 5=eventually, 10=imminent (auction, days left)
-6. Cost of Delay: 1=no cost, 5=some losses, 10=hemorrhaging money/opportunity
-7. Internal Timing: 1=no urgency, 5=considering change, 10=hit breaking point
-8. Availability: 1=too busy, 5=could make time, 10=ready to act now
+5. Time Pressure: Real deadlines? (1=none, 5=flexible, 10=imminent like auction)
+6. Cost of Delay: Losses from waiting? (1=none, 5=some, 10=major losses)
+7. Internal Timing: Hit breaking point? (1=no, 5=considering, 10=can't continue)
+8. Availability: Ready to act? (1=too busy, 5=could, 10=ready now)
 
-SCORING RULES:
-- Default to 5 if not mentioned
-- 7-9 only with EXPLICIT urgency signals
-- Look for: auction, deadline, days left, can't wait, losing money
+WHAT TO LOOK FOR:
+- Deadlines: auction, foreclosure, expires, days left, running out
+- Costs: losing money, wasting time, opportunity cost
+- Breaking point: had enough, can't anymore, need change now
+- Score 6-8 for clear signals
 
-Return ONLY: {"5":5,"6":5,"7":5,"8":5}`;
+Return ONLY: {"5":6,"6":5,"7":7,"8":6}`;
 
-  const userPrompt = `Score from prospect speech:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P2-Urgency', 100);
+  const userPrompt = `Score:\n"${transcript}"`;
+  return await callAI(systemPrompt, userPrompt, 'P2-Urgency', 150);
 }
 
 /**
  * P3 AGENT: Decisiveness (indicators 9-12)
  */
 async function runP3Agent(transcript) {
-  const systemPrompt = `Score PILLAR 3: DECISIVENESS from PROSPECT speech only.
+  const systemPrompt = `Score PILLAR 3: DECISIVENESS from prospect speech.
 
 INDICATORS (1-10 scale):
-9. Authority: 1=needs many approvals, 5=shared decision, 10="I decide alone"
-10. Decision Style: 1=very analytical/slow, 5=normal, 10=fast/intuitive
-11. Commitment: 1=wants to wait indefinitely, 5=considering, 10=ready now
-12. Self-Permission: 1=overthinks, 5=normal, 10=trusts gut
+9. Authority: Decision maker? (1=many approvals needed, 5=shared, 10=sole decision)
+10. Decision Style: How fast? (1=very slow, 5=normal, 10=fast/intuitive)
+11. Commitment: Ready now? (1=wait indefinitely, 5=considering, 10=ready today)
+12. Self-Permission: Trust self? (1=overthinks, 5=normal, 10=confident)
 
-SCORING RULES:
-- Default to 5 if not mentioned
-- Score LOW (2-4) if: "need to ask spouse", "think about it", "not sure"
-- Score HIGH (7-9) if: "I decide", "let's do it", "ready now"
+WHAT TO LOOK FOR:
+- Authority: "I decide", "my choice" vs "ask spouse", "need approval"
+- Speed: "let's do it", "ready now" vs "think about it", "research more"
+- Score 3-5 for hesitation, 6-8 for confidence
 
-Return ONLY: {"9":5,"10":5,"11":5,"12":5}`;
+Return ONLY: {"9":6,"10":5,"11":7,"12":6}`;
 
-  const userPrompt = `Score from prospect speech:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P3-Decisiveness', 100);
+  const userPrompt = `Score:\n"${transcript}"`;
+  return await callAI(systemPrompt, userPrompt, 'P3-Decisiveness', 150);
 }
 
 /**
@@ -357,30 +357,29 @@ export async function runAllPillarAgents(transcript) {
 // Output: hotButtonDetails (emotional triggers with quotes)
 // ============================================================================
 export async function runHotButtonsAgent(transcript) {
-  const systemPrompt = `You analyze sales conversations to find emotional triggers from the PROSPECT (not the salesperson).
+  const systemPrompt = `Find emotional triggers from PROSPECT speech in this sales conversation.
 
-ONLY detect triggers if the prospect EXPLICITLY says something emotional. Do NOT invent triggers.
+INDICATOR IDS (choose most relevant):
+1-4: Pain/Desire (worried, stressed, frustrated, want, need, hope, looking for)
+5-8: Urgency (deadline, auction, soon, running out, can't wait, now)
+9-12: Decisiveness (I decide, ready, let's do it, committed)
+13-16: Money (afford, budget, expensive, cost, investment, financing)
+17-20: Responsibility (my fault, I should, need to fix, responsible for)
+21-23: Price Sensitivity (too much, cheaper, discount, better deal)
+24-27: Trust (not sure, skeptical, prove it, guarantee, really work)
 
-INDICATOR IDS:
-1-4: Pain/Desire (worried, stressed, want, need, hope)
-5-8: Urgency (deadline, auction, days left, can't wait, running out of time)
-9-12: Decisiveness (I decide, ready now, let's do it)
-13-16: Money (afford, budget, expensive, investment)
-17-20: Responsibility (my fault, I should have, I need to fix)
-21-23: Price Sensitivity (too much, cheaper, discount)
-24-27: Trust (not sure, skeptical, prove it, guarantee)
+OUTPUT per trigger:
+- id: indicator number 1-27
+- quote: Extract meaningful phrase from transcript (3-15 words, can paraphrase slightly)
+- contextualPrompt: Follow-up question (8 words max)
+- score: 5-9 (5=mild, 7=clear, 9=intense)
 
-RULES:
-- Only include triggers with EXACT QUOTES from the transcript
-- quote must be word-for-word from the text (3-12 words)
-- If no clear emotional triggers, return empty array
-- Score 7-9 for strong emotions, 4-6 for mild concerns
-
-Return: {"hotButtonDetails":[{"id":1,"quote":"exact words here","contextualPrompt":"follow-up question?","score":7}]}`;
+Return: {"hotButtonDetails":[{"id":1,"quote":"prospect's concern here","contextualPrompt":"What worries you?","score":7}]}
+Return 2-4 most important triggers. If truly nothing detected, return empty array.`;
 
   const userPrompt = `Transcript:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 300);
+  return await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 400);
 }
 
 // ============================================================================
@@ -392,25 +391,23 @@ Return: {"hotButtonDetails":[{"id":1,"quote":"exact words here","contextualPromp
  * Output: detectedObjections [{objectionText, probability}]
  */
 export async function runObjectionDetectionAgent(transcript) {
-  const systemPrompt = `Detect CLEAR objections from the PROSPECT in a sales conversation.
+  const systemPrompt = `Detect prospect objections, concerns, or hesitations in this sales conversation.
 
-ONLY flag as objection if prospect EXPLICITLY expresses concern, hesitation, or pushback.
-
-OBJECTION TYPES:
-- Price: "too expensive", "can't afford", "out of my budget"
-- Timing: "need to think", "not ready", "maybe later", "give me time"
-- Trust: "not sure about this", "sounds too good", "how do I know"
-- Authority: "ask my spouse", "need to talk to partner", "not my decision alone"
-- Competition: "shopping around", "other options", "another company"
+OBJECTION PATTERNS:
+- Price: expensive, cost, afford, money, budget, too much, cheaper
+- Timing: think about it, wait, later, not ready, need time, maybe
+- Trust: not sure, skeptical, guarantee, proof, really work, sounds too good
+- Authority: ask spouse/partner, need to talk to, not my decision
+- Competition: other options, shopping around, comparing, another company
+- Fear: worried, nervous, what if, concerned, scared
 
 RULES:
-- objectionText must be EXACT or near-exact quote from prospect
-- Do NOT detect objections from salesperson questions
-- If prospect is just asking questions (not objecting), don't flag it
-- If no clear objections, return empty array
-- Probability 0.7-0.9 for clear objections, 0.5-0.7 for hesitations
+- objectionText should capture the concern (can paraphrase if needed, 5-20 words)
+- Include hesitations and concerns, not just direct objections
+- Probability: 0.8-0.95 for clear objections, 0.65-0.8 for hesitations
+- Return 1-3 most important objections
 
-Return: {"detectedObjections":[{"objectionText":"exact quote","probability":0.8}]}`;
+Return: {"detectedObjections":[{"objectionText":"prospect concern here","probability":0.85}]}`;
 
   const userPrompt = `Detect objections:\n"${transcript}"`;
 
@@ -802,13 +799,13 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
 
-  // Token control: MINIMAL windows for speed (only recent context matters)
-  const tPillars = String(transcript || '').slice(-600);      // Only last ~100 words
-  const tHotButtons = String(transcript || '').slice(-500);   // Only last ~80 words
-  const tObjections = String(transcript || '').slice(-600);   // Only last ~100 words
-  const tDiagnostic = String(transcript || '').slice(-400);   // Only last ~70 words
-  const tTruth = String(transcript || '').slice(-800);        // Only last ~130 words
-  const tInsights = String(transcript || '').slice(-500);     // Only last ~80 words
+  // Token control: Balanced windows for accuracy (need enough context)
+  const tPillars = String(transcript || '').slice(-1200);     // Last ~200 words
+  const tHotButtons = String(transcript || '').slice(-1000);  // Last ~165 words
+  const tObjections = String(transcript || '').slice(-1200);  // Last ~200 words
+  const tDiagnostic = String(transcript || '').slice(-800);   // Last ~130 words
+  const tTruth = String(transcript || '').slice(-1200);       // Last ~200 words
+  const tInsights = String(transcript || '').slice(-1000);    // Last ~165 words
 
   // Run all agents in parallel with FAST timeouts (2-4s max)
   // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
