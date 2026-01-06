@@ -981,74 +981,53 @@ async function handleIncomingTextChunk(connectionId, {
     }
   }
 
-  // When NOT using realtime, run the 15 AI agents with THROTTLING to prevent rate limits
+  // When NOT using realtime, run the 15 AI agents with simple throttling
   if (!useRealtime) {
-    // Initialize throttle state if not present
-    if (!meta._analysisThrottle) {
-      meta._analysisThrottle = {
-        lastRunMs: 0,
-        pending: false,
-        debounceTimer: null
-      };
-      connectionPersistence.set(connectionId, meta);
-    }
-
-    const THROTTLE_MS = 3000; // Min 3 seconds between analyses
-    const DEBOUNCE_MS = 800;  // Wait 800ms after last chunk before analyzing
+    const THROTTLE_MS = 4000; // Min 4 seconds between analyses
     const now = Date.now();
-    const throttle = meta._analysisThrottle;
+    const lastRun = meta._lastAnalysisMs || 0;
+    const pending = meta._analysisPending || false;
 
-    // Clear any pending debounce timer
-    if (throttle.debounceTimer) {
-      clearTimeout(throttle.debounceTimer);
-    }
-
-    // If an analysis is already running, skip
-    if (throttle.pending) {
-      console.log(`[${connectionId}] Analysis already in progress, skipping`);
-      return;
-    }
-
-    // Debounce: wait for speech to pause before running analysis
-    throttle.debounceTimer = setTimeout(async () => {
-      // Check throttle: don't run too frequently
-      const elapsed = Date.now() - throttle.lastRunMs;
-      if (elapsed < THROTTLE_MS) {
-        console.log(`[${connectionId}] Throttled: only ${elapsed}ms since last analysis`);
-        return;
-      }
-
-      throttle.pending = true;
-      throttle.lastRunMs = Date.now();
+    // Skip if already running or too soon
+    if (pending || (now - lastRun) < THROTTLE_MS) {
+      // Don't block - just skip this analysis cycle
+    } else {
+      // Mark as running and run analysis in background (non-blocking)
+      meta._analysisPending = true;
+      meta._lastAnalysisMs = now;
       connectionPersistence.set(connectionId, meta);
 
-      try {
-        console.log(`[${connectionId}] Running 15 AI agents analysis (throttled)`);
-        const analysis = await analyzeConversation(
-          meta?.plainTranscript || text,
-          prospectType || meta?.prospectType || null,
-          customScriptPrompt || meta?.customScriptPrompt || '',
-          pillarWeights ?? meta?.pillarWeights ?? null
-        );
-        if (analysis) {
-          sendToClient(connectionId, {
-            type: 'analysis_update',
-            data: {
-              ...analysis,
-              hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-              objections: Array.isArray(analysis.objections) ? analysis.objections : []
-            }
-          });
+      // Run in background - don't await
+      (async () => {
+        try {
+          console.log(`[${connectionId}] Running AI analysis`);
+          const analysis = await analyzeConversation(
+            meta?.plainTranscript || text,
+            prospectType || meta?.prospectType || null,
+            customScriptPrompt || meta?.customScriptPrompt || '',
+            pillarWeights ?? meta?.pillarWeights ?? null
+          );
+          if (analysis) {
+            sendToClient(connectionId, {
+              type: 'analysis_update',
+              data: {
+                ...analysis,
+                hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
+                objections: Array.isArray(analysis.objections) ? analysis.objections : []
+              }
+            });
+          }
+        } catch (e) {
+          console.warn(`[WS] AI analysis failed: ${e.message}`);
+        } finally {
+          const m = connectionPersistence.get(connectionId);
+          if (m) {
+            m._analysisPending = false;
+            connectionPersistence.set(connectionId, m);
+          }
         }
-      } catch (e) {
-        console.warn(`[WS] 15 agents analysis failed: ${e.message}`);
-      } finally {
-        throttle.pending = false;
-        connectionPersistence.set(connectionId, meta);
-      }
-    }, DEBOUNCE_MS);
-
-    connectionPersistence.set(connectionId, meta);
+      })();
+    }
   }
 
   // Also run conversation summary updates (independent of analysis pipeline)

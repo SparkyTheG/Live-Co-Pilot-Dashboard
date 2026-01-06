@@ -49,8 +49,8 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
     ? { maxTokens: maxTokensOrOptions }
     : (maxTokensOrOptions || {});
 
-  const maxTokens = Number(opts.maxTokens ?? 400);    // Reduced from 800
-  const timeoutMs = Number(opts.timeoutMs ?? 6000);   // Reduced from 12000
+  const maxTokens = Number(opts.maxTokens ?? 200);    // Small focused outputs
+  const timeoutMs = Number(opts.timeoutMs ?? 4000);   // Fast 4s timeout
 
   const doCall = async () => {
     const baseReq = {
@@ -358,11 +358,12 @@ OUTPUT per trigger:
 - contextualPrompt: follow-up question (10 words max)
 - score: intensity 1-10
 
-Return: {"hotButtonDetails":[{"id":1,"quote":"I'm really worried","contextualPrompt":"What worries you most?","score":8}]}`;
+Return: {"hotButtonDetails":[{"id":1,"quote":"I'm really worried","contextualPrompt":"What worries you most?","score":8}]}
+Return max 3 most important triggers.`;
 
   const userPrompt = `Find emotional triggers:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 800);
+  return await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 300);
 }
 
 // ============================================================================
@@ -384,11 +385,11 @@ Authority: ask spouse/partner/boss, not my decision
 Fear: scared, worried, what if, concerned, nervous
 
 Return: {"detectedObjections":[{"objectionText":"I need to think about it","probability":0.85}]}
-Probability: 0.65-0.95 based on how explicit the objection is.`;
+Return max 2 most important objections. Probability: 0.65-0.95.`;
 
   const userPrompt = `Detect objections:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 400);
+  return await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
 }
 
 /**
@@ -418,7 +419,7 @@ Return: {"fears":[{"objectionIndex":0,"fear":"Fear of making a financial mistake
 
   const userPrompt = `Identify underlying fears:\n${objectionsList}`;
 
-  return await callAI(systemPrompt, userPrompt, 'FearAgent', 400);
+  return await callAI(systemPrompt, userPrompt, 'FearAgent', 150);
 }
 
 /**
@@ -448,7 +449,7 @@ Return: {"whispers":[{"objectionIndex":0,"whisper":"They need to see immediate v
 
   const userPrompt = `Generate whisper insights:\n${objectionsList}`;
 
-  return await callAI(systemPrompt, userPrompt, 'WhisperAgent', 400);
+  return await callAI(systemPrompt, userPrompt, 'WhisperAgent', 150);
 }
 
 /**
@@ -476,11 +477,11 @@ FORMAT:
 2. Acknowledge concern genuinely
 3. Provide value/next step
 
-Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"I understand you want to think about it. What specific questions can I answer to help you feel confident?"}]}`;
+Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"I understand. What specific questions can I answer?"}]}`;
 
   const userPrompt = `Generate rebuttals:\n${objectionsList}`;
 
-  return await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 600);
+  return await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 250);
 }
 
 /**
@@ -702,7 +703,7 @@ Return: {"summary":"...","keyMotivators":["..."],"concerns":["..."],"recommendat
 
   const userPrompt = `${prospectType} prospect:\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'InsightsAgent', 400);
+  return await callAI(systemPrompt, userPrompt, 'InsightsAgent', 200);
 }
 
 // ============================================================================
@@ -776,24 +777,24 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
 
-  // Token control: smaller windows for faster responses
-  const tPillars = String(transcript || '').slice(-1500);     // Reduced from 2500
-  const tHotButtons = String(transcript || '').slice(-1000);  // Reduced from 1600
-  const tObjections = String(transcript || '').slice(-1200);  // Reduced from 1800
-  const tDiagnostic = String(transcript || '').slice(-800);   // Reduced from 1400
-  const tTruth = String(transcript || '').slice(-2000);       // Reduced from 3500
-  const tInsights = String(transcript || '').slice(-1200);    // Reduced from 2200
+  // Token control: MINIMAL windows for speed (only recent context matters)
+  const tPillars = String(transcript || '').slice(-600);      // Only last ~100 words
+  const tHotButtons = String(transcript || '').slice(-500);   // Only last ~80 words
+  const tObjections = String(transcript || '').slice(-600);   // Only last ~100 words
+  const tDiagnostic = String(transcript || '').slice(-400);   // Only last ~70 words
+  const tTruth = String(transcript || '').slice(-800);        // Only last ~130 words
+  const tInsights = String(transcript || '').slice(-500);     // Only last ~80 words
 
-  // Run all agents in parallel with tighter timeouts (5-8s instead of 9-14s)
+  // Run all agents in parallel with FAST timeouts (3-5s max)
   // Note: runAllPillarAgents internally runs 7 agents in parallel
   // Note: runObjectionsAgents internally runs 4 objection agents (1 sequential + 3 parallel)
   const tasks = [
-    withTimeout(runAllPillarAgents(tPillars), 8000, { indicatorSignals: {}, pillarErrors: {} }),
-    withTimeout(runHotButtonsAgent(tHotButtons), 5000, { hotButtonDetails: [] }),
-    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 7000, { objections: [] }),
-    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 4000, { askedQuestions: [] }),
-    withTimeout(runTruthIndexAgent(tTruth), 5000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
-    withTimeout(runInsightsAgent(tInsights, prospectType), 5000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
+    withTimeout(runAllPillarAgents(tPillars), 5000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runHotButtonsAgent(tHotButtons), 3000, { hotButtonDetails: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 4000, { objections: [] }),
+    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 3000, { askedQuestions: [] }),
+    withTimeout(runTruthIndexAgent(tTruth), 3000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    withTimeout(runInsightsAgent(tInsights, prospectType), 3000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
   ];
 
   const settled = await Promise.allSettled(tasks);
