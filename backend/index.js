@@ -362,6 +362,9 @@ wss.on('connection', (ws, req) => {
           }
         }
       } else if (data.type === 'stop_listening') {
+        // #region debug log H1,H3
+        try{require('fs').appendFileSync('/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log',JSON.stringify({location:'index.js:364',message:'Received stop_listening from client',data:{connectionId:connectionId.slice(-6)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3'})+'\n');}catch(e){}
+        // #endregion
         // Stop listening
         stopListening(connectionId);
         // Mark session ended and generate final summary

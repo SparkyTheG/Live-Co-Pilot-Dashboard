@@ -78,6 +78,9 @@ class ElevenLabsScribeRealtime {
       this.connected = false;
       const reasonStr = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason || '');
       console.log('[S3] ElevenLabs Scribe WS closed', { code, reason: reasonStr.slice(0, 200) });
+      // #region debug log H5
+      try{require('fs').appendFileSync('/home/sparky/Documents/github-realestste-demo-main/.cursor/debug.log',JSON.stringify({location:'listener.js:76',message:'Scribe WS closed',data:{code,reason:reasonStr.slice(0,200),closed:this.closed},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})+'\n');}catch(e){}
+      // #endregion
       this.ws = null;
     });
     this.ws.on('error', (err) => {

@@ -81,8 +81,14 @@ export default function RecordingButton({
 
   useEffect(() => {
     console.log('[RecordingButton] mounted');
+    // #region debug log H4
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:83',message:'Component mounted',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     return () => {
       console.log('[RecordingButton] unmount cleanup -> stopRecording()');
+      // #region debug log H4
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:85',message:'Component unmounting - cleanup triggered',data:{wasRecording:isRecordingRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
       // Cleanup on unmount
       stopRecording();
       if (wsRef.current) {
@@ -163,6 +169,9 @@ export default function RecordingButton({
 
       ws.setOnError((err) => {
         console.error('WebSocket error:', err);
+        // #region debug log H3
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:170',message:'WebSocket error occurred',data:{error:String(err),isRecording:isRecordingRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
         // Do NOT stop recording on transient WS errors (Railway can drop idle sockets).
         // Keep transcription running; websocket.ts will attempt reconnect automatically.
         setError('WebSocket connection error — reconnecting…');
@@ -170,6 +179,9 @@ export default function RecordingButton({
       });
 
       ws.setOnDisconnect(() => {
+        // #region debug log H3
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:178',message:'WebSocket disconnected',data:{isRecording:isRecordingRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
         // If we're recording, treat disconnect as transient and wait for auto-reconnect
         if (isRecordingRef.current) {
           setError('WebSocket disconnected — reconnecting…');
@@ -291,10 +303,17 @@ export default function RecordingButton({
         source.connect(processor);
         processor.connect(audioContext.destination);
 
+        // #region debug log H2
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:291',message:'Audio pipeline connected',data:{audioContextState:audioContext.state,inSampleRate,numberOfInputs:processor.numberOfInputs,numberOfOutputs:processor.numberOfOutputs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
+
         setIsRecording(true);
         isRecordingRef.current = true;
         setIsConnecting(false);
         console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)', { inSampleRate });
+        // #region debug log H2,H5
+        fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:297',message:'Recording started successfully',data:{isRecording:true,wsConnected:wsRef.current?.isConnected()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H5'})}).catch(()=>{});
+        // #endregion
         return;
       }
 
@@ -389,6 +408,9 @@ export default function RecordingButton({
   const stopRecording = () => {
     const stack = String(new Error('stopRecording called').stack || '');
     console.log('🛑 Frontend: Stopping recording...\n' + stack);
+    // #region debug log H1,H2
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:389',message:'stopRecording called',data:{stack:stack.split('\n').slice(0,5).join(';'),audioContextState:audioContextRef.current?.state,processorConnected:!!processorRef.current,wsConnected:wsRef.current?.isConnected()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
 
     // CRITICAL: Update ref FIRST to prevent restart loops
     isRecordingRef.current = false;
@@ -463,20 +485,27 @@ export default function RecordingButton({
     })();
 
     console.log('[RecordingButton] mic toggle', { isRecording, isTrusted, detail, pointerType, key, activeEl });
+    // #region debug log H1,H4
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:465',message:'handleToggle called',data:{isRecording,isTrusted,detail,pointerType,key,activeEl},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H4'})}).catch(()=>{});
+    // #endregion
 
     // Guard: ignore programmatic clicks (we only want explicit user interaction)
-    if (isTrusted === false) return;
-
-    // Guard: prevent accidental single-click stop (we've seen spurious click events in prod).
-    // To stop while recording: double-click the mic button.
-    if (isRecording && typeof detail === 'number' && detail < 2) {
-      console.log('[RecordingButton] ignoring single-click stop (double-click to stop)');
+    if (isTrusted === false) {
+      // #region debug log H1
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:470',message:'Blocked untrusted click',data:{isTrusted},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       return;
     }
 
     if (isRecording) {
+      // #region debug log H1
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:476',message:'User click -> stopRecording',data:{detail},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       stopRecording();
     } else {
+      // #region debug log H1
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RecordingButton.tsx:481',message:'User click -> startRecording',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       startRecording();
     }
   };
