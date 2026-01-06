@@ -25,11 +25,30 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 10000, // Reduced from 25s to 10s for faster failures
-  maxRetries: 1   // Reduced from 2 to 1 for faster response
+  timeout: 8000,  // 8s timeout for faster failure detection
+  maxRetries: 0   // No retries - fail fast to prevent freezing
 });
 
 const MODEL = 'gpt-4o-mini';
+
+// Request queue to prevent rate limiting
+let activeRequests = 0;
+const MAX_CONCURRENT = 5; // Max 5 concurrent OpenAI requests to prevent rate limiting
+const requestQueue = [];
+
+async function throttledRequest(fn) {
+  // Wait in queue if too many active requests
+  while (activeRequests >= MAX_CONCURRENT) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  
+  activeRequests++;
+  try {
+    return await fn();
+  } finally {
+    activeRequests--;
+  }
+}
 
 function withTimeout(promise, ms, fallback) {
   return Promise.race([
@@ -89,8 +108,9 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   };
 
   try {
+    // Throttle to prevent rate limiting (max 5 concurrent)
     const result = await withTimeout(
-      doCall(),
+      throttledRequest(() => doCall()),
       timeoutMs,
       { error: `timeout after ${timeoutMs}ms` }
     );
@@ -790,13 +810,13 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const tTruth = String(transcript || '').slice(-800);        // Only last ~130 words
   const tInsights = String(transcript || '').slice(-500);     // Only last ~80 words
 
-  // Run all agents in parallel with FAST timeouts (3-5s max)
-  // Note: runAllPillarAgents internally runs 7 agents in parallel
-  // Note: runObjectionsAgents internally runs 4 objection agents (1 sequential + 3 parallel)
+  // Run all agents in parallel with FAST timeouts (2-4s max)
+  // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
+  // Note: runObjectionsAgents internally runs 4 objection agents (throttled)
   const tasks = [
-    withTimeout(runAllPillarAgents(tPillars), 5000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runAllPillarAgents(tPillars), 6000, { indicatorSignals: {}, pillarErrors: {} }),
     withTimeout(runHotButtonsAgent(tHotButtons), 3000, { hotButtonDetails: [] }),
-    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 4000, { objections: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 5000, { objections: [] }),
     withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 3000, { askedQuestions: [] }),
     withTimeout(runTruthIndexAgent(tTruth), 3000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
     withTimeout(runInsightsAgent(tInsights, prospectType), 3000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })

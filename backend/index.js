@@ -901,8 +901,8 @@ async function handleIncomingTextChunk(connectionId, {
   });
 
   // Run the 15 AI agents with throttling + stuck detection
-  const THROTTLE_MS = 5000; // Min 5 seconds between analyses
-  const MAX_PENDING_MS = 20000; // Force-clear pending after 20s (stuck detection)
+  const THROTTLE_MS = 3000; // Min 3 seconds between analyses for faster updates
+  const MAX_PENDING_MS = 15000; // Force-clear pending after 15s (stuck detection)
   const now = Date.now();
   const lastRun = meta?._lastAnalysisMs || 0;
   const pendingStartMs = meta?._analysisPendingStart || 0;
