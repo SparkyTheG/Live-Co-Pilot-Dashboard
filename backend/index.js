@@ -5,10 +5,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import { createRealtimeConnection } from './realtime/listener.js';
-import { analyzeConversation, analyzeConversationFromAiAnalysis } from './analysis/engine.js';
+import { analyzeConversation } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
 import { runSpeakerDetectionAgent, runConversationSummaryAgent } from './analysis/aiAgents.js';
-import { RealtimeAnalysisSession } from './realtime/realtimeAnalysis.js';
 
 dotenv.config();
 
@@ -150,8 +149,6 @@ const wss = new WebSocketServer({
 const connections = new Map();
 // Store per-connection persistence metadata
 const connectionPersistence = new Map(); // connectionId -> { authToken, sessionId, userId, userEmail, lastTranscriptPersistMs, conversationHistory, lastSummaryMs, summaryId }
-// Optional: OpenAI Realtime analysis sessions (single-session "Option B")
-const realtimeAnalysisSessions = new Map(); // connectionId -> RealtimeAnalysisSession
 
 // Ping all connections every 10 seconds to keep them alive (Railway proxy times out idle connections)
 const PING_INTERVAL = 10000;
@@ -229,9 +226,7 @@ wss.on('connection', (ws, req) => {
     pillarWeights: null,
     // Plain transcript (no labels) for deterministic calculations
     plainTranscript: '',
-    // Option B: use OpenAI Realtime single-session analysis
-    useRealtimeAnalysis: false,
-    // Client mode: backend_transcribe (default) or openai_webrtc (frontend streams direct to OpenAI)
+    // Client mode: backend_transcribe (default) or websocket_transcribe (frontend sends text)
     clientMode: 'backend_transcribe'
   });
 
@@ -268,14 +263,10 @@ wss.on('connection', (ws, req) => {
           meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
           meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
           meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
-          // DISABLED: OpenAI Realtime API is expensive. Using 15 GPT-4o mini agents instead.
-          // The 15 agents run in parallel via analyzeConversation() in onTranscript callback.
-          meta.useRealtimeAnalysis = false;
           connectionPersistence.set(connectionId, meta);
 
           // Runtime evidence in Railway logs (no secrets)
           console.log('[A1] start_listening env check', {
-            useRealtimeAnalysis: meta.useRealtimeAnalysis,
             hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
             hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
             hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL),
@@ -288,128 +279,7 @@ wss.on('connection', (ws, req) => {
             prospectType: meta.prospectType || '(none)'
           });
 
-          // #region agent log
-          dbg('A1', 'backend/index.js:start_listening', 'Realtime analysis enabled?', {
-            useRealtimeAnalysis: meta.useRealtimeAnalysis,
-            hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
-            hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
-            hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL)
-          });
-          // #endregion
-
-          if (meta.useRealtimeAnalysis && process.env.OPENAI_API_KEY) {
-            if (!realtimeAnalysisSessions.get(connectionId)) {
-              const instructions = `You are a REAL-TIME sales call analyzer. Output ONLY valid JSON.
-
-CONTEXT: Analyzing calls between CLOSER (salesperson) and PROSPECT (potential customer).
-- The CUSTOM_SCRIPT_PROMPT (if provided) describes the business/product being sold - USE THIS to tailor rebuttal scripts.
-- Example: If CUSTOM_SCRIPT_PROMPT says "we are a CRM company", rebuttals should reference CRM benefits.
-
-SPEAKER DETECTION:
-- CLOSER: The salesperson asking questions, presenting offers, handling objections
-- PROSPECT: The potential customer responding, raising concerns, expressing interest or objections
-
-===== 27 INDICATORS (score 1-10, higher=stronger signal) =====
-P1-PAIN/DESIRE GAP:
-1-Pain Intensity: How much distress about current situation? (stress, frustration, urgency in voice)
-2-Pain Awareness: Do they recognize their problem? ("I know I need to...", "The issue is...")
-3-Desire Clarity: Clear vision of what they want? ("I want to...", specific goals)
-4-Desire Priority: How important is solving this? ("This is my top priority", "I need this now")
-
-P2-URGENCY:
-5-Time Pressure: External deadlines? ("I need to sell by...", "The bank is...")
-6-Cost of Delay: Aware of consequences? ("Every month costs me...", "I'm losing...")
-7-Internal Timing: Personal readiness? ("I'm ready to move forward", "Now is the time")
-8-Environmental Availability: Time/resources to act? ("I have time this week", "I can meet")
-
-P3-DECISIVENESS:
-9-Decision Authority: Can they decide alone? ("I make the decisions", "I need to check with...")
-10-Decision Style: Quick or slow decider? (asks for details vs. ready to commit)
-11-Commitment to Decide: Will they actually decide? ("I will decide by...", "Let me think...")
-12-Self-Permission: Allow themselves to act? ("I deserve this", "I should do this")
-
-P4-MONEY AVAILABILITY:
-13-Resource Access: Do they have funds? ("I have savings", "Money isn't the issue")
-14-Resource Fluidity: Can they access it? ("It's liquid", "I'd need to...")
-15-Investment Mindset: See it as investment? ("It's worth it", "ROI", "value")
-16-Resourcefulness: Can find money if needed? ("I'll figure it out", "I can borrow")
-
-P5-OWNERSHIP:
-17-Problem Recognition: Own their problem? ("It's my fault", "I created this")
-18-Solution Ownership: Own fixing it? ("I need to fix this", "It's on me")
-19-Locus of Control: Feel in control? ("I can change this", "It's up to me")
-20-Action Integrity: Actions match words? (doing what they say)
-
-P6-PRICE SENSITIVITY (REVERSE - high score = LESS price sensitive):
-21-Emotional Response to Price: Calm about costs? (not shocked, accepting)
-22-Negotiation Reflex: Don't immediately haggle? (accepts pricing)
-23-Structural Rigidity: Flexible on terms? (open to options)
-
-P7-TRUST:
-24-ROI Belief: Trust it will work? ("I believe this will help")
-25-External Trust: Trust the closer/company? ("I trust you", "You seem honest")
-26-Internal Trust: Trust themselves to succeed? ("I can do this")
-27-Risk Tolerance: Comfortable with uncertainty? ("I'm okay with risk")
-
-===== HOT BUTTONS (PROSPECT ONLY) =====
-IMPORTANT: Only detect hot buttons from what the PROSPECT says, NOT the closer!
-Hot buttons are emotional triggers the prospect reveals:
-- Family concerns, health issues, financial stress, time pressure, frustration, dreams/goals
-- Quote MUST be exact words the PROSPECT said
-- Score 1-10 based on emotional intensity
-- These help the closer understand what motivates the prospect
-
-===== OBJECTIONS (PROSPECT ONLY) =====
-IMPORTANT: Only detect objections from what the PROSPECT says, NOT the closer!
-Common objection patterns from prospects:
-- PRICE: "too expensive", "can't afford", "need to think about cost"
-- TIMING: "not the right time", "maybe later", "need more time"
-- TRUST: "how do I know", "sounds too good", "what's the catch"
-- AUTHORITY: "need to talk to spouse/partner", "not my decision alone"
-- NEED: "not sure I need this", "might not be necessary"
-
-For each objection provide:
-- fear: the underlying worry driving this objection
-- whisper: what they secretly want to hear
-- rebuttalScript: A response the closer can use. USE THE CUSTOM_SCRIPT_PROMPT context if provided to tailor the rebuttal to the specific business/product being sold.
-
-===== TRUTH INDEX SIGNALS =====
-- coherenceSignals: List any contradictions, hesitations, deflections, or confidence markers
-- overallCoherence: "high" (consistent, confident), "medium" (some hesitation), "low" (contradictory, evasive)
-
-OUTPUT JSON (no markdown, no explanations):
-{
-  "speaker": "closer|prospect|unknown",
-  "indicatorSignals": {"1":7,"2":6,...}, 
-  "hotButtonDetails": [{"id":5,"quote":"exact PROSPECT words","contextualPrompt":"follow-up question for closer to ask","score":8}],
-  "objections": [{"objectionText":"what PROSPECT said","probability":0.8,"fear":"prospect's underlying fear","whisper":"what prospect wants to hear","rebuttalScript":"response using CUSTOM_SCRIPT_PROMPT context"}],
-  "askedQuestions": [1,5,12],
-  "detectedRules": [{"ruleId":"T1","evidence":"quote","confidence":0.8}],
-  "coherenceSignals": ["signal1","signal2"],
-  "overallCoherence": "high|medium|low",
-  "insights": {"summary":"brief summary","keyMotivators":["motivator1"],"concerns":["concern1"],"recommendation":"next step","closingReadiness":"ready|almost|not_ready"}
-}
-
-CRITICAL RULES:
-1. Score indicators based on ACTUAL evidence in conversation. Be generous when there's any signal.
-2. Hot buttons and objections are ONLY from PROSPECT speech - never from what the CLOSER says.
-3. Rebuttal scripts should incorporate CUSTOM_SCRIPT_PROMPT context to be relevant to the specific product/service.`;
-
-              const session = new RealtimeAnalysisSession({
-                apiKey: process.env.OPENAI_API_KEY,
-                model: process.env.OPENAI_REALTIME_MODEL || undefined,
-                instructions,
-                temperature: 0.6
-              });
-              realtimeAnalysisSessions.set(connectionId, session);
-              console.log('[A1] RealtimeAnalysisSession created', {
-                connectionId,
-                model: process.env.OPENAI_REALTIME_MODEL || 'default'
-              });
-              // Connect in background so first chunk is fast
-              void session.connect().catch(() => {});
-            }
-          }
+          // OpenAI Realtime analysis sessions removed. We use GPT-4o-mini agents for analysis.
         }
         // Capture auth token (if present) for Supabase persistence under RLS
         if (data.authToken && typeof data.authToken === 'string') {
@@ -572,76 +442,6 @@ CRITICAL RULES:
           pillarWeights: data.pillarWeights ?? meta?.pillarWeights ?? null,
           clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
         });
-      } else if (data.type === 'realtime_ai_update') {
-        // Frontend OpenAI WebRTC mode: frontend sends transcript chunk + aiAnalysis JSON from Realtime audio agent.
-        const meta = connectionPersistence.get(connectionId);
-        const transcriptText = String(data?.transcriptText || '').trim();
-        const ai = data?.aiAnalysis && typeof data.aiAnalysis === 'object' ? data.aiAnalysis : null;
-        if (!transcriptText || !ai) return;
-
-        // Update transcripts used for persistence + deterministic calculations.
-        if (meta) {
-          meta.plainTranscript = `${meta.plainTranscript || ''}${transcriptText} `;
-          // Keep labeled history for readability in DB; use ai.speaker if present.
-          const sp = String(ai?.speaker || 'unknown').toLowerCase();
-          const label = sp === 'prospect' ? 'PROSPECT' : sp === 'closer' ? 'CLOSER' : 'UNKNOWN';
-          meta.conversationHistory = `${meta.conversationHistory || ''}${label}: ${transcriptText}\n`;
-          connectionPersistence.set(connectionId, meta);
-        }
-
-        // Fan out transcript chunk to frontend UI (same event name used elsewhere)
-        sendToClient(connectionId, {
-          type: 'transcript_chunk',
-          data: { speaker: ai?.speaker || 'unknown', text: transcriptText, ts: Date.now() }
-        });
-
-        // Build final analysis payload from aiAnalysis (reuses deterministic lubometer/truthIndex)
-        try {
-          const normalizedAi = {
-            indicatorSignals: ai.indicatorSignals || {},
-            hotButtonDetails: ai.hotButtonDetails || [],
-            objections: ai.objections || [],
-            askedQuestions: ai.askedQuestions || [],
-            detectedRules: ai.detectedRules || [],
-            coherenceSignals: ai.coherenceSignals || [],
-            overallCoherence: ai.overallCoherence || 'medium',
-            insights: ai.insights || {}
-          };
-          const final = await analyzeConversationFromAiAnalysis(
-            meta?.plainTranscript || transcriptText,
-            meta?.prospectType || null,
-            meta?.pillarWeights ?? null,
-            normalizedAi
-          );
-          sendToClient(connectionId, {
-            type: 'analysis_update',
-            data: {
-              ...final,
-              hotButtons: Array.isArray(final.hotButtons) ? final.hotButtons : [],
-              objections: Array.isArray(final.objections) ? final.objections : []
-            }
-          });
-        } catch (e) {
-          console.warn(`[WS] realtime_ai_update: failed to build analysis: ${e.message}`);
-        }
-      } else if (data.type === 'realtime_transcript_chunk') {
-        // Frontend OpenAI WebRTC mode: push transcript to backend immediately for UI/persistence.
-        const meta = connectionPersistence.get(connectionId);
-        const transcriptText = String(data?.text || '').trim();
-        const sp = String(data?.speaker || 'unknown').toLowerCase();
-        if (!transcriptText) return;
-
-        if (meta) {
-          meta.plainTranscript = `${meta.plainTranscript || ''}${transcriptText} `;
-          const label = sp === 'prospect' ? 'PROSPECT' : sp === 'closer' ? 'CLOSER' : 'UNKNOWN';
-          meta.conversationHistory = `${meta.conversationHistory || ''}${label}: ${transcriptText}\n`;
-          connectionPersistence.set(connectionId, meta);
-        }
-
-        sendToClient(connectionId, {
-          type: 'transcript_chunk',
-          data: { speaker: sp || 'unknown', text: transcriptText, ts: Date.now() }
-        });
       } else if (data.type === 'debug_event') {
         // Debug-only: allows frontend to emit structured logs visible in Railway.
         // Never log secrets.
@@ -725,14 +525,6 @@ CRITICAL RULES:
     })();
     console.log(`[WS] Connection closed: ${connectionId}`, { code, reason: reasonStr });
     connections.delete(connectionId);
-    // Close realtime analysis session if present
-    const rt = realtimeAnalysisSessions.get(connectionId);
-    if (rt) {
-      try {
-        rt.close();
-      } catch {}
-      realtimeAnalysisSessions.delete(connectionId);
-    }
     // IMPORTANT: Do NOT finalize/end sessions on transient WS close.
     // Railway/proxies can drop websockets; we only finalize on explicit stop_listening.
     console.log(`[WS] Close cleanup complete (no finalization) for ${connectionId}`);

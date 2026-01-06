@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { ConversationWebSocket } from '../../lib/websocket';
-import { OpenAIRealtimeWebRTC } from '../../lib/openaiRealtimeWebrtc';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -28,7 +27,6 @@ export default function RecordingButton({
   const [noBackend, setNoBackend] = useState(false);
   const wsRef = useRef<ConversationWebSocket | null>(null);
   const recognitionRef = useRef<any>(null);
-  const openAiRealtimeRef = useRef<OpenAIRealtimeWebRTC | null>(null);
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string>('default');
   // Use ref to track recording state (avoids stale closure issues)
@@ -44,9 +42,7 @@ export default function RecordingButton({
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
 
-  // Mode: Use Web Speech API (browser) for transcription + 15 GPT-4o mini agents for analysis
-  // This is free and doesn't require ElevenLabs or OpenAI Realtime API
-  const useOpenAIWebRTC = false;
+  // OpenAI Realtime WebRTC mode removed (unused).
   // Mode: Use ElevenLabs Scribe v2 Realtime STT via backend (streams PCM16@16k over WS)
   // Note: requires ELEVENLABS_API_KEY configured on the backend (Railway env var).
   const useScribeRealtime = true;
@@ -208,70 +204,18 @@ export default function RecordingButton({
       const startCfg = {
         customScriptPrompt,
         pillarWeights,
-        clientMode: useOpenAIWebRTC ? 'openai_webrtc' : (useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe')
+        clientMode: useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe'
       };
       startListeningConfigRef.current = startCfg;
       ws.startListening(startCfg);
       wsRef.current = ws;
-      console.log(`✅ Frontend: Listening started (mode=${useOpenAIWebRTC ? 'openai_webrtc' : (useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe')})`);
+      console.log(`✅ Frontend: Listening started (mode=${useScribeRealtime ? 'backend_transcribe' : 'websocket_transcribe'})`);
 
       // Start WebSocket keepalive to prevent timeout
       startKeepalive();
 
-      // Option B: Stream mic directly to OpenAI Realtime via WebRTC (no ElevenLabs required)
-      if (useOpenAIWebRTC) {
-        if (!session?.access_token) {
-          throw new Error('Not authenticated: missing session access token');
-        }
-        const wsUrl =
-          import.meta.env.VITE_WS_URL ||
-          (import.meta.env.DEV ? 'ws://localhost:3001/ws' : '');
-        if (!wsUrl) {
-          throw new Error('Backend WS URL missing (set VITE_WS_URL)');
-        }
-
-        const openAi = new OpenAIRealtimeWebRTC({
-          wsUrl,
-          authToken: session.access_token,
-          prospectType,
-          customScriptPrompt,
-          deviceId: selectedMicId,
-          onTranscript: (text) => {
-            if (onTranscriptUpdate) onTranscriptUpdate(text);
-            // Immediately push transcript into backend so it's persisted (but NOT re-echoed to UI)
-            wsRef.current?.sendRaw({
-              type: 'realtime_transcript_chunk',
-              text,
-              speaker: 'unknown',
-              ts: Date.now()
-            });
-          },
-          onAiAnalysis: (transcriptText, aiAnalysis) => {
-            wsRef.current?.sendRaw({
-              type: 'realtime_ai_update',
-              transcriptText,
-              aiAnalysis,
-              ts: Date.now()
-            });
-          },
-          onError: (e) => {
-            console.error('OpenAI Realtime error:', e);
-            setError(e.message);
-          }
-        });
-        openAiRealtimeRef.current = openAi;
-
-        await openAi.connect();
-        console.log('✅ OpenAI Realtime WebRTC connected');
-
-        setIsRecording(true);
-        isRecordingRef.current = true;
-        setIsConnecting(false);
-              return;
-            }
-
       // If using ElevenLabs Scribe via backend, stream PCM16@16k mic audio to backend
-      if (useScribeRealtime && !useOpenAIWebRTC) {
+      if (useScribeRealtime) {
         console.log('[ScribeMode] Starting mic stream...');
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -469,15 +413,6 @@ export default function RecordingButton({
     }
 
     // Stop OpenAI Realtime WebRTC (if used)
-    if (openAiRealtimeRef.current) {
-      try {
-        openAiRealtimeRef.current.close();
-      } catch (e) {
-        console.warn('Error closing OpenAI Realtime:', e);
-      }
-      openAiRealtimeRef.current = null;
-    }
-
     // Stop PCM pipeline + mic
     try {
       processorRef.current?.disconnect();
