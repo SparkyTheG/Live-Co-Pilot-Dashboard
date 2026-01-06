@@ -253,14 +253,9 @@ wss.on('connection', (ws, req) => {
           meta.prospectType = typeof data.config?.prospectType === 'string' ? data.config.prospectType : (meta.prospectType || '');
           meta.customScriptPrompt = typeof data.config?.customScriptPrompt === 'string' ? data.config.customScriptPrompt : (meta.customScriptPrompt || '');
           meta.pillarWeights = Array.isArray(data.config?.pillarWeights) ? data.config.pillarWeights : (meta.pillarWeights || null);
-          // If frontend is using OpenAI WebRTC direct, backend does NOT run analysis sessions.
-          // Frontend will post transcript+aiAnalysis back via WS message `realtime_ai_update`.
-          if (meta.clientMode === 'openai_webrtc') {
-            meta.useRealtimeAnalysis = false;
-          } else {
-            // Enable Realtime analysis by default when OPENAI_API_KEY is set (model defaults internally)
-            meta.useRealtimeAnalysis = Boolean(process.env.OPENAI_API_KEY) && process.env.OPENAI_REALTIME_DISABLED !== 'true';
-          }
+          // DISABLED: OpenAI Realtime API is expensive. Using 15 GPT-4o mini agents instead.
+          // The 15 agents run in parallel via analyzeConversation() in onTranscript callback.
+          meta.useRealtimeAnalysis = false;
           connectionPersistence.set(connectionId, meta);
 
           // Runtime evidence in Railway logs (no secrets)
@@ -1115,10 +1110,26 @@ async function startRealtimeListening(connectionId, config) {
       },
       onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
         try {
-          // OLD 15 AI AGENTS DISABLED - Realtime AI is now the ONLY analysis source
-          // Analysis is done in onChunk -> handleIncomingTextChunk() using the realtime AI session
-          console.log(`[${connectionId}] onTranscript: Skipping legacy 15 AI agents (realtime AI is active)`);
+          // 15 AI AGENTS ENABLED - Run parallel analysis for faster updates
+          console.log(`[${connectionId}] onTranscript: Running 15 AI agents analysis`);
           console.log(`[${connectionId}] Transcript length: ${transcript.length} chars, prospectType: ${prospectType}`);
+          
+          // Run the 15 AI agents in parallel
+          try {
+            const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
+            if (analysis) {
+              sendToClient(connectionId, {
+                type: 'analysis_update',
+                data: {
+                  ...analysis,
+                  hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
+                  objections: Array.isArray(analysis.objections) ? analysis.objections : []
+                }
+              });
+            }
+          } catch (analysisErr) {
+            console.warn(`[${connectionId}] 15 agents analysis error: ${analysisErr.message}`);
+          }
 
           // Persist a readable "paragraph" snapshot with CLOSER:/PROSPECT: labels on the session row.
           // Uses the formatted conversationHistory which has speaker labels.

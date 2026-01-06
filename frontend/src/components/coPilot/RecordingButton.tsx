@@ -44,9 +44,9 @@ export default function RecordingButton({
   const pcmPendingRef = useRef<Int16Array[]>([]);
   const pcmPendingSamplesRef = useRef<number>(0);
 
-  // Mode: stream mic directly to OpenAI Realtime (WebRTC). Backend persists + fans out updates.
-  // You selected option (B), so this is enabled by default.
-  const useOpenAIWebRTC = true;
+  // Mode: Use backend transcription (ElevenLabs Scribe) + 15 AI agents for analysis
+  // OpenAI Realtime WebRTC is disabled for cost savings
+  const useOpenAIWebRTC = false;
 
   function resampleLinear(input: Float32Array, inRate: number, outRate: number) {
     if (inRate === outRate) return input;
