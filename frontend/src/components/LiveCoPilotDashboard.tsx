@@ -85,9 +85,6 @@ export default function LiveCoPilotDashboard() {
   // Use ref to track latest value (avoids stale closure issues)
   const askedQuestionsRef = useRef<Set<number>>(new Set());
 
-  // Track best lubometer and truth index scores for stability (prevents wild fluctuations)
-  const [bestLubometerScore, setBestLubometerScore] = useState<number>(0);
-  const [bestTruthIndexScore, setBestTruthIndexScore] = useState<number>(0);
   // Prevent unbounded growth during long sessions
   const MAX_HOT_BUTTONS_HISTORY = 25;
   const MAX_OBJECTIONS_HISTORY = 25;
@@ -98,9 +95,6 @@ export default function LiveCoPilotDashboard() {
     setAskedQuestionsHistory(newSet);
     askedQuestionsRef.current = newSet;
     setQuestionStates({});
-    // Reset best scores when prospect type changes
-    setBestLubometerScore(0);
-    setBestTruthIndexScore(0);
   }, [prospectType]);
 
   // Sync ref with state whenever state changes
@@ -131,27 +125,6 @@ export default function LiveCoPilotDashboard() {
       objections: analysis.objections?.length || 0,
       lubometer: analysis.lubometer?.score,
       truthIndex: analysis.truthIndex?.score
-    });
-
-    // STABILITY: Track best lubometer score (allows increases, gradual decreases)
-    const newLubometerScore = analysis.lubometer?.score ?? 0;
-    setBestLubometerScore(prev => {
-      if (newLubometerScore >= prev) {
-        return newLubometerScore; // New score is higher or equal - use it
-      }
-      // Score decreased - use weighted average to smooth transition (70% old, 30% new)
-      const smoothed = Math.round(prev * 0.7 + newLubometerScore * 0.3);
-      return Math.max(smoothed, newLubometerScore); // Never go below actual new score
-    });
-    
-    // STABILITY: Track best truth index score
-    const newTruthIndexScore = analysis.truthIndex?.score ?? 0;
-    setBestTruthIndexScore(prev => {
-      if (newTruthIndexScore >= prev) {
-        return newTruthIndexScore;
-      }
-      const smoothed = Math.round(prev * 0.7 + newTruthIndexScore * 0.3);
-      return Math.max(smoothed, newTruthIndexScore);
     });
 
     const now = Date.now();
@@ -303,7 +276,7 @@ export default function LiveCoPilotDashboard() {
     : 0;
 
   // Use stabilized truth index score for display (prevents wild fluctuations)
-  const truthScore = bestTruthIndexScore > 0 ? bestTruthIndexScore : (analysisData?.truthIndex?.score ?? 0);
+  const truthScore = analysisData?.truthIndex?.score ?? 0;
 
   // Calculate Lubometer level - use real analysis data only
   const getLubometerLevel = () => {
@@ -339,8 +312,14 @@ export default function LiveCoPilotDashboard() {
   const lubometerLevel = getLubometerLevel();
   const lubometerText = getLubometerText();
   const lubometerColor = getLubometerColor();
-  // Use stabilized score for display (prevents wild fluctuations)
-  const lubometerScore = bestLubometerScore > 0 ? bestLubometerScore : (analysisData?.lubometer?.score ?? 0);
+  const lubometerScore = analysisData?.lubometer?.score ?? 0;
+
+  // Debug visibility: show weights from settings vs weights used by backend calculation (if provided).
+  const settingsWeightsText = settings?.pillarWeights?.map((p: any) => `${p.id}:${p.weight}`).join(' | ');
+  const backendWeightsUsed = (analysisData as any)?.lubometer?.weightsUsed as Record<string, number> | undefined;
+  const backendWeightsText = backendWeightsUsed
+    ? Object.entries(backendWeightsUsed).map(([k, v]) => `${k}:${v}`).join(' | ')
+    : '';
 
   // Truth Index helpers for header display - only use real data
   const getTruthIndexColor = () => {
@@ -585,6 +564,21 @@ export default function LiveCoPilotDashboard() {
                   <p className="text-sm text-gray-400">Prospect readiness level</p>
                 </div>
               </div>
+              
+              {(settingsWeightsText || backendWeightsText) && (
+                <div className="mb-4 space-y-1 text-xs">
+                  {settingsWeightsText && (
+                    <div className="text-gray-500">
+                      Settings weights: <span className="text-gray-300 font-mono">{settingsWeightsText}</span>
+                    </div>
+                  )}
+                  {backendWeightsText && (
+                    <div className="text-gray-500">
+                      Backend weightsUsed: <span className="text-gray-300 font-mono">{backendWeightsText}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Readiness Score */}
               <div className="text-center mb-6">
