@@ -462,6 +462,61 @@ Return 2-4 most important triggers. If truly nothing detected, return empty arra
 }
 
 // ============================================================================
+// UNIFIED ANALYSIS AGENT (single-call, inspired by zero-stress-sales-main)
+// Produces: indicatorSignals + hotButtonDetails + objections + truth signals + insights
+// This avoids partial timeouts where only some sub-agents finish.
+// ============================================================================
+async function runUnifiedAnalysisAgent(transcript, prospectType, customScriptPrompt = '') {
+  const t = String(transcript || '');
+  const pt = String(prospectType || 'foreclosure');
+  const custom = String(customScriptPrompt || '').trim();
+
+  const systemPrompt = `You are an expert real estate sales conversation analyzer.
+
+Your job: read a conversation transcript and output ONLY valid JSON with this exact schema:
+{
+  "indicatorSignals": { "1": 1-10, "2": 1-10, ..., "27": 1-10 },
+  "hotButtonDetails": [
+    { "id": 1-27, "quote": "3-15 words", "contextualPrompt": "8 words max", "score": 5-9 }
+  ],
+  "objections": [
+    {
+      "objectionText": "5-20 words (quote or close paraphrase from prospect)",
+      "probability": 0.0-1.0,
+      "fear": "short underlying fear",
+      "whisper": "short internal whisper (<= 12 words)",
+      "rebuttalScript": "2-4 sentences, empathetic + structured"
+    }
+  ],
+  "detectedRules": [
+    { "ruleId": "T1|T2|T3|T4|T5", "evidence": "short evidence", "confidence": 0.6-1.0 }
+  ],
+  "coherenceSignals": ["short signal", "short signal"],
+  "overallCoherence": "high|medium|low",
+  "insights": "1-2 sentence summary",
+  "keyMotivators": ["short", "short"],
+  "concerns": ["short", "short"],
+  "recommendation": "1 sentence next best move",
+  "closingReadiness": "ready|almost|not_ready"
+}
+
+Rules:
+- Score all 27 indicators (1-10). Use 5 if unclear.
+- Hot buttons: return 0-4 items, only if clearly present; tie each to an indicator id.
+- Objections: return 0-3 items. Only include objections that are actually present or clearly implied by the prospect.
+- Truth rules T1-T5 are contradictions. Be conservative and evidence-based.
+- Output must be STRICT JSON. No markdown. No extra keys.`;
+
+  const userPrompt = `Prospect type: ${pt}
+${custom ? `Custom script prompt: ${custom}` : ''}
+
+TRANSCRIPT (most recent portion):
+${t}`;
+
+  return await callAI(systemPrompt, userPrompt, 'UnifiedAnalysisAgent', { maxTokens: 900, timeoutMs: 9000 });
+}
+
+// ============================================================================
 // OBJECTIONS SYSTEM: 4 Focused Agents
 // ============================================================================
 
@@ -784,80 +839,47 @@ ${isFinal ? 'Provide the FINAL comprehensive summary of this completed conversat
 // MAIN: Run all agents in parallel
 // ============================================================================
 export async function runAllAgents(transcript, prospectType, customScriptPrompt = '') {
-  console.log(`\n[MultiAgent] Starting parallel analysis...`);
-  console.log(`[MultiAgent] Full transcript length: ${transcript?.length||0} chars`);
-  console.log(`[MultiAgent] Transcript preview: "${String(transcript||'').slice(0,150)}..."`);
-  console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
+  console.log(`\n[MultiAgent] Starting unified analysis...`);
   const startTime = Date.now();
 
-  // Token control: Balanced windows for accuracy (need enough context)
-  const tPillars = String(transcript || '').slice(-800);      // Last ~130 words
-  const tHotButtons = String(transcript || '').slice(-800);   // Last ~130 words
-  const tObjections = String(transcript || '').slice(-800);   // Last ~130 words
-  const tDiagnostic = String(transcript || '').slice(-600);   // Last ~100 words
-  const tTruth = String(transcript || '').slice(-800);        // Last ~130 words
-  const tInsights = String(transcript || '').slice(-800);     // Last ~130 words
+  // Rolling window (like the fast project) to keep latency stable.
+  const tUnified = String(transcript || '').slice(-8000);
 
-  // Run all agents in parallel with timeouts that work reliably on Railway.
-  // Each agent call is still abortable; these caps just prevent premature empty results.
-  // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
-  // Note: runObjectionsAgents internally runs 4 objection agents (throttled)
-  const tasks = [
-    withTimeout(runAllPillarAgents(tPillars), 12000, { indicatorSignals: {}, pillarErrors: {} }),
-    withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
-    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 11000, { objections: [] }),
-    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
-    withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
-  ];
+  // Primary path: ONE OpenAI call for everything.
+  const unified = await runUnifiedAnalysisAgent(tUnified, prospectType, customScriptPrompt);
 
-  const settled = await Promise.allSettled(tasks);
-  const [
-    pillarsResultRaw,
-    hotButtonsResultRaw,
-    objectionsResultRaw,
-    truthIndexResultRaw,
-    insightsResultRaw
-  ] = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
+  // Defensive normalization (never crash downstream)
+  const indicatorSignals = (unified && typeof unified.indicatorSignals === 'object' && unified.indicatorSignals)
+    ? unified.indicatorSignals
+    : {};
+  const hotButtonDetails = Array.isArray(unified?.hotButtonDetails) ? unified.hotButtonDetails : [];
+  const objections = Array.isArray(unified?.objections) ? unified.objections : [];
+  const detectedRules = Array.isArray(unified?.detectedRules) ? unified.detectedRules : [];
+  const coherenceSignals = Array.isArray(unified?.coherenceSignals) ? unified.coherenceSignals : [];
+  const overallCoherence = (typeof unified?.overallCoherence === 'string' ? unified.overallCoherence : 'medium');
 
-  const pillarsResult = pillarsResultRaw || { indicatorSignals: {}, pillarErrors: {} };
-  const hotButtonsResult = hotButtonsResultRaw || { hotButtonDetails: [] };
-  const objectionsResult = objectionsResultRaw || { objections: [] };
-  const truthIndexResult = truthIndexResultRaw || { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' };
-  const insightsResult = insightsResultRaw || { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' };
-  
-  const totalTime = Date.now() - startTime;
-  console.log(`[MultiAgent] All done in ${totalTime}ms`);
-  console.log(`[MultiAgent] Indicators scored: ${Object.keys(pillarsResult.indicatorSignals || {}).length}/27`);
-  
-  console.log(`[MultiAgent] Truth Index: ${(truthIndexResult.detectedRules || []).length} incoherence rules`);
-  
-  return {
-    // From 7 Pillar Agents (Lubometer)
-    indicatorSignals: pillarsResult.indicatorSignals || {},
-    pillarErrors: pillarsResult.pillarErrors || {},
-    // From Hot Buttons Agent
-    hotButtonDetails: hotButtonsResult.hotButtonDetails || [],
-    // From 4 Objection Agents
-    objections: objectionsResult.objections || [],
-    // Diagnostic Questions: user-controlled (no AI)
+  const result = {
+    indicatorSignals,
+    pillarErrors: {},
+    hotButtonDetails,
+    objections,
     askedQuestions: [],
-    // From Truth Index Agent (T1-T5 rules)
-    detectedRules: truthIndexResult.detectedRules || [],
-    coherenceSignals: truthIndexResult.coherenceSignals || [],
-    overallCoherence: truthIndexResult.overallCoherence || 'medium',
-    // From Insights Agent
-    insights: insightsResult.summary || '',
-    keyMotivators: insightsResult.keyMotivators || [],
-    concerns: insightsResult.concerns || [],
-    recommendation: insightsResult.recommendation || '',
-    closingReadiness: insightsResult.closingReadiness || 'not_ready',
-    // Errors
+    detectedRules,
+    coherenceSignals,
+    overallCoherence,
+    insights: String(unified?.insights || ''),
+    keyMotivators: Array.isArray(unified?.keyMotivators) ? unified.keyMotivators : [],
+    concerns: Array.isArray(unified?.concerns) ? unified.concerns : [],
+    recommendation: String(unified?.recommendation || ''),
+    closingReadiness: String(unified?.closingReadiness || 'not_ready'),
     agentErrors: {
-      pillars: pillarsResult.pillarErrors || null,
-      hotButtons: hotButtonsResult.error || null,
-      objections: objectionsResult.error || null,
-      truthIndex: truthIndexResult.error || null,
-      insights: insightsResult.error || null
+      unified: unified?.error || null
     }
   };
+
+  console.log(`[MultiAgent] Unified done in ${Date.now() - startTime}ms`);
+  console.log(`[MultiAgent] Indicators scored: ${Object.keys(result.indicatorSignals || {}).length}/27`);
+  console.log(`[MultiAgent] Hot Buttons: ${(result.hotButtonDetails || []).length}, Objections: ${(result.objections || []).length}`);
+
+  return result;
 }
