@@ -95,14 +95,18 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
     let response;
     try {
       // Prefer strict JSON output if supported by the API/model
-      response = await openai.chat.completions.create({
-        ...baseReq,
-        response_format: { type: 'json_object' },
-        signal
-      });
+      response = await openai.chat.completions.create(
+        { ...baseReq, response_format: { type: 'json_object' } },
+        // IMPORTANT: signal must be passed as a request option (not in the JSON body),
+        // otherwise the API rejects it: "Unrecognized request argument supplied: signal"
+        { signal }
+      );
     } catch (e) {
       // Fallback for older API behavior: no response_format
-      response = await openai.chat.completions.create({ ...baseReq, signal });
+      response = await openai.chat.completions.create(
+        baseReq,
+        { signal }
+      );
     }
 
     let content = response?.choices?.[0]?.message?.content ?? '{}';
