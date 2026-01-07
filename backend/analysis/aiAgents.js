@@ -78,7 +78,9 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
     : (maxTokensOrOptions || {});
 
   const maxTokens = Number(opts.maxTokens ?? 200);    // Small focused outputs
-  const timeoutMs = Number(opts.timeoutMs ?? 4000);   // Fast 4s timeout
+  // Railway latency can spike; 4s caused frequent aborts where only Lubometer survived.
+  // Keep abort-enabled timeouts, but give enough runway for HotButtons/Objections to complete.
+  const timeoutMs = Number(opts.timeoutMs ?? 8000);
 
   const doCall = async (signal) => {
     const openai = getOpenAIClient();
@@ -824,16 +826,17 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const tTruth = String(transcript || '').slice(-800);        // Last ~130 words
   const tInsights = String(transcript || '').slice(-800);     // Last ~130 words
 
-  // Run all agents in parallel with FAST timeouts (2-4s max)
+  // Run all agents in parallel with timeouts that work reliably on Railway.
+  // Each agent call is still abortable; these caps just prevent premature empty results.
   // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
   // Note: runObjectionsAgents internally runs 4 objection agents (throttled)
   const tasks = [
-    withTimeout(runAllPillarAgents(tPillars), 6000, { indicatorSignals: {}, pillarErrors: {} }),
-    withTimeout(runHotButtonsAgent(tHotButtons), 3000, { hotButtonDetails: [] }),
-    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 5000, { objections: [] }),
-    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 3000, { askedQuestions: [] }),
-    withTimeout(runTruthIndexAgent(tTruth), 3000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
-    withTimeout(runInsightsAgent(tInsights, prospectType), 3000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
+    withTimeout(runAllPillarAgents(tPillars), 12000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 11000, { objections: [] }),
+    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 9000, { askedQuestions: [] }),
+    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
   ];
 
   const settled = await Promise.allSettled(tasks);

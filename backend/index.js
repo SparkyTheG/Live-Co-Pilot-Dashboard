@@ -791,26 +791,14 @@ async function startRealtimeListening(connectionId, config) {
       },
       onTranscript: async (transcript, prospectType, customScriptPrompt, pillarWeights) => {
         try {
-          // 15 AI AGENTS ENABLED - Run parallel analysis for faster updates
-          console.log(`[${connectionId}] onTranscript: Running 15 AI agents analysis`);
-          console.log(`[${connectionId}] Transcript length: ${transcript.length} chars, prospectType: ${prospectType}`);
-          
-          // Run the 15 AI agents in parallel
-          try {
-            const analysis = await analyzeConversation(transcript, prospectType, customScriptPrompt, pillarWeights);
-            if (analysis) {
-              sendToClient(connectionId, {
-                type: 'analysis_update',
-                data: {
-                  ...analysis,
-                  hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-                  objections: Array.isArray(analysis.objections) ? analysis.objections : []
-                }
-              });
-            }
-          } catch (analysisErr) {
-            console.warn(`[${connectionId}] 15 agents analysis error: ${analysisErr.message}`);
-          }
+          // IMPORTANT: Avoid duplicate analysis runs.
+          // Analysis is driven by committed chunks (onChunk -> handleIncomingTextChunk),
+          // which includes sequence-guard + dirty catch-up logic.
+          // This onTranscript callback is kept for persistence/summary only.
+          console.log(`[${connectionId}] onTranscript received (persistence only)`, {
+            transcriptLen: transcript?.length || 0,
+            prospectType: prospectType || '(none)'
+          });
 
           // Persist a readable "paragraph" snapshot with CLOSER:/PROSPECT: labels on the session row.
           // Uses the formatted conversationHistory which has speaker labels.
