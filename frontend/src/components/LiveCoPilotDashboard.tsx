@@ -362,12 +362,14 @@ export default function LiveCoPilotDashboard() {
     return askedQuestionIndices.includes(index) || questionStates[index]?.asked;
   };
 
+  // Badge colors must match Admin Panel "Badge color" dropdown:
+  // situation=Blue, timeline=Red, authority=Purple, pain=Orange, financial=Green
   const categoryColors: Record<string, string> = {
-    situation: 'text-cyan-400 border-cyan-400/30',
-    timeline: 'text-teal-400 border-teal-400/30',
-    authority: 'text-blue-400 border-blue-400/30',
-    pain: 'text-cyan-300 border-cyan-300/30',
-    financial: 'text-emerald-400 border-emerald-400/30',
+    situation: 'text-blue-300 border-blue-400/30',
+    timeline: 'text-red-300 border-red-400/30',
+    authority: 'text-purple-300 border-purple-400/30',
+    pain: 'text-orange-300 border-orange-400/30',
+    financial: 'text-green-300 border-green-400/30',
   };
 
   const categoryLabels: Record<string, string> = {
