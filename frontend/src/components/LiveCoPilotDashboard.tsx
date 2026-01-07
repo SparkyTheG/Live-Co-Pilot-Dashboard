@@ -109,9 +109,18 @@ export default function LiveCoPilotDashboard() {
   }, [askedQuestionsHistory]);
 
   // Get questions for this prospect type (render + validation)
+  // IMPORTANT: Dashboard renderer expects { question, why, category }.
+  // Settings editor stores { question, helper, badgeText, badgeColor }.
   const questionsFromSettings = settings.diagnosticQuestionsByProspectType?.[prospectType];
   const questions = (Array.isArray(questionsFromSettings) && questionsFromSettings.length > 0)
-    ? questionsFromSettings
+    ? questionsFromSettings.map((q: any) => ({
+        question: String(q?.question || ''),
+        why: String(q?.helper || ''),
+        // Use badgeColor as the category key for styling
+        category: (q?.badgeColor || 'situation'),
+        // Use explicit badge text if provided
+        badgeText: String(q?.badgeText || '')
+      }))
     : diagnosticQuestions[prospectType];
 
   // Extract analysis update handler so it can be reused
@@ -353,7 +362,7 @@ export default function LiveCoPilotDashboard() {
     return askedQuestionIndices.includes(index) || questionStates[index]?.asked;
   };
 
-  const categoryColors = {
+  const categoryColors: Record<string, string> = {
     situation: 'text-cyan-400 border-cyan-400/30',
     timeline: 'text-teal-400 border-teal-400/30',
     authority: 'text-blue-400 border-blue-400/30',
@@ -361,7 +370,7 @@ export default function LiveCoPilotDashboard() {
     financial: 'text-emerald-400 border-emerald-400/30',
   };
 
-  const categoryLabels = {
+  const categoryLabels: Record<string, string> = {
     situation: 'Situation',
     timeline: 'Timeline',
     authority: 'Authority',
@@ -544,9 +553,11 @@ export default function LiveCoPilotDashboard() {
                             <div className={`font-medium mb-2 text-lg ${(isAsked || questionStates[idx]?.asked) ? 'text-white' : 'text-gray-300'}`}>
                               {q.question}
                             </div>
-                            <div className="text-sm text-gray-400 mb-2 italic">{q.why}</div>
-                            <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${categoryColors[q.category]}`}>
-                              {categoryLabels[q.category]}
+                            {q.why && (
+                              <div className="text-sm text-gray-400 mb-2 italic">{q.why}</div>
+                            )}
+                            <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${categoryColors[q.category] || categoryColors.situation}`}>
+                              {(q as any).badgeText || categoryLabels[q.category] || 'Category'}
                             </div>
                           </div>
                         </div>

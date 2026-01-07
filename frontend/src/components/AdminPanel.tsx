@@ -615,11 +615,11 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                         }}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
                       >
-                        <option value="situation">Situation</option>
-                        <option value="timeline">Timeline</option>
-                        <option value="authority">Authority</option>
-                        <option value="pain">Pain Point</option>
-                        <option value="financial">Financial</option>
+                        <option value="situation">Blue</option>
+                        <option value="timeline">Red</option>
+                        <option value="authority">Purple</option>
+                        <option value="pain">Orange</option>
+                        <option value="financial">Green</option>
                       </select>
 
                       <div className="flex gap-2 mt-4">
