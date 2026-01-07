@@ -69,9 +69,45 @@ const pingInterval = setInterval(() => {
   });
 }, PING_INTERVAL);
 
+// -----------------------------------------------------------------------------
+// Minimal per-connection heartbeat (every 10s)
+// Helps diagnose "stops updating after ~30s" issues on Railway.
+// -----------------------------------------------------------------------------
+const heartbeatInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [connectionId, ws] of connections.entries()) {
+    const meta = connectionPersistence.get(connectionId) || {};
+    const lastActivity = Number(ws?.lastActivity || 0);
+    const lastChunkMs = Number(meta._lastChunkMs || 0);
+    const lastAnalysisMs = Number(meta._lastAnalysisMs || 0);
+    const lastAnalysisOkMs = Number(meta._lastAnalysisOkMs || 0);
+    const pending = Boolean(meta._analysisPending);
+    const pendingStart = Number(meta._analysisPendingStart || 0);
+    const seq = Number(meta._analysisSeq || 0);
+    const dirty = Boolean(meta._analysisDirty);
+    const lastErr = String(meta._lastAnalysisErr || '').slice(0, 160);
+    const wsState = typeof ws?.readyState === 'number' ? ws.readyState : -1;
+
+    console.log('[HB]', {
+      conn: String(connectionId).slice(-8),
+      wsState,
+      ageActivityS: lastActivity ? Math.round((now - lastActivity) / 1000) : null,
+      ageChunkS: lastChunkMs ? Math.round((now - lastChunkMs) / 1000) : null,
+      pending,
+      pendingAgeS: pending && pendingStart ? Math.round((now - pendingStart) / 1000) : null,
+      ageAnalysisStartS: lastAnalysisMs ? Math.round((now - lastAnalysisMs) / 1000) : null,
+      ageAnalysisOkS: lastAnalysisOkMs ? Math.round((now - lastAnalysisOkMs) / 1000) : null,
+      seq,
+      dirty,
+      lastErr: lastErr || null
+    });
+  }
+}, 10000);
+
 // Clean up interval on server close
 process.on('SIGINT', () => {
   clearInterval(pingInterval);
+  clearInterval(heartbeatInterval);
   wss.close();
   process.exit(0);
 });
@@ -93,6 +129,7 @@ console.log('[BOOT] backend started', {
 
 process.on('SIGTERM', () => {
   clearInterval(pingInterval);
+  clearInterval(heartbeatInterval);
   wss.close();
   process.exit(0);
 });
@@ -117,7 +154,11 @@ wss.on('connection', (ws, req) => {
     // Plain transcript (no labels) for deterministic calculations
     plainTranscript: '',
     // Client mode: backend_transcribe (default) or websocket_transcribe (frontend sends text)
-    clientMode: 'backend_transcribe'
+    clientMode: 'backend_transcribe',
+    // Heartbeat diagnostics
+    _lastChunkMs: 0,
+    _lastAnalysisOkMs: 0,
+    _lastAnalysisErr: ''
   });
 
   // Track last activity time
@@ -459,6 +500,10 @@ async function handleIncomingTextChunk(connectionId, {
   // Get connection metadata
   const meta = connectionPersistence.get(connectionId);
   const conversationHistory = meta?.conversationHistory || '';
+  if (meta) {
+    meta._lastChunkMs = Date.now();
+    connectionPersistence.set(connectionId, meta);
+  }
 
   // Maintain a plain transcript (for deterministic calculations)
   if (meta) {
@@ -584,6 +629,7 @@ async function handleIncomingTextChunk(connectionId, {
     m0._analysisPending = true;
     m0._analysisPendingStart = now2;
     m0._lastAnalysisMs = now2;
+    m0._lastAnalysisErr = '';
     connectionPersistence.set(connectionId, m0);
 
     // Run in background - don't await
@@ -604,11 +650,23 @@ async function handleIncomingTextChunk(connectionId, {
               objections: Array.isArray(analysis.objections) ? analysis.objections : []
             }
           });
+          // Mark last successful analysis time for heartbeat visibility
+          const mOk = connectionPersistence.get(connectionId);
+          if (mOk) {
+            mOk._lastAnalysisOkMs = Date.now();
+            mOk._lastAnalysisErr = '';
+            connectionPersistence.set(connectionId, mOk);
+          }
         } else {
           console.log(`[${connectionId.slice(-6)}] Dropping stale analysis seq=${seq} (newer seq present)`);
         }
       } catch (e) {
         console.warn(`[WS] AI analysis failed: ${e.message}`);
+        const mErr = connectionPersistence.get(connectionId);
+        if (mErr) {
+          mErr._lastAnalysisErr = String(e?.message || e || '').slice(0, 300);
+          connectionPersistence.set(connectionId, mErr);
+        }
       } finally {
         const m1 = connectionPersistence.get(connectionId);
         if (m1) {
