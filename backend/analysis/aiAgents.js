@@ -839,47 +839,78 @@ ${isFinal ? 'Provide the FINAL comprehensive summary of this completed conversat
 // MAIN: Run all agents in parallel
 // ============================================================================
 export async function runAllAgents(transcript, prospectType, customScriptPrompt = '') {
-  console.log(`\n[MultiAgent] Starting unified analysis...`);
+  console.log(`\n[MultiAgent] Starting parallel analysis...`);
+  console.log(`[MultiAgent] Full transcript length: ${transcript?.length||0} chars`);
+  console.log(`[MultiAgent] Transcript preview: "${String(transcript||'').slice(0,150)}..."`);
+  console.log(`[MultiAgent] Lubometer: 7 pillar agents | Objections: 4 agents | Others: 4 agents`);
   const startTime = Date.now();
 
-  // Rolling window (like the fast project) to keep latency stable.
-  const tUnified = String(transcript || '').slice(-8000);
+  // Token control: Balanced windows for accuracy (need enough context)
+  const tPillars = String(transcript || '').slice(-800);      // Last ~130 words
+  const tHotButtons = String(transcript || '').slice(-800);   // Last ~130 words
+  const tObjections = String(transcript || '').slice(-800);   // Last ~130 words
+  const tTruth = String(transcript || '').slice(-800);        // Last ~130 words
+  const tInsights = String(transcript || '').slice(-800);     // Last ~130 words
 
-  // Primary path: ONE OpenAI call for everything.
-  const unified = await runUnifiedAnalysisAgent(tUnified, prospectType, customScriptPrompt);
+  // Run all agents in parallel with timeouts that work reliably on Railway.
+  // Each agent call is still abortable; these caps just prevent premature empty results.
+  // Note: runAllPillarAgents internally runs 7 agents in parallel (throttled)
+  // Note: runObjectionsAgents internally runs 4 objection agents (throttled)
+  const tasks = [
+    withTimeout(runAllPillarAgents(tPillars), 12000, { indicatorSignals: {}, pillarErrors: {} }),
+    withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
+    withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 11000, { objections: [] }),
+    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
+  ];
 
-  // Defensive normalization (never crash downstream)
-  const indicatorSignals = (unified && typeof unified.indicatorSignals === 'object' && unified.indicatorSignals)
-    ? unified.indicatorSignals
-    : {};
-  const hotButtonDetails = Array.isArray(unified?.hotButtonDetails) ? unified.hotButtonDetails : [];
-  const objections = Array.isArray(unified?.objections) ? unified.objections : [];
-  const detectedRules = Array.isArray(unified?.detectedRules) ? unified.detectedRules : [];
-  const coherenceSignals = Array.isArray(unified?.coherenceSignals) ? unified.coherenceSignals : [];
-  const overallCoherence = (typeof unified?.overallCoherence === 'string' ? unified.overallCoherence : 'medium');
+  const settled = await Promise.allSettled(tasks);
+  const [
+    pillarsResultRaw,
+    hotButtonsResultRaw,
+    objectionsResultRaw,
+    truthIndexResultRaw,
+    insightsResultRaw
+  ] = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
 
-  const result = {
-    indicatorSignals,
-    pillarErrors: {},
-    hotButtonDetails,
-    objections,
+  const pillarsResult = pillarsResultRaw || { indicatorSignals: {}, pillarErrors: {} };
+  const hotButtonsResult = hotButtonsResultRaw || { hotButtonDetails: [] };
+  const objectionsResult = objectionsResultRaw || { objections: [] };
+  const truthIndexResult = truthIndexResultRaw || { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' };
+  const insightsResult = insightsResultRaw || { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' };
+  
+  const totalTime = Date.now() - startTime;
+  console.log(`[MultiAgent] All done in ${totalTime}ms`);
+  console.log(`[MultiAgent] Indicators scored: ${Object.keys(pillarsResult.indicatorSignals || {}).length}/27`);
+  console.log(`[MultiAgent] Truth Index: ${(truthIndexResult.detectedRules || []).length} incoherence rules`);
+  
+  return {
+    // From 7 Pillar Agents (Lubometer)
+    indicatorSignals: pillarsResult.indicatorSignals || {},
+    pillarErrors: pillarsResult.pillarErrors || {},
+    // From Hot Buttons Agent
+    hotButtonDetails: hotButtonsResult.hotButtonDetails || [],
+    // From 4 Objection Agents
+    objections: objectionsResult.objections || [],
+    // Diagnostic Questions: user-controlled (no AI)
     askedQuestions: [],
-    detectedRules,
-    coherenceSignals,
-    overallCoherence,
-    insights: String(unified?.insights || ''),
-    keyMotivators: Array.isArray(unified?.keyMotivators) ? unified.keyMotivators : [],
-    concerns: Array.isArray(unified?.concerns) ? unified.concerns : [],
-    recommendation: String(unified?.recommendation || ''),
-    closingReadiness: String(unified?.closingReadiness || 'not_ready'),
+    // From Truth Index Agent (T1-T5 rules)
+    detectedRules: truthIndexResult.detectedRules || [],
+    coherenceSignals: truthIndexResult.coherenceSignals || [],
+    overallCoherence: truthIndexResult.overallCoherence || 'medium',
+    // From Insights Agent
+    insights: insightsResult.summary || '',
+    keyMotivators: insightsResult.keyMotivators || [],
+    concerns: insightsResult.concerns || [],
+    recommendation: insightsResult.recommendation || '',
+    closingReadiness: insightsResult.closingReadiness || 'not_ready',
+    // Errors
     agentErrors: {
-      unified: unified?.error || null
+      pillars: pillarsResult.pillarErrors || null,
+      hotButtons: hotButtonsResult.error || null,
+      objections: objectionsResult.error || null,
+      truthIndex: truthIndexResult.error || null,
+      insights: insightsResult.error || null
     }
   };
-
-  console.log(`[MultiAgent] Unified done in ${Date.now() - startTime}ms`);
-  console.log(`[MultiAgent] Indicators scored: ${Object.keys(result.indicatorSignals || {}).length}/27`);
-  console.log(`[MultiAgent] Hot Buttons: ${(result.hotButtonDetails || []).length}, Objections: ${(result.objections || []).length}`);
-
-  return result;
 }
