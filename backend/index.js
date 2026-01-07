@@ -577,7 +577,8 @@ async function handleIncomingTextChunk(connectionId, {
   });
 
   // Run the 15 AI agents with throttling + stuck detection
-  const THROTTLE_MS = 3000; // Min 3 seconds between analyses for faster updates
+  // Slightly higher throttle keeps the system from accumulating OpenAI calls over time on Railway.
+  const THROTTLE_MS = 4500; // Min 4.5 seconds between analyses (dirty flag triggers catch-up)
   const MAX_PENDING_MS = 25000; // Force-clear pending after 25s (stuck detection)
   const now = Date.now();
   const lastRun = meta?._lastAnalysisMs || 0;
@@ -690,38 +691,8 @@ async function handleIncomingTextChunk(connectionId, {
   // Start analysis if eligible (otherwise dirty flag above will trigger catch-up)
   startAnalysisRun(false);
 
-  // Also run conversation summary updates (independent of analysis pipeline)
-  if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
-    const now = Date.now();
-    const SUMMARY_INTERVAL_MS = 15000;
-    if (!meta.lastSummaryMs || (now - meta.lastSummaryMs) > SUMMARY_INTERVAL_MS) {
-      meta.lastSummaryMs = now;
-      connectionPersistence.set(connectionId, meta);
-      const formattedTranscript = meta.conversationHistory || '';
-      const summaryProspectType = meta.prospectType || prospectType || '';
-      if (formattedTranscript.length > 50) {
-        runConversationSummaryAgent(formattedTranscript, summaryProspectType, false)
-          .then((summaryResult) => {
-            if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
-              const supabase = createUserSupabaseClient(meta.authToken);
-              if (supabase) {
-                const summaryData = {
-                  session_id: meta.sessionId,
-                  user_id: meta.userId,
-                  user_email: meta.userEmail || '',
-                  prospect_type: summaryProspectType,
-                  summary_json: summaryResult,
-                  is_final: false,
-                  updated_at: new Date().toISOString()
-                };
-                void supabase.from('call_summaries').upsert(summaryData, { onConflict: 'session_id' }).catch(() => {});
-              }
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }
+  // NOTE: Progressive conversation summary disabled to keep live AI updates fast/stable on Railway.
+  // Final summary is still generated on explicit stop_listening.
 
   // Persist transcript chunk to Supabase with AI-detected speaker role
   if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
@@ -829,59 +800,8 @@ async function startRealtimeListening(connectionId, config) {
               }
             }
 
-            // CONVERSATION SUMMARY: Continuously analyze and update summary (every 15 seconds for faster testing)
-            // This runs in parallel with the main analysis, non-blocking
-            const SUMMARY_INTERVAL_MS = 15000; // 15 seconds (reduced from 30s for faster testing)
-            const timeSinceLastSummary = meta.lastSummaryMs ? (now - meta.lastSummaryMs) : SUMMARY_INTERVAL_MS + 1;
-            console.log(`[${connectionId}] Summary check: timeSince=${timeSinceLastSummary}ms, transcriptLen=${(meta.conversationHistory || '').length}, sessionId=${meta.sessionId}`);
-            
-            if (timeSinceLastSummary > SUMMARY_INTERVAL_MS) {
-              meta.lastSummaryMs = now;
-              connectionPersistence.set(connectionId, meta);
-              
-              // Run summary analysis in background (non-blocking)
-              const formattedTranscript = meta.conversationHistory || '';
-              // Use prospect type from meta (set during start_listening) or current transcript message
-              const summaryProspectType = meta.prospectType || prospectType || '';
-              if (formattedTranscript.length > 50) { // Reduced from 100 for testing
-                console.log(`[${connectionId}] Running conversation summary agent with prospectType: ${summaryProspectType}`);
-                runConversationSummaryAgent(formattedTranscript, summaryProspectType, false)
-                  .then((summaryResult) => {
-                    console.log(`[${connectionId}] Summary agent result:`, summaryResult ? 'success' : 'null', summaryResult?.error || '');
-                    if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
-                      const supabase = createUserSupabaseClient(meta.authToken);
-                      if (supabase) {
-                        const summaryData = {
-                          session_id: meta.sessionId,
-                          user_id: meta.userId,
-                          user_email: meta.userEmail || '',
-                          prospect_type: summaryProspectType,
-                          summary_json: summaryResult,
-                          is_final: false,
-                          updated_at: new Date().toISOString()
-          };
-
-                        // Upsert summary (update if exists, insert if new)
-                        console.log(`[${connectionId}] Upserting summary to Supabase...`, { session_id: summaryData.session_id, user_id: summaryData.user_id });
-                        void supabase
-                          .from('call_summaries')
-                          .upsert(summaryData, { onConflict: 'session_id' })
-                          .then(({ error, data: upsertData }) => {
-                            if (error) {
-                              console.error(`[WS] Supabase summary upsert failed: ${error.message}`, error);
-                            } else {
-                              console.log(`[${connectionId}] Summary upserted successfully to Supabase`);
-                            }
-                          })
-                          .catch((err) => { console.error(`[WS] Summary upsert exception:`, err); });
-                      }
-                    }
-                  })
-                  .catch((err) => {
-                    console.warn(`[${connectionId}] Summary analysis error: ${err.message}`);
-                  });
-              }
-            }
+            // NOTE: Progressive conversation summary disabled to keep live AI updates fast/stable on Railway.
+            // Final summary is still generated on explicit stop_listening.
           }
 
           // NOTE: Analysis is now handled in onChunk -> handleIncomingTextChunk() via realtime AI
