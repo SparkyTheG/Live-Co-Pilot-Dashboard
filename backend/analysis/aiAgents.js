@@ -40,22 +40,24 @@ function getOpenAIClient() {
 
 const MODEL = 'gpt-4o-mini';
 
-// Request queue to prevent rate limiting
-let activeRequests = 0;
-const MAX_CONCURRENT = 6; // Max 6 concurrent OpenAI requests (balanced for speed + stability)
-const requestQueue = [];
+// Request pools to prevent rate limiting AND prevent background agents (summary/speaker)
+// from starving the main real-time analysis agents.
+const ACTIVE_BY_POOL = { main: 0, aux: 0 };
+const MAX_BY_POOL = {
+  main: 6, // main analysis agents
+  aux: 1   // background agents (summary, speaker role) - never starve main
+};
 
-async function throttledRequest(fn) {
-  // Wait in queue if too many active requests
-  while (activeRequests >= MAX_CONCURRENT) {
+async function throttledRequest(fn, pool = 'main') {
+  const p = pool === 'aux' ? 'aux' : 'main';
+  while ((ACTIVE_BY_POOL[p] || 0) >= (MAX_BY_POOL[p] || 1)) {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  
-  activeRequests++;
+  ACTIVE_BY_POOL[p] = (ACTIVE_BY_POOL[p] || 0) + 1;
   try {
     return await fn();
   } finally {
-    activeRequests--;
+    ACTIVE_BY_POOL[p] = Math.max(0, (ACTIVE_BY_POOL[p] || 1) - 1);
   }
 }
 
@@ -81,6 +83,7 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   // Railway latency can spike; 4s caused frequent aborts where only Lubometer survived.
   // Keep abort-enabled timeouts, but give enough runway for HotButtons/Objections to complete.
   const timeoutMs = Number(opts.timeoutMs ?? 8000);
+  const pool = String(opts.pool || 'main') === 'aux' ? 'aux' : 'main';
 
   const doCall = async (signal) => {
     const openai = getOpenAIClient();
@@ -134,7 +137,7 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
 
     let result;
     try {
-      result = await throttledRequest(() => doCall(controller.signal));
+      result = await throttledRequest(() => doCall(controller.signal), pool);
     } finally {
       clearTimeout(timer);
     }
@@ -191,7 +194,7 @@ ${history}
 New chunk:
 "${text}"`;
 
-  const result = await callAI(systemPrompt, userPrompt, 'SpeakerRoleAgent', { maxTokens: 40, timeoutMs: 2500 });
+  const result = await callAI(systemPrompt, userPrompt, 'SpeakerRoleAgent', { maxTokens: 40, timeoutMs: 2500, pool: 'aux' });
   const sp = String(result?.speaker || '').toLowerCase();
   if (sp === 'closer' || sp === 'prospect' || sp === 'unknown') return { speaker: sp };
   return { speaker: 'unknown' };
@@ -832,7 +835,7 @@ ${transcriptToAnalyze}
 
 ${isFinal ? 'Provide the FINAL comprehensive summary of this completed conversation.' : 'Provide a progressive summary of the conversation so far (call still in progress).'}`;
 
-  return await callAI(systemPrompt, userPrompt, 'ConversationSummaryAgent', 2000);
+  return await callAI(systemPrompt, userPrompt, 'ConversationSummaryAgent', { maxTokens: 2000, timeoutMs: 12000, pool: 'aux' });
 }
 
 // ============================================================================

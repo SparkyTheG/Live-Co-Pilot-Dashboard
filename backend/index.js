@@ -690,38 +690,7 @@ async function handleIncomingTextChunk(connectionId, {
   // Start analysis if eligible (otherwise dirty flag above will trigger catch-up)
   startAnalysisRun(false);
 
-  // Also run conversation summary updates (independent of analysis pipeline)
-  if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
-    const now = Date.now();
-    const SUMMARY_INTERVAL_MS = 15000;
-    if (!meta.lastSummaryMs || (now - meta.lastSummaryMs) > SUMMARY_INTERVAL_MS) {
-      meta.lastSummaryMs = now;
-      connectionPersistence.set(connectionId, meta);
-      const formattedTranscript = meta.conversationHistory || '';
-      const summaryProspectType = meta.prospectType || prospectType || '';
-      if (formattedTranscript.length > 50) {
-        runConversationSummaryAgent(formattedTranscript, summaryProspectType, false)
-          .then((summaryResult) => {
-            if (summaryResult && !summaryResult.error && isSupabaseConfigured()) {
-              const supabase = createUserSupabaseClient(meta.authToken);
-              if (supabase) {
-                const summaryData = {
-                  session_id: meta.sessionId,
-                  user_id: meta.userId,
-                  user_email: meta.userEmail || '',
-                  prospect_type: summaryProspectType,
-                  summary_json: summaryResult,
-                  is_final: false,
-                  updated_at: new Date().toISOString()
-                };
-                void supabase.from('call_summaries').upsert(summaryData, { onConflict: 'session_id' }).catch(() => {});
-              }
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }
+  // NOTE: Progressive summary is handled in startRealtimeListening -> onTranscript (single place).
 
   // Persist transcript chunk to Supabase with AI-detected speaker role
   if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
