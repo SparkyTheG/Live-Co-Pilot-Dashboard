@@ -629,9 +629,15 @@ export async function runRebuttalScriptAgent(detectedObjections, customScriptPro
     `${idx}. "${obj.objectionText}"`
   ).join('\n');
 
-  const customContext = customScriptPrompt?.trim() 
-    ? `\nCONTEXT: ${customScriptPrompt}` 
+  const trimmedContext = String(customScriptPrompt || '').trim();
+  const customContext = trimmedContext
+    ? `\n\nCUSTOM BUSINESS CONTEXT (must use for tone/positioning):\n- ${trimmedContext}\n`
     : '';
+
+  console.log('[RebuttalAgent] context', {
+    hasCustomContext: Boolean(trimmedContext),
+    contextPreview: trimmedContext ? trimmedContext.slice(0, 70) : ''
+  });
 
   const systemPrompt = `Generate empathetic rebuttal scripts (2-3 sentences each).${customContext}
 
@@ -639,6 +645,11 @@ FORMAT:
 1. Start with empathy: "I understand..." / "That's valid..." / "It's natural..."
 2. Acknowledge concern genuinely
 3. Provide value/next step
+
+RULES:
+- If CUSTOM BUSINESS CONTEXT is provided, you MUST adapt the rebuttal to fit that business (industry, offer type, positioning).
+- Do NOT literally repeat the context line verbatim; weave it naturally into the rebuttal (e.g., reference the relevant domain, outcomes, or approach).
+- Keep each rebuttal 2-3 sentences, confident, and non-pushy.
 
 Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"I understand. What specific questions can I answer?"}]}`;
 
