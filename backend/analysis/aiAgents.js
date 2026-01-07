@@ -161,6 +161,43 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
 }
 
 // ============================================================================
+// SPEAKER ROLE AGENT (AI)
+// Classifies each committed chunk as: closer | prospect | unknown
+// Used for:
+// - call_transcript_chunks.speaker_role
+// - call_sessions.transcript_text speaker labels
+// ============================================================================
+export async function runSpeakerRoleAgent(newChunk, conversationHistory = '') {
+  const text = String(newChunk || '').trim();
+  if (!text) return { speaker: 'unknown' };
+
+  // Keep context short + recent (avoid cost + latency)
+  const history = String(conversationHistory || '').slice(-1200);
+
+  const systemPrompt = `You label who spoke a chunk in a real estate sales call.
+
+Return ONLY JSON: {"speaker":"closer"} or {"speaker":"prospect"} or {"speaker":"unknown"}
+
+Rules:
+- closer = salesperson (asks questions, explains process, proposes steps, schedules, qualifies)
+- prospect = seller (talks about their situation, pain, timeline, money, objections, motivations)
+- unknown if too short/ambiguous or could be either.
+
+Be conservative: prefer "unknown" over guessing when unclear.`;
+
+  const userPrompt = `Recent conversation (may include speaker tags, use as hint only):
+${history}
+
+New chunk:
+"${text}"`;
+
+  const result = await callAI(systemPrompt, userPrompt, 'SpeakerRoleAgent', { maxTokens: 40, timeoutMs: 2500 });
+  const sp = String(result?.speaker || '').toLowerCase();
+  if (sp === 'closer' || sp === 'prospect' || sp === 'unknown') return { speaker: sp };
+  return { speaker: 'unknown' };
+}
+
+// ============================================================================
 // LUBOMETER: 7 PILLAR AGENTS (run in parallel)
 // Each agent scores only its pillar's indicators
 // ============================================================================

@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversation } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
-import { runConversationSummaryAgent } from './analysis/aiAgents.js';
+import { runConversationSummaryAgent, runSpeakerRoleAgent } from './analysis/aiAgents.js';
 
 dotenv.config();
 
@@ -236,7 +236,7 @@ wss.on('connection', (ws, req) => {
         const cm = metaAfterConfig?.clientMode || 'backend_transcribe';
         if (cm === 'backend_transcribe') {
           console.log(`[WS] clientMode=backend_transcribe: starting backend STT`);
-          await startRealtimeListening(connectionId, data.config);
+        await startRealtimeListening(connectionId, data.config);
         } else {
           console.log(`[WS] clientMode=${cm}: skipping backend STT (no ElevenLabs)`);
         }
@@ -542,14 +542,12 @@ async function handleIncomingTextChunk(connectionId, {
 
   // Skip speaker detection to save API calls - use simple heuristic instead
   let detectedSpeaker = 'unknown';
-  
-  // Simple speaker heuristic: questions are usually from closer, statements from prospect
-  const hasQuestion = text.includes('?');
-  const isShort = text.split(' ').length < 8;
-  if (hasQuestion && isShort) {
-    detectedSpeaker = 'closer';
-  } else if (text.length > 30) {
-    detectedSpeaker = 'prospect';
+  try {
+    const aiSpeaker = await runSpeakerRoleAgent(text, conversationHistory);
+    if (aiSpeaker?.speaker) detectedSpeaker = aiSpeaker.speaker;
+  } catch (e) {
+    // Hard fallback: avoid breaking pipeline if OpenAI is unavailable.
+    detectedSpeaker = 'unknown';
   }
   
   console.log(`[${connectionId.slice(-6)}] chunk: "${text.slice(0, 40)}..." speaker=${detectedSpeaker}`);
@@ -861,7 +859,7 @@ async function startRealtimeListening(connectionId, config) {
                           summary_json: summaryResult,
                           is_final: false,
                           updated_at: new Date().toISOString()
-                        };
+          };
 
                         // Upsert summary (update if exists, insert if new)
                         console.log(`[${connectionId}] Upserting summary to Supabase...`, { session_id: summaryData.session_id, user_id: summaryData.user_id });
