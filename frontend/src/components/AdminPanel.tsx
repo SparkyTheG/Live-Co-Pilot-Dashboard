@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn, FileText } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { prospectTypes } from '../data/coPilotData';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -316,7 +317,7 @@ function VerificationPendingScreen({
 }
 
 export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps) {
-  const { settings, updatePillarWeight, updateCustomPrompt, resetToDefaults, saveToSupabase, saving, lastSaved } = useSettings();
+  const { settings, updatePillarWeight, updateCustomPrompt, updateDiagnosticQuestions, resetToDefaults, saveToSupabase, saving, lastSaved } = useSettings();
   const { user, loading, signOut } = useAuth();
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -337,6 +338,11 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
   const calculateMaxScore = () => {
     return settings.pillarWeights.reduce((sum, p) => sum + p.weight * 10, 0);
   };
+
+  const [dqProspectType, setDqProspectType] = useState<string>('foreclosure');
+  const dqList = Array.isArray(settings.diagnosticQuestionsByProspectType?.[dqProspectType])
+    ? settings.diagnosticQuestionsByProspectType[dqProspectType]
+    : [];
 
   // Loading state
   if (loading) {
@@ -538,6 +544,118 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                 }`}>
                   {settings.customScriptPrompt.length}/70
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Diagnostic Questions Editor */}
+        <div className="mt-8 backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Diagnostic Questions Editor</h2>
+              <p className="text-sm text-gray-400">Edit the question, helper text, and badge for each prospect type</p>
+            </div>
+            <select
+              value={dqProspectType}
+              onChange={(e) => setDqProspectType(e.target.value)}
+              className="bg-gray-900 border border-gray-600 rounded-xl px-4 py-2 text-white focus:border-cyan-500 focus:outline-none"
+            >
+              {prospectTypes.map((pt) => (
+                <option key={pt.id} value={pt.id}>{pt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-3">
+            {dqList.length === 0 ? (
+              <div className="text-gray-400 text-sm">
+                No custom questions saved yet for this prospect type. Add your first one below.
+              </div>
+            ) : (
+              dqList.map((q, idx) => (
+                <div key={idx} className="p-4 bg-gray-800/40 border border-gray-700/40 rounded-xl">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs text-gray-400 mb-1">Question</label>
+                      <input
+                        value={q.question}
+                        onChange={(e) => {
+                          const next = dqList.map((x, i) => i === idx ? { ...x, question: e.target.value } : x);
+                          updateDiagnosticQuestions(dqProspectType, next);
+                        }}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+                      />
+                      <label className="block text-xs text-gray-400 mb-1 mt-3">Helper text</label>
+                      <input
+                        value={q.helper}
+                        onChange={(e) => {
+                          const next = dqList.map((x, i) => i === idx ? { ...x, helper: e.target.value } : x);
+                          updateDiagnosticQuestions(dqProspectType, next);
+                        }}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Badge text</label>
+                      <input
+                        value={q.badgeText}
+                        onChange={(e) => {
+                          const next = dqList.map((x, i) => i === idx ? { ...x, badgeText: e.target.value } : x);
+                          updateDiagnosticQuestions(dqProspectType, next);
+                        }}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+                      />
+                      <label className="block text-xs text-gray-400 mb-1 mt-3">Badge color</label>
+                      <select
+                        value={q.badgeColor}
+                        onChange={(e) => {
+                          const next = dqList.map((x, i) => i === idx ? { ...x, badgeColor: e.target.value as any } : x);
+                          updateDiagnosticQuestions(dqProspectType, next);
+                        }}
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+                      >
+                        <option value="situation">Situation</option>
+                        <option value="timeline">Timeline</option>
+                        <option value="authority">Authority</option>
+                        <option value="pain">Pain Point</option>
+                        <option value="financial">Financial</option>
+                      </select>
+
+                      <div className="flex gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = dqList.filter((_, i) => i !== idx);
+                            updateDiagnosticQuestions(dqProspectType, next);
+                          }}
+                          className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 rounded-lg text-red-300 text-xs"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    ...dqList,
+                    { question: 'New question...', helper: 'Why this matters...', badgeText: 'Financial', badgeColor: 'financial' as const }
+                  ];
+                  updateDiagnosticQuestions(dqProspectType, next);
+                }}
+                className="px-4 py-2 bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 rounded-lg text-cyan-200 text-sm font-medium"
+              >
+                Add question
+              </button>
+              <div className="text-xs text-gray-500">
+                Changes are saved when you click <span className="text-gray-300">Save Settings</span>
               </div>
             </div>
           </div>

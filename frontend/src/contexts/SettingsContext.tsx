@@ -13,10 +13,20 @@ export interface PriceTierSetting {
   price: number;
 }
 
+export type DiagnosticQuestionCategory = 'situation' | 'timeline' | 'authority' | 'pain' | 'financial';
+
+export interface EditableDiagnosticQuestion {
+  question: string;
+  helper: string;
+  badgeText: string;
+  badgeColor: DiagnosticQuestionCategory;
+}
+
 export interface AdminSettings {
   pillarWeights: PillarWeight[];
   priceTiers: PriceTierSetting[];
   customScriptPrompt: string;
+  diagnosticQuestionsByProspectType: Record<string, EditableDiagnosticQuestion[]>;
 }
 
 const DEFAULT_SETTINGS: AdminSettings = {
@@ -35,6 +45,7 @@ const DEFAULT_SETTINGS: AdminSettings = {
     { label: 'Elite', price: 15997 },
   ],
   customScriptPrompt: '',
+  diagnosticQuestionsByProspectType: {},
 };
 
 interface SettingsContextType {
@@ -42,6 +53,7 @@ interface SettingsContextType {
   updatePillarWeight: (pillarId: string, weight: number) => void;
   updatePriceTier: (index: number, price: number, label?: string) => void;
   updateCustomPrompt: (prompt: string) => void;
+  updateDiagnosticQuestions: (prospectType: string, questions: EditableDiagnosticQuestion[]) => void;
   resetToDefaults: () => void;
   saveToSupabase: () => Promise<{ success: boolean; error?: string }>;
   saving: boolean;
@@ -68,6 +80,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         pillarWeights: Array.isArray(parsed.pillarWeights) ? parsed.pillarWeights : DEFAULT_SETTINGS.pillarWeights,
         priceTiers: Array.isArray(parsed.priceTiers) ? parsed.priceTiers : DEFAULT_SETTINGS.priceTiers,
         customScriptPrompt: typeof parsed.customScriptPrompt === 'string' ? parsed.customScriptPrompt.slice(0, 70) : DEFAULT_SETTINGS.customScriptPrompt,
+        diagnosticQuestionsByProspectType:
+          parsed.diagnosticQuestionsByProspectType && typeof parsed.diagnosticQuestionsByProspectType === 'object'
+            ? parsed.diagnosticQuestionsByProspectType
+            : DEFAULT_SETTINGS.diagnosticQuestionsByProspectType,
       };
     };
   }, []);
@@ -209,6 +225,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const updateDiagnosticQuestions: SettingsContextType['updateDiagnosticQuestions'] = (prospectType, questions) => {
+    setSettings(prev => ({
+      ...prev,
+      diagnosticQuestionsByProspectType: {
+        ...(prev.diagnosticQuestionsByProspectType || {}),
+        [prospectType]: Array.isArray(questions) ? questions : []
+      }
+    }));
+  };
+
   const resetToDefaults = () => {
     setSettings(DEFAULT_SETTINGS);
   };
@@ -220,6 +246,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updatePillarWeight,
         updatePriceTier,
         updateCustomPrompt,
+        updateDiagnosticQuestions,
         resetToDefaults,
         saveToSupabase,
         saving,

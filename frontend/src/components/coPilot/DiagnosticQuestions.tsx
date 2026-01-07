@@ -1,6 +1,7 @@
 import { ClipboardList, HelpCircle } from 'lucide-react';
 import { ProspectType } from '../../data/coPilotData';
 import { diagnosticQuestions } from '../../data/diagnosticQuestions';
+import { useSettings } from '../../contexts/SettingsContext';
 
 interface DiagnosticQuestionsProps {
   prospectType: ProspectType;
@@ -23,7 +24,16 @@ const categoryLabels = {
 };
 
 export default function DiagnosticQuestions({ prospectType }: DiagnosticQuestionsProps) {
-  const questions = diagnosticQuestions[prospectType];
+  const { settings } = useSettings();
+  const questions =
+    (settings.diagnosticQuestionsByProspectType?.[prospectType] && Array.isArray(settings.diagnosticQuestionsByProspectType[prospectType]))
+      ? settings.diagnosticQuestionsByProspectType[prospectType]
+      : (diagnosticQuestions[prospectType] as any[]).map((q) => ({
+          question: q.question,
+          helper: q.why,
+          badgeText: q.category === 'pain' ? 'Pain Point' : q.category.charAt(0).toUpperCase() + q.category.slice(1),
+          badgeColor: q.category
+        }));
 
   return (
     <div className="bg-gradient-to-br from-gray-900 via-gray-900 to-blue-950 border-2 border-blue-500/30 rounded-2xl p-6 shadow-2xl">
@@ -51,15 +61,15 @@ export default function DiagnosticQuestions({ prospectType }: DiagnosticQuestion
                   <p className="text-white font-medium text-lg leading-relaxed">
                     {q.question}
                   </p>
-                  <span className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border ${categoryColors[q.category]}`}>
-                    {categoryLabels[q.category]}
+                  <span className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border ${categoryColors[(q as any).badgeColor]}`}>
+                    {(q as any).badgeText}
                   </span>
                 </div>
 
                 <div className="flex items-start gap-2 pl-2 border-l-2 border-blue-500/30">
                   <HelpCircle className="w-4 h-4 text-blue-400/60 mt-0.5 flex-shrink-0" />
                   <p className="text-blue-300/70 text-sm italic">
-                    {q.why}
+                    {(q as any).helper}
                   </p>
                 </div>
               </div>

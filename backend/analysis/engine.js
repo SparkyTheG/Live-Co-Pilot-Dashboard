@@ -351,8 +351,9 @@ function computeTruthIndex(aiAnalysis) {
 }
 
 function normalizeDiagnosticQuestions(aiAnalysis) {
-  const asked = Array.isArray(aiAnalysis?.askedQuestions) ? aiAnalysis.askedQuestions.filter((n) => Number.isInteger(n)) : [];
-  return { asked, total: 0, completion: 0 };
+  // Diagnostic questions are user-controlled (no AI auto-detection).
+  // Keep schema stable for the frontend, but don't auto-populate.
+  return { asked: [], total: 0, completion: 0 };
 }
 
 async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType, pillarWeights, aiAnalysis, startTime }) {

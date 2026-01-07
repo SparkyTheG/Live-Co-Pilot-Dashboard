@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle2, Circle, Target, Gauge, Sparkles, Shield } from 'lucide-react';
 import { ProspectType } from '../data/coPilotData';
 import { diagnosticQuestions } from '../data/diagnosticQuestions';
+import { useSettings } from '../contexts/SettingsContext';
 import TopObjections from './TopObjections';
 import RecordingButton from './coPilot/RecordingButton';
 
@@ -58,6 +59,7 @@ export default function LiveCoPilotDashboard() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [questionStates, setQuestionStates] = useState<Record<number, { asked: boolean }>>({});
   const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const { settings } = useSettings();
 
   // Accumulated history for hot buttons and objections (persists across updates)
   const [hotButtonsHistory, setHotButtonsHistory] = useState<Array<{
@@ -106,8 +108,11 @@ export default function LiveCoPilotDashboard() {
     askedQuestionsRef.current = askedQuestionsHistory;
   }, [askedQuestionsHistory]);
 
-  // Get questions for this prospect type (needed for callback)
-  const questions = diagnosticQuestions[prospectType];
+  // Get questions for this prospect type (render + validation)
+  const questionsFromSettings = settings.diagnosticQuestionsByProspectType?.[prospectType];
+  const questions = (Array.isArray(questionsFromSettings) && questionsFromSettings.length > 0)
+    ? questionsFromSettings
+    : diagnosticQuestions[prospectType];
 
   // Extract analysis update handler so it can be reused
   const handleAnalysisUpdate = useCallback((analysis: any) => {
@@ -217,24 +222,7 @@ export default function LiveCoPilotDashboard() {
       });
     }
 
-    // Accumulate asked questions - but ONLY if AI actually detected some
-    // Don't add from empty arrays or error responses
-    const newAskedFromAI = analysis.diagnosticQuestions?.asked;
-    if (newAskedFromAI && Array.isArray(newAskedFromAI) && newAskedFromAI.length > 0) {
-      setAskedQuestionsHistory(prev => {
-        const newSet = new Set(prev);
-        // Only add valid question indices
-        const currentQuestions = diagnosticQuestions[prospectType];
-        newAskedFromAI.forEach((idx: number) => {
-          if (typeof idx === 'number' && idx >= 0 && idx < currentQuestions.length) {
-            newSet.add(idx);
-          }
-        });
-        askedQuestionsRef.current = newSet;
-        console.log(`[DiagnosticQuestions] Added from AI: [${newAskedFromAI.join(', ')}], Total: [${Array.from(newSet).join(', ')}]`);
-        return newSet;
-      });
-    }
+    // Diagnostic Questions are user-controlled now (no AI auto-detection).
 
     // Ensure hotButtons and objections are arrays before setting state
     // Use accumulated history for asked questions
@@ -248,7 +236,7 @@ export default function LiveCoPilotDashboard() {
         ...analysis.diagnosticQuestions,
         // Use accumulated history
         asked: currentAskedArray,
-        total: analysis.diagnosticQuestions?.total || diagnosticQuestions[prospectType].length,
+        total: analysis.diagnosticQuestions?.total || questions.length,
         completion: analysis.diagnosticQuestions?.completion || 0
       }
     };

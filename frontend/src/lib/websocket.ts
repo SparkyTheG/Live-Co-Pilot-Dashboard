@@ -42,7 +42,7 @@ export interface AnalysisUpdate {
     authority: string;
     structure: string;
   };
-  diagnosticQuestions: {
+  diagnosticQuestions?: {
     asked: number[];
     total: number;
     completion: number;

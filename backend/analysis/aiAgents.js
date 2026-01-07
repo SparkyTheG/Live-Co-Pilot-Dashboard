@@ -591,78 +591,13 @@ export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
   return { objections };
 }
 
-// ============================================================================
-// AGENT 4: DIAGNOSTIC QUESTIONS AGENT
-// Output: askedQuestions (indices of questions asked by salesperson)
-// ============================================================================
-const DIAGNOSTIC_QUESTIONS = {
-  'foreclosure': [
-    'How many days until auction?',
-    'Loan balance vs property value?',
-    'Months behind on payments?',
-    'Why did this happen?',
-    'Talked to lender about options?',
-    'Family still living there?',
-    'What happens if auction occurs?',
-    'Who else is involved in decision?',
-    'Listed with agent or other offers?'
-  ],
-  'creative-seller-financing': [
-    'Months behind on payments?',
-    'Current loan balance and monthly payment?',
-    'Why did you fall behind?',
-    'Any foreclosure notices? Auction date?',
-    'Other liens or judgments?',
-    'Who else involved in decision?',
-    'What happens if you lose property?',
-    'Listed with agent or other offers?'
-  ],
-  'distressed-landlord': [
-    'How long as landlord?',
-    'How many properties?',
-    'Current tenant situation?',
-    'Monthly negative cash flow?',
-    'What incident made you say done?',
-    'Property condition?',
-    'Self-managing or property manager?',
-    'Tried to fix before?'
-  ],
-  'performing-tired-landlord': [
-    'How long in landlord business?',
-    'Current monthly cash flow?',
-    'What triggered selling consideration?',
-    'Time spent managing per month?',
-    'What would you do without this property?',
-    'Does spouse want you to sell?',
-    'Trade income for freedom today?',
-    'Calculated time worth vs rental income?'
-  ],
-  'cash-equity-seller': [
-    'Timeline for selling?',
-    'Why selling now?',
-    'Bottom-line number?',
-    'Already purchased next property?',
-    'Other offers received?',
-    'What to commit today?',
-    'Anyone else in decision?',
-    'Lower price for guaranteed 7-day close?'
-  ]
-};
+// NOTE: Diagnostic Questions AI agent removed.
+// Diagnostic questions are now user-editable content in the frontend (Admin Panel),
+// and the "asked" state is controlled manually (no AI auto-detection).
 
-export async function runDiagnosticQuestionsAgent(transcript, prospectType) {
-  const questions = DIAGNOSTIC_QUESTIONS[prospectType] || DIAGNOSTIC_QUESTIONS['foreclosure'];
-  const questionsList = questions.map((q, idx) => `${idx}. ${q}`).join('\n');
-  
-  const systemPrompt = `Detect which questions the SALESPERSON asked (semantic match OK).
-
-QUESTIONS:\n${questionsList}
-
-Return: {"askedQuestions":[0,2,5]} (indices of questions asked)`;
-
-  const userPrompt = `Transcript:\n"${transcript}"`;
-
-  return await callAI(systemPrompt, userPrompt, 'DiagnosticAgent', 200);
-}
+// NOTE: Diagnostic Questions agent removed.
+// Diagnostic questions are now user-editable content in the frontend (Admin Panel),
+// and the "asked" state is controlled manually (no AI auto-detection).
 
 // ============================================================================
 // AGENT 5: TRUTH INDEX AGENT
@@ -834,7 +769,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
     withTimeout(runAllPillarAgents(tPillars), 12000, { indicatorSignals: {}, pillarErrors: {} }),
     withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
     withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 11000, { objections: [] }),
-    withTimeout(runDiagnosticQuestionsAgent(tDiagnostic, prospectType), 9000, { askedQuestions: [] }),
     withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
     withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
   ];
@@ -844,7 +778,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
     pillarsResultRaw,
     hotButtonsResultRaw,
     objectionsResultRaw,
-    diagnosticResultRaw,
     truthIndexResultRaw,
     insightsResultRaw
   ] = settled.map((r) => (r.status === 'fulfilled' ? r.value : null));
@@ -852,7 +785,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
   const pillarsResult = pillarsResultRaw || { indicatorSignals: {}, pillarErrors: {} };
   const hotButtonsResult = hotButtonsResultRaw || { hotButtonDetails: [] };
   const objectionsResult = objectionsResultRaw || { objections: [] };
-  const diagnosticResult = diagnosticResultRaw || { askedQuestions: [] };
   const truthIndexResult = truthIndexResultRaw || { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' };
   const insightsResult = insightsResultRaw || { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' };
   
@@ -870,8 +802,8 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
     hotButtonDetails: hotButtonsResult.hotButtonDetails || [],
     // From 4 Objection Agents
     objections: objectionsResult.objections || [],
-    // From Diagnostic Agent
-    askedQuestions: diagnosticResult.askedQuestions || [],
+    // Diagnostic Questions: user-controlled (no AI)
+    askedQuestions: [],
     // From Truth Index Agent (T1-T5 rules)
     detectedRules: truthIndexResult.detectedRules || [],
     coherenceSignals: truthIndexResult.coherenceSignals || [],
@@ -887,7 +819,6 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
       pillars: pillarsResult.pillarErrors || null,
       hotButtons: hotButtonsResult.error || null,
       objections: objectionsResult.error || null,
-      diagnostic: diagnosticResult.error || null,
       truthIndex: truthIndexResult.error || null,
       insights: insightsResult.error || null
     }
