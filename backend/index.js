@@ -17,7 +17,8 @@ console.log('[BOOT] backend starting', {
   hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
   hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY),
   hasRealtimeModelEnv: Boolean(process.env.OPENAI_REALTIME_MODEL),
-  realtimeDisabled: process.env.OPENAI_REALTIME_DISABLED === 'true'
+  realtimeDisabled: process.env.OPENAI_REALTIME_DISABLED === 'true',
+  supabaseConfigured: isSupabaseConfigured()
 });
 
 // Debug-mode instrumentation removed after verification.
@@ -925,7 +926,12 @@ function stopListening(connectionId) {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), backendBuildSha: BACKEND_BUILD_SHA });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    backendBuildSha: BACKEND_BUILD_SHA,
+    supabaseConfigured: isSupabaseConfigured()
+  });
 });
 
 // Start server
