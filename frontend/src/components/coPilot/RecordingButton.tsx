@@ -54,6 +54,26 @@ export default function RecordingButton({
     }
   }, [prospectType]);
 
+  // If settings change mid-call (pillar weights / prompt), push them to backend so Lubometer uses latest.
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws || !ws.isConnected()) return;
+    if (!isRecordingRef.current) return;
+    try {
+      ws.sendSettingsUpdate(customScriptPrompt, pillarWeights);
+      // Keep reconnect behavior consistent with latest settings
+      if (startListeningConfigRef.current) {
+        startListeningConfigRef.current = {
+          ...startListeningConfigRef.current,
+          customScriptPrompt,
+          pillarWeights
+        };
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [customScriptPrompt, pillarWeights]);
+
   // Load microphone devices (best-effort)
   useEffect(() => {
     const refresh = async () => {
@@ -272,7 +292,7 @@ export default function RecordingButton({
             const s = Math.max(-1, Math.min(1, input[i]));
             const val = s < 0 ? Math.floor(s * 0x8000) : Math.floor(s * 0x7fff);
             view.setInt16(i * 2, val, true);
-          }
+                }
           return buffer;
         };
 
@@ -292,8 +312,8 @@ export default function RecordingButton({
         isRecordingRef.current = true;
         setIsConnecting(false);
         console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)', { inSampleRate });
-        return;
-      }
+              return;
+            }
 
       // Use Web Speech API for transcription (free, runs in browser)
       const SpeechRecognitionCtor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;

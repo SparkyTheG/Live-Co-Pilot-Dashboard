@@ -371,6 +371,20 @@ wss.on('connection', (ws, req) => {
           pillarWeights: data.pillarWeights ?? meta?.pillarWeights ?? null,
           clientTsMs: typeof data.clientTsMs === 'number' ? data.clientTsMs : null
         });
+      } else if (data.type === 'settings_update') {
+        // Allow mid-call updates to settings that affect analysis (pillar weights, prompts).
+        const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
+        const nextCustom = typeof data.customScriptPrompt === 'string' ? data.customScriptPrompt : meta.customScriptPrompt || '';
+        const nextWeights = Array.isArray(data.pillarWeights) ? data.pillarWeights : meta.pillarWeights || null;
+        meta.customScriptPrompt = nextCustom;
+        meta.pillarWeights = nextWeights;
+        connectionPersistence.set(connectionId, meta);
+        console.log(`[WS] settings_update stored for ${connectionId.slice(-6)}`, {
+          hasCustomScript: Boolean(nextCustom),
+          pillarWeightsCount: Array.isArray(nextWeights) ? nextWeights.length : 0
+        });
+        // Optional ack so frontend can update lastMessageTime if desired
+        sendToClient(connectionId, { type: 'settings_update_ack', ts: Date.now() });
       } else if (data.type === 'debug_event') {
         // Debug-only: allows frontend to emit structured logs visible in Railway.
         // Never log secrets.

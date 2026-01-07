@@ -73,7 +73,7 @@ export class ConversationWebSocket {
     // In production, if no URL is provided, fall back to same-origin /ws (works on Railway single-service deploys)
     const envUrl = import.meta.env.VITE_WS_URL;
     const defaultUrl = import.meta.env.DEV ? 'ws://localhost:3001/ws' : undefined;
-
+    
     const derivedUrl = (() => {
       try {
         if (typeof window === 'undefined') return undefined;
@@ -301,6 +301,22 @@ export class ConversationWebSocket {
       type: 'transcript',
       text: text,
       prospectType: prospectType,
+      customScriptPrompt: customScriptPrompt || '',
+      pillarWeights: pillarWeights || null,
+      authToken: this.authToken,
+      clientTsMs: Date.now()
+    }));
+  }
+
+  // Update analysis-related settings mid-call without restarting listening.
+  sendSettingsUpdate(customScriptPrompt?: string, pillarWeights?: { id: string; weight: number }[]) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket is not connected, cannot send settings_update');
+      return;
+    }
+    this.lastSendTime = Date.now();
+    this.ws.send(JSON.stringify({
+      type: 'settings_update',
       customScriptPrompt: customScriptPrompt || '',
       pillarWeights: pillarWeights || null,
       authToken: this.authToken,

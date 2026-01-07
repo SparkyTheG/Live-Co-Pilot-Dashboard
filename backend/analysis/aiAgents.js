@@ -749,7 +749,12 @@ Return: {
 
   const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
 
-  return await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 600);
+  const res = await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 600);
+  // Mark successful agent output so the engine can distinguish it from fallbacks/timeouts.
+  if (res && typeof res === 'object' && !res.error) {
+    res._fromAgent = true;
+  }
+  return res;
 }
 
 // NOTE: Speaker detection agent removed (not used; backend uses a simple heuristic).
@@ -863,7 +868,8 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
     withTimeout(runAllPillarAgents(tPillars), 12000, { indicatorSignals: {}, pillarErrors: {} }),
     withTimeout(runHotButtonsAgent(tHotButtons), 9000, { hotButtonDetails: [] }),
     withTimeout(runObjectionsAgents(tObjections, customScriptPrompt), 11000, { objections: [] }),
-    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: 'medium' }),
+    // If Truth Index times out, force deterministic fallback in engine by surfacing an error.
+    withTimeout(runTruthIndexAgent(tTruth), 9000, { detectedRules: [], coherenceSignals: [], overallCoherence: '', error: 'timeout' }),
     withTimeout(runInsightsAgent(tInsights, prospectType), 9000, { summary: '', keyMotivators: [], concerns: [], recommendation: '', closingReadiness: 'not_ready' })
   ];
 
@@ -901,6 +907,7 @@ export async function runAllAgents(transcript, prospectType, customScriptPrompt 
     detectedRules: truthIndexResult.detectedRules || [],
     coherenceSignals: truthIndexResult.coherenceSignals || [],
     overallCoherence: truthIndexResult.overallCoherence || 'medium',
+    truthIndexFromAgent: Boolean(truthIndexResult._fromAgent),
     // From Insights Agent
     insights: insightsResult.summary || '',
     keyMotivators: insightsResult.keyMotivators || [],

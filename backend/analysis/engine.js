@@ -455,10 +455,16 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
     return computeTruthIndexDeterministic(indicatorSignals, transcript);
   }
 
+  // If the truth agent didn't actually run (e.g., upstream fallback object),
+  // use deterministic rules rather than returning a "default medium" score.
+  const fromAgent = Boolean(aiAnalysis?.truthIndexFromAgent);
+
   // Prefer AI-detected rules if present; otherwise fall back to deterministic.
   const rules = Array.isArray(aiAnalysis?.detectedRules) ? aiAnalysis.detectedRules : [];
   const coherence = String(aiAnalysis?.overallCoherence || '').toLowerCase();
-  const hasAiSignal = rules.length > 0 || coherence === 'high' || coherence === 'medium' || coherence === 'low';
+  const hasAiSignal =
+    fromAgent &&
+    (rules.length > 0 || coherence === 'high' || coherence === 'medium' || coherence === 'low');
   if (!hasAiSignal) {
     return computeTruthIndexDeterministic(indicatorSignals, transcript);
   }
