@@ -333,16 +333,145 @@ function computeLubometer(indicatorSignals, pillarWeights) {
   return { score, maxScore: 90, level, interpretation, action, pillarScores: pillarAvg, weightsUsed };
 }
 
-function computeTruthIndex(aiAnalysis) {
-  const coherence = String(aiAnalysis?.overallCoherence || 'medium').toLowerCase();
-  const base = coherence === 'high' ? 80 : coherence === 'low' ? 45 : 60;
+function avgRange(indicatorSignals, a, b) {
+  let sum = 0;
+  let cnt = 0;
+  for (let i = a; i <= b; i++) {
+    const v = toNum(indicatorSignals?.[String(i)]);
+    if (v > 0) {
+      sum += clamp(v, 0, 10);
+      cnt++;
+    }
+  }
+  return cnt ? sum / cnt : 0;
+}
+
+function computeTruthIndexDeterministic(indicatorSignals, transcript) {
+  const t = String(transcript || '').toLowerCase();
+
+  const painAvg = avgRange(indicatorSignals, 1, 4);
+  const desireAvg = (() => {
+    const d2 = toNum(indicatorSignals?.['2']);
+    const d3 = toNum(indicatorSignals?.['3']);
+    const vals = [d2, d3].filter((n) => n > 0);
+    if (!vals.length) return 0;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+  const urgencyAvg = avgRange(indicatorSignals, 5, 8);
+  const decisivenessAvg = avgRange(indicatorSignals, 9, 12);
+  const moneyAvg = avgRange(indicatorSignals, 13, 16);
+  const responsibilityAvg = avgRange(indicatorSignals, 17, 20);
+  const priceSensitivityRaw = avgRange(indicatorSignals, 21, 23);
+
+  const penalties = [];
+
+  // T1: High Pain + Low Urgency (≤4) –15
+  if (painAvg >= 7 && urgencyAvg > 0 && urgencyAvg <= 4) {
+    penalties.push({
+      rule: 'T1 High Pain + Low Urgency',
+      description: 'Pain is high but urgency is low.',
+      penalty: 15,
+      details: `painAvg=${painAvg.toFixed(1)}, urgencyAvg=${urgencyAvg.toFixed(1)}`
+    });
+  }
+
+  // T2: High Desire + Low Decisiveness (≤4) –15
+  if (desireAvg >= 7 && decisivenessAvg > 0 && decisivenessAvg <= 4) {
+    penalties.push({
+      rule: 'T2 High Desire + Low Decisiveness',
+      description: 'Desire is high but decisiveness is low.',
+      penalty: 15,
+      details: `desireAvg=${desireAvg.toFixed(1)}, decisivenessAvg=${decisivenessAvg.toFixed(1)}`
+    });
+  }
+
+  // T3: High Money + High Price Sensitivity (≥8) –10
+  if (moneyAvg >= 7 && priceSensitivityRaw >= 8) {
+    penalties.push({
+      rule: 'T3 High Money + High Price Sensitivity',
+      description: 'Money looks available but price sensitivity is very high.',
+      penalty: 10,
+      details: `moneyAvg=${moneyAvg.toFixed(1)}, priceSensitivityRaw=${priceSensitivityRaw.toFixed(1)}`
+    });
+  }
+
+  // T4: Claims Authority + Reveals Need for Approval –10 (use transcript cue)
+  const authority = toNum(indicatorSignals?.['9']);
+  const needsApproval =
+    t.includes('ask my wife') ||
+    t.includes('ask my husband') ||
+    t.includes('ask my partner') ||
+    t.includes('check with my wife') ||
+    t.includes('check with my husband') ||
+    t.includes('check with my partner') ||
+    t.includes('talk to my wife') ||
+    t.includes('talk to my husband') ||
+    t.includes('talk to my partner') ||
+    t.includes('need to ask') ||
+    t.includes('need to check') ||
+    t.includes('need to talk to');
+
+  if (authority >= 7 && needsApproval) {
+    penalties.push({
+      rule: 'T4 Claims Authority + Needs Approval',
+      description: 'Authority appears high but approval language is present.',
+      penalty: 10,
+      details: `authority=${authority}, approvalCue=true`
+    });
+  }
+
+  // T5: High Desire + Low Responsibility (≤5) –15
+  if (desireAvg >= 7 && responsibilityAvg > 0 && responsibilityAvg <= 5) {
+    penalties.push({
+      rule: 'T5 High Desire + Low Responsibility',
+      description: 'Desire is high but ownership/responsibility is low.',
+      penalty: 15,
+      details: `desireAvg=${desireAvg.toFixed(1)}, responsibilityAvg=${responsibilityAvg.toFixed(1)}`
+    });
+  }
+
+  const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
+  const score = clamp(100 - totalPenalty, 0, 100);
+
+  const coherenceSignals = [];
+  if (painAvg >= 7 && urgencyAvg >= 6) coherenceSignals.push('Pain aligns with urgency');
+  if (desireAvg >= 7 && decisivenessAvg >= 6) coherenceSignals.push('Desire aligns with decisiveness');
+  if (responsibilityAvg >= 7) coherenceSignals.push('High ownership/responsibility');
+
+  const overallCoherence = score >= 75 ? 'high' : score >= 50 ? 'medium' : 'low';
+  const redFlags = penalties.map((p) => p.rule).slice(0, 8);
+
+  return {
+    score,
+    signals: coherenceSignals,
+    redFlags,
+    penalties: penalties.slice(0, 8)
+  };
+}
+
+function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
+  // If truth agent timed out/errored, use deterministic rules so Truth Index still updates.
+  if (aiAnalysis?.agentErrors?.truthIndex) {
+    return computeTruthIndexDeterministic(indicatorSignals, transcript);
+  }
+
+  // Prefer AI-detected rules if present; otherwise fall back to deterministic.
   const rules = Array.isArray(aiAnalysis?.detectedRules) ? aiAnalysis.detectedRules : [];
+  const coherence = String(aiAnalysis?.overallCoherence || '').toLowerCase();
+  const hasAiSignal = rules.length > 0 || coherence === 'high' || coherence === 'medium' || coherence === 'low';
+  if (!hasAiSignal) {
+    return computeTruthIndexDeterministic(indicatorSignals, transcript);
+  }
+
+  const base = coherence === 'high' ? 80 : coherence === 'low' ? 45 : 60;
   const penalty = clamp(rules.length * 4, 0, 30);
   const score = clamp(base - penalty, 0, 100);
   const signals = Array.isArray(aiAnalysis?.coherenceSignals) ? aiAnalysis.coherenceSignals : [];
-  const redFlags = rules.map((r) => (typeof r === 'string' ? r : r?.rule || r?.name || 'incoherence')).slice(0, 8);
+  const redFlags = rules
+    .map((r) => (typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence')))
+    .slice(0, 8);
   const penalties = rules.slice(0, 8).map((r) => ({
-    rule: typeof r === 'string' ? r : (r?.rule || r?.name || 'incoherence'),
+    rule: typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence'),
     description: typeof r === 'string' ? r : (r?.evidence || r?.description || ''),
     penalty: 4,
     details: typeof r === 'string' ? '' : (r?.evidence || '')
@@ -366,8 +495,9 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
   console.log(`  - Truth Index: ${aiAnalysis.overallCoherence || 'unknown'} coherence`);
   console.log(`  - Insights: ${aiAnalysis.closingReadiness || 'unknown'} readiness`);
 
-  const lubometer = computeLubometer(aiAnalysis.indicatorSignals || {}, pillarWeights);
-  const truthIndex = computeTruthIndex(aiAnalysis);
+  const indicatorSignals = aiAnalysis.indicatorSignals || {};
+  const lubometer = computeLubometer(indicatorSignals, pillarWeights);
+  const truthIndex = computeTruthIndex(aiAnalysis, indicatorSignals, cleanedTranscript);
   const hotButtons = normalizeHotButtons(aiAnalysis.hotButtonDetails);
   const objections = Array.isArray(aiAnalysis.objections) ? aiAnalysis.objections : [];
   const diagnosticQuestions = normalizeDiagnosticQuestions(aiAnalysis);
