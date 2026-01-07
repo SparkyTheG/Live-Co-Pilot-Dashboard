@@ -314,12 +314,7 @@ export default function LiveCoPilotDashboard() {
   const lubometerColor = getLubometerColor();
   const lubometerScore = analysisData?.lubometer?.score ?? 0;
 
-  // Debug visibility: show weights from settings vs weights used by backend calculation (if provided).
-  const settingsWeightsText = settings?.pillarWeights?.map((p: any) => `${p.id}:${p.weight}`).join(' | ');
-  const backendWeightsUsed = (analysisData as any)?.lubometer?.weightsUsed as Record<string, number> | undefined;
-  const backendWeightsText = backendWeightsUsed
-    ? Object.entries(backendWeightsUsed).map(([k, v]) => `${k}:${v}`).join(' | ')
-    : '';
+  // (debug display removed)
 
   // Truth Index helpers for header display - only use real data
   const getTruthIndexColor = () => {
@@ -565,21 +560,6 @@ export default function LiveCoPilotDashboard() {
                 </div>
               </div>
               
-              {(settingsWeightsText || backendWeightsText) && (
-                <div className="mb-4 space-y-1 text-xs">
-                  {settingsWeightsText && (
-                    <div className="text-gray-500">
-                      Settings weights: <span className="text-gray-300 font-mono">{settingsWeightsText}</span>
-                    </div>
-                  )}
-                  {backendWeightsText && (
-                    <div className="text-gray-500">
-                      Backend weightsUsed: <span className="text-gray-300 font-mono">{backendWeightsText}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Readiness Score */}
               <div className="text-center mb-6">
                 <div className={`text-6xl font-bold bg-gradient-to-r ${lubometerColor.gradient} bg-clip-text text-transparent mb-2`}>
