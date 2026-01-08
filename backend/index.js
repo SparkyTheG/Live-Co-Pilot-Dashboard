@@ -383,6 +383,8 @@ wss.on('connection', (ws, req) => {
           hasCustomScript: Boolean(nextCustom),
           pillarWeightsCount: Array.isArray(nextWeights) ? nextWeights.length : 0
         });
+        // IMPORTANT: apply settings immediately (re-run analysis even if no new transcript arrived)
+        scheduleAnalysis(connectionId, {}, { force: true, reason: 'settings_update' });
         // Optional ack so frontend can update lastMessageTime if desired
         sendToClient(connectionId, { type: 'settings_update_ack', ts: Date.now() });
       } else if (data.type === 'debug_event') {
@@ -476,6 +478,10 @@ wss.on('connection', (ws, req) => {
 const realtimeConnections = new Map();
 const lastGoodAnalysis = new Map();
 
+// Analysis scheduling constants
+const ANALYSIS_THROTTLE_MS = 3000; // Min time between analyses (normal transcript-driven runs)
+const ANALYSIS_MAX_PENDING_MS = 25000; // Stuck detection: force-clear pending after this long
+
 // Helper function to send data to client
 function sendToClient(connectionId, data) {
   const ws = connections.get(connectionId);
@@ -489,6 +495,115 @@ function sendToClient(connectionId, data) {
   } else {
     console.warn(`[WS] Cannot send to ${connectionId}: WebSocket not open (state: ${ws?.readyState})`);
   }
+}
+
+/**
+ * Schedule an analysis run for the given connection using the latest transcript/settings.
+ * This is used both on new transcript chunks and on settings updates (so changes apply immediately).
+ */
+function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
+  const { force = false, reason = 'unknown' } = opts || {};
+  const meta = connectionPersistence.get(connectionId);
+  if (!meta) return;
+
+  const now = Date.now();
+
+  // Stuck detection: if pending for too long, force clear it
+  if (meta._analysisPending && meta._analysisPendingStart && (now - meta._analysisPendingStart) > ANALYSIS_MAX_PENDING_MS) {
+    console.warn(`[${connectionId.slice(-6)}] Analysis stuck for ${now - meta._analysisPendingStart}ms, force clearing`);
+    meta._analysisPending = false;
+    meta._analysisPendingStart = 0;
+  }
+
+  const lastRun = meta._lastAnalysisMs || 0;
+  const tooSoon = (now - lastRun) < ANALYSIS_THROTTLE_MS;
+
+  // If analysis is running or throttled, mark dirty so we run a catch-up pass ASAP.
+  if (meta._analysisPending || (!force && tooSoon)) {
+    meta._analysisDirty = true;
+    meta._analysisDirtyTs = now;
+    connectionPersistence.set(connectionId, meta);
+    return;
+  }
+
+  // Capture current state for the async task (LATEST transcript + LATEST settings)
+  const transcriptSnapshot = String(meta.plainTranscript || overrides.textFallback || '').trim();
+  if (transcriptSnapshot.length < 5) return; // don't run analysis on near-empty transcript
+
+  const ptSnapshot = (typeof overrides.prospectType === 'string' ? overrides.prospectType : null) || meta.prospectType || null;
+  const csSnapshot =
+    (typeof overrides.customScriptPrompt === 'string' ? overrides.customScriptPrompt : '') || meta.customScriptPrompt || '';
+  const pwSnapshot =
+    (overrides.pillarWeights !== undefined ? overrides.pillarWeights : null) ?? meta.pillarWeights ?? null;
+
+  // Sequence guard: ensures stale analysis results can't overwrite newer ones
+  meta._analysisSeq = (meta._analysisSeq || 0) + 1;
+  const seq = meta._analysisSeq;
+
+  // Mark as running with timestamp
+  meta._analysisPending = true;
+  meta._analysisPendingStart = now;
+  meta._lastAnalysisMs = now;
+  meta._lastAnalysisErr = '';
+  connectionPersistence.set(connectionId, meta);
+
+  // Run in background - don't await
+  setImmediate(async () => {
+    try {
+      console.log(
+        `[${connectionId.slice(-6)}] Running AI analysis seq=${seq} (${transcriptSnapshot.length} chars) reason=${reason}`
+      );
+      const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
+
+      // Only send if this is still the newest analysis run
+      const mCheck = connectionPersistence.get(connectionId);
+      if (mCheck && mCheck._analysisSeq === seq && analysis) {
+        sendToClient(connectionId, {
+          type: 'analysis_update',
+          data: {
+            ...analysis,
+            analysisSeq: seq,
+            hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
+            objections: Array.isArray(analysis.objections) ? analysis.objections : []
+          }
+        });
+
+        // Mark last successful analysis time for heartbeat visibility
+        const mOk = connectionPersistence.get(connectionId);
+        if (mOk) {
+          mOk._lastAnalysisOkMs = Date.now();
+          mOk._lastAnalysisErr = '';
+          connectionPersistence.set(connectionId, mOk);
+        }
+      } else {
+        console.log(`[${connectionId.slice(-6)}] Dropping stale analysis seq=${seq} (newer seq present)`);
+      }
+    } catch (e) {
+      console.warn(`[WS] AI analysis failed: ${e.message}`);
+      const mErr = connectionPersistence.get(connectionId);
+      if (mErr) {
+        mErr._lastAnalysisErr = String(e?.message || e || '').slice(0, 300);
+        connectionPersistence.set(connectionId, mErr);
+      }
+    } finally {
+      const m1 = connectionPersistence.get(connectionId);
+      if (m1) {
+        m1._analysisPending = false;
+        m1._analysisPendingStart = 0;
+
+        // If a new transcript/settings update arrived while we were analyzing, immediately run a catch-up pass.
+        const dirty = !!m1._analysisDirty;
+        m1._analysisDirty = false;
+        m1._analysisDirtyTs = 0;
+        connectionPersistence.set(connectionId, m1);
+
+        if (dirty) {
+          // Force=true so we don't sit behind throttle when we're already behind.
+          setImmediate(() => scheduleAnalysis(connectionId, {}, { force: true, reason: 'dirty_catchup' }));
+        }
+      }
+    }
+  });
 }
 
 async function handleIncomingTextChunk(connectionId, {
@@ -590,119 +705,12 @@ async function handleIncomingTextChunk(connectionId, {
     }
   });
 
-  // Run the 15 AI agents with throttling + stuck detection
-  const THROTTLE_MS = 3000; // Min 3 seconds between analyses for faster updates
-  const MAX_PENDING_MS = 25000; // Force-clear pending after 25s (stuck detection)
-  const now = Date.now();
-  const lastRun = meta?._lastAnalysisMs || 0;
-  const pendingStartMs = meta?._analysisPendingStart || 0;
-  let pending = meta?._analysisPending || false;
-
-  // Stuck detection: if pending for too long, force clear it
-  if (pending && pendingStartMs && (now - pendingStartMs) > MAX_PENDING_MS) {
-    console.warn(`[${connectionId.slice(-6)}] Analysis stuck for ${now - pendingStartMs}ms, force clearing`);
-    pending = false;
-    if (meta) {
-      meta._analysisPending = false;
-      meta._analysisPendingStart = 0;
-      connectionPersistence.set(connectionId, meta);
-    }
-  }
-
-  // If analysis is currently running or throttled, mark dirty so we run a catch-up pass ASAP.
-  if (meta) {
-    const tooSoon = (now - lastRun) < THROTTLE_MS;
-    if (pending || tooSoon) {
-      meta._analysisDirty = true;
-      meta._analysisDirtyTs = now;
-      connectionPersistence.set(connectionId, meta);
-    }
-  }
-
-  const startAnalysisRun = (force = false) => {
-    const m0 = connectionPersistence.get(connectionId);
-    if (!m0) return;
-    const now2 = Date.now();
-    const lastRun2 = m0._lastAnalysisMs || 0;
-    const pending2 = m0._analysisPending || false;
-    if (pending2) return;
-    if (!force && (now2 - lastRun2) < THROTTLE_MS) return;
-
-    // Capture current state for the async task (LATEST transcript)
-    const transcriptSnapshot = m0.plainTranscript || text;
-    const ptSnapshot = prospectType || m0.prospectType || null;
-    const csSnapshot = customScriptPrompt || m0.customScriptPrompt || '';
-    const pwSnapshot = pillarWeights ?? m0.pillarWeights ?? null;
-
-    // Sequence guard: ensures stale analysis results can't overwrite newer ones
-    m0._analysisSeq = (m0._analysisSeq || 0) + 1;
-    const seq = m0._analysisSeq;
-
-    // Mark as running with timestamp
-    m0._analysisPending = true;
-    m0._analysisPendingStart = now2;
-    m0._lastAnalysisMs = now2;
-    m0._lastAnalysisErr = '';
-    connectionPersistence.set(connectionId, m0);
-
-    // Run in background - don't await
-    setImmediate(async () => {
-      try {
-        console.log(`[${connectionId.slice(-6)}] Running AI analysis seq=${seq} (${transcriptSnapshot.length} chars)`);
-        const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
-
-        // Only send if this is still the newest analysis run
-        const mCheck = connectionPersistence.get(connectionId);
-        if (mCheck && mCheck._analysisSeq === seq && analysis) {
-          sendToClient(connectionId, {
-            type: 'analysis_update',
-            data: {
-              ...analysis,
-              analysisSeq: seq,
-              hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-              objections: Array.isArray(analysis.objections) ? analysis.objections : []
-            }
-          });
-          // Mark last successful analysis time for heartbeat visibility
-          const mOk = connectionPersistence.get(connectionId);
-          if (mOk) {
-            mOk._lastAnalysisOkMs = Date.now();
-            mOk._lastAnalysisErr = '';
-            connectionPersistence.set(connectionId, mOk);
-          }
-        } else {
-          console.log(`[${connectionId.slice(-6)}] Dropping stale analysis seq=${seq} (newer seq present)`);
-        }
-      } catch (e) {
-        console.warn(`[WS] AI analysis failed: ${e.message}`);
-        const mErr = connectionPersistence.get(connectionId);
-        if (mErr) {
-          mErr._lastAnalysisErr = String(e?.message || e || '').slice(0, 300);
-          connectionPersistence.set(connectionId, mErr);
-        }
-      } finally {
-        const m1 = connectionPersistence.get(connectionId);
-        if (m1) {
-          m1._analysisPending = false;
-          m1._analysisPendingStart = 0;
-
-          // If new transcript arrived while we were analyzing, immediately run a catch-up pass.
-          const dirty = !!m1._analysisDirty;
-          m1._analysisDirty = false;
-          m1._analysisDirtyTs = 0;
-          connectionPersistence.set(connectionId, m1);
-
-          if (dirty) {
-            // Force=true so we don't sit behind THROTTLE_MS when we're already behind.
-            setImmediate(() => startAnalysisRun(true));
-          }
-        }
-      }
-    });
-  };
-
-  // Start analysis if eligible (otherwise dirty flag above will trigger catch-up)
-  startAnalysisRun(false);
+  // Run the 15 AI agents (throttled, with catch-up) using the shared scheduler.
+  scheduleAnalysis(
+    connectionId,
+    { prospectType, customScriptPrompt, pillarWeights, textFallback: text },
+    { force: false, reason: 'transcript' }
+  );
 
   // NOTE: Progressive summary is handled in startRealtimeListening -> onTranscript (single place).
 
