@@ -301,23 +301,31 @@ function computePillarAverages(indicatorSignals) {
 
 function computeLubometer(indicatorSignals, pillarWeights) {
   const pillarAvg = computePillarAverages(indicatorSignals);
-  const defaultWeights = { P1: 1.2, P2: 1.1, P3: 1.0, P4: 1.0, P5: 0.9, P6: 0.8, P7: 1.0 };
+  // Defaults should match the frontend's DEFAULT_SETTINGS (SettingsContext.tsx)
+  const defaultWeights = { P1: 1.5, P2: 1.0, P3: 1.0, P4: 1.5, P5: 1.0, P6: 1.5, P7: 1.5 };
   const weightsUsed = { ...defaultWeights };
   if (Array.isArray(pillarWeights)) {
     for (const w of pillarWeights) {
       if (w?.id && typeof w.weight === 'number') weightsUsed[w.id] = w.weight;
     }
   }
-  let num = 0;
-  let den = 0;
+  // Weighted TOTAL scoring (matches AdminPanel "Maximum Lubometer Score" = sum(weights)*10).
+  // Each pillar contributes 0..(10*weight) points, based on its avg (0..10).
+  let total = 0;
+  let maxScore = 0;
   for (const [pid, avg] of Object.entries(pillarAvg)) {
-    const wt = toNum(weightsUsed[pid] ?? 1);
-    num += avg * wt;
-    den += wt;
+    const wt = clamp(toNum(weightsUsed[pid] ?? 1), 0, 10);
+    total += clamp(toNum(avg), 0, 10) * wt;
+    maxScore += 10 * wt;
   }
-  const weightedAvg = den ? num / den : 0; // 0..10
-  const score = Math.round(clamp((weightedAvg / 10) * 90, 0, 90));
-  const level = score >= 65 ? 'high' : score >= 45 ? 'medium' : 'low';
+  maxScore = Math.round(clamp(maxScore, 0, 1000));
+  const score = Math.round(clamp(total, 0, maxScore));
+  const percent = maxScore ? (score / maxScore) * 100 : 0;
+
+  // Keep level thresholds equivalent to old 0..90 scale:
+  // - High: >= 65/90 ≈ 72%
+  // - Medium: >= 45/90 = 50%
+  const level = percent >= 72 ? 'high' : percent >= 50 ? 'medium' : 'low';
   const interpretation =
     level === 'high'
       ? 'High readiness: prospect signals strong pain/urgency and openness.'
@@ -330,7 +338,7 @@ function computeLubometer(indicatorSignals, pillarWeights) {
       : level === 'medium'
         ? 'Ask diagnostic questions to sharpen pain and urgency.'
         : 'Do not close yet; deepen pain/urgency and establish trust.';
-  return { score, maxScore: 90, level, interpretation, action, pillarScores: pillarAvg, weightsUsed };
+  return { score, maxScore, level, interpretation, action, pillarScores: pillarAvg, weightsUsed };
 }
 
 function avgRange(indicatorSignals, a, b) {
