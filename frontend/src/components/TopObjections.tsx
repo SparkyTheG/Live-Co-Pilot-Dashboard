@@ -16,10 +16,17 @@ interface TopObjectionsProps {
 export default function TopObjections({ realTimeObjections }: TopObjectionsProps) {
   const [expandedObjection, setExpandedObjection] = useState<string | null>(null);
 
+  const makeStableId = (text: string) => {
+    const t = String(text || '').toLowerCase().trim();
+    // Stable key so expanded state survives resorting and progressive updates.
+    // Keep it short but deterministic.
+    return `obj-${t.replace(/\s+/g, ' ').slice(0, 60)}`;
+  };
+
   // Use real-time objections only - no static fallback (show all, not limited to 5)
   const objectionsToDisplay = realTimeObjections && realTimeObjections.length > 0
-    ? realTimeObjections.map((obj, idx) => ({
-        id: `realtime-${idx}`,
+    ? realTimeObjections.map((obj) => ({
+        id: makeStableId(obj.objectionText),
         objectionText: obj.objectionText,
         probability: Math.round(obj.probability * 100),
         whatTheyreReallyAfraidOf: obj.fear,
@@ -138,45 +145,43 @@ export default function TopObjections({ realTimeObjections }: TopObjectionsProps
             {expandedObjection === objection.id && (
               <div className="px-4 pb-4 space-y-4 animate-slide-down">
                 {/* What They're Really Afraid Of */}
-                {objection.whatTheyreReallyAfraidOf && (
-                  <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-cyan-300 font-bold text-sm mb-1">What They're Really Afraid Of:</h4>
-                        <p className="text-gray-300 text-sm">{objection.whatTheyreReallyAfraidOf}</p>
-                      </div>
+                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-cyan-300 font-bold text-sm mb-1">What They're Really Afraid Of:</h4>
+                      <p className="text-gray-300 text-sm">
+                        {objection.whatTheyreReallyAfraidOf || 'Generating…'}
+                      </p>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Reframe / Whisper */}
-                {objection.reframe && (
-                  <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-blue-300 font-bold text-sm mb-1">Whisper / Reframe:</h4>
-                        <p className="text-gray-300 text-sm italic">{objection.reframe}</p>
-                      </div>
+                <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-blue-300 font-bold text-sm mb-1">Whisper / Reframe:</h4>
+                      <p className="text-gray-300 text-sm italic">
+                        {objection.reframe || 'Generating…'}
+                      </p>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Rebuttal Script */}
-                {objection.rebuttalScript && (
-                  <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <MessageSquare className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-teal-300 font-bold text-sm mb-2">Rebuttal Script:</h4>
-                        <p className="text-gray-200 text-sm leading-relaxed bg-gray-900/40 p-3 rounded border border-teal-400/20">
-                          "{objection.rebuttalScript}"
-                        </p>
-                      </div>
+                <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-teal-300 font-bold text-sm mb-2">Rebuttal Script:</h4>
+                      <p className="text-gray-200 text-sm leading-relaxed bg-gray-900/40 p-3 rounded border border-teal-400/20">
+                        "{objection.rebuttalScript || 'Generating…'}"
+                      </p>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Control Question */}
                 {objection.controlQuestion && (
