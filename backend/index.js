@@ -616,6 +616,20 @@ async function handleIncomingTextChunk(connectionId, {
   const text = String(chunkText || '').trim();
   console.log(`[handleIncomingTextChunk] Received text: length=${text.length}, preview="${text.slice(0,100)}"`);
   if (!text) return;
+
+  const toSpeakerLabel = (speaker) =>
+    speaker === 'closer' ? 'CLOSER' : speaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
+
+  const rebuildConversationHistory = (meta) => {
+    // Maintain a labeled transcript derived from per-chunk entries so we can update labels later
+    const entries = Array.isArray(meta?.transcriptEntries) ? meta.transcriptEntries : [];
+    const joined = entries
+      .map((e) => `${toSpeakerLabel(e?.speaker)}: ${String(e?.text || '').trim()}`.trim())
+      .filter(Boolean)
+      .join('\n\n');
+    const MAX_HISTORY_CHARS = 8000;
+    meta.conversationHistory = joined.length > MAX_HISTORY_CHARS ? joined.slice(-MAX_HISTORY_CHARS) : joined;
+  };
   
   // Debug: Log what we received including custom script prompt
   console.log(`[handleIncomingTextChunk] Received`, {
@@ -669,31 +683,42 @@ async function handleIncomingTextChunk(connectionId, {
     connectionPersistence.set(connectionId, meta);
   }
 
-  // Skip speaker detection to save API calls - use simple heuristic instead
-  let detectedSpeaker = 'unknown';
-  try {
-    const aiSpeaker = await runSpeakerRoleAgent(text, conversationHistory);
-    if (aiSpeaker?.speaker) detectedSpeaker = aiSpeaker.speaker;
-  } catch (e) {
-    // Hard fallback: avoid breaking pipeline if OpenAI is unavailable.
-    detectedSpeaker = 'unknown';
-  }
-  
-  console.log(`[${connectionId.slice(-6)}] chunk: "${text.slice(0, 40)}..." speaker=${detectedSpeaker}`);
+  // Speaker-role detection is a SIDE-CAR task:
+  // - Must NOT block sending transcript chunks to the frontend
+  // - Must NOT block scheduling the main analysis pipeline
+  // We insert the chunk as unknown immediately, then update Supabase + session transcript when the AI returns.
+  const speakerPromise = (async () => {
+    try {
+      const aiSpeaker = await runSpeakerRoleAgent(text, conversationHistory);
+      const sp = String(aiSpeaker?.speaker || '').toLowerCase();
+      if (sp.includes('closer')) return 'closer';
+      if (sp.includes('prospect')) return 'prospect';
+      return 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  })();
 
-  // Format speaker label for transcript
-  const speakerLabel = detectedSpeaker === 'closer' ? 'CLOSER' : detectedSpeaker === 'prospect' ? 'PROSPECT' : 'UNKNOWN';
+  const detectedSpeaker = 'unknown';
 
-  // Update conversation history with formatted speaker labels (cap at 8000 chars)
-  const MAX_HISTORY_CHARS = 8000;
-  const formattedLine = `${speakerLabel}: ${text}`;
-  const newHistory = conversationHistory ? conversationHistory + '\n\n' + formattedLine : formattedLine;
+  // Track this chunk in-memory so we can re-label it later when speakerPromise completes.
+  // Keep bounded so long calls don't bloat memory.
+  let localChunkSeq = null;
   if (meta) {
-    meta.conversationHistory = newHistory.length > MAX_HISTORY_CHARS
-      ? newHistory.slice(-MAX_HISTORY_CHARS)
-      : newHistory;
+    meta._chunkSeq = (meta._chunkSeq || 0) + 1;
+    localChunkSeq = meta._chunkSeq;
+    meta.transcriptEntries = Array.isArray(meta.transcriptEntries) ? meta.transcriptEntries : [];
+    meta.transcriptEntries.push({ seq: localChunkSeq, speaker: detectedSpeaker, text });
+    // Bound by count first (cheap), then by char cap via rebuildConversationHistory()
+    const MAX_ENTRIES = 220;
+    if (meta.transcriptEntries.length > MAX_ENTRIES) {
+      meta.transcriptEntries = meta.transcriptEntries.slice(-MAX_ENTRIES);
+    }
+    rebuildConversationHistory(meta);
     connectionPersistence.set(connectionId, meta);
   }
+
+  console.log(`[${connectionId.slice(-6)}] chunk: "${text.slice(0, 40)}..." speaker=${detectedSpeaker} (speaker AI async)`);
 
   // Send the transcribed chunk to the frontend for transparency/debugging
   sendToClient(connectionId, {
@@ -714,11 +739,11 @@ async function handleIncomingTextChunk(connectionId, {
 
   // NOTE: Progressive summary is handled in startRealtimeListening -> onTranscript (single place).
 
-  // Persist transcript chunk to Supabase with AI-detected speaker role
+  // Persist transcript chunk to Supabase immediately (unknown), then update speaker_role asynchronously.
   if (meta?.authToken && meta?.sessionId && meta?.userId && isSupabaseConfigured()) {
     const supabase = createUserSupabaseClient(meta.authToken);
     if (supabase) {
-      void supabase
+      const insertPromise = supabase
         .from('call_transcript_chunks')
         .insert({
           session_id: meta.sessionId,
@@ -729,10 +754,8 @@ async function handleIncomingTextChunk(connectionId, {
           chunk_char_count: chunkCharCount,
           client_ts_ms: clientTsMs
         })
-        .then(({ error }) => {
-          if (error) console.warn(`[WS] Supabase transcript insert failed: ${error.message}`);
-        })
-        .catch(() => {});
+        .select('id')
+        .single();
 
       // Update session with formatted transcript paragraph
       void supabase
@@ -747,6 +770,47 @@ async function handleIncomingTextChunk(connectionId, {
         .eq('user_id', meta.userId)
         .then(() => {})
         .catch(() => {});
+
+      // When speaker AI returns + insert succeeded, update only that row + refresh session transcript.
+      void Promise.allSettled([speakerPromise, insertPromise]).then(([spRes, insRes]) => {
+        const sp = spRes.status === 'fulfilled' ? spRes.value : 'unknown';
+        const insertedId = insRes.status === 'fulfilled' ? insRes.value?.data?.id : null;
+        if (!insertedId) return;
+        if (sp !== 'closer' && sp !== 'prospect') return;
+
+        // Update the chunk row
+        void supabase
+          .from('call_transcript_chunks')
+          .update({ speaker_role: sp })
+          .eq('id', insertedId)
+          .eq('user_id', meta.userId)
+          .then(() => {})
+          .catch(() => {});
+
+        // Update in-memory transcript + session transcript_text (best-effort; does not affect analysis latency)
+        const m2 = connectionPersistence.get(connectionId);
+        if (m2 && Array.isArray(m2.transcriptEntries) && localChunkSeq != null) {
+          const idx = m2.transcriptEntries.findIndex((e) => e?.seq === localChunkSeq);
+          if (idx >= 0) {
+            m2.transcriptEntries[idx] = { ...m2.transcriptEntries[idx], speaker: sp };
+            rebuildConversationHistory(m2);
+            connectionPersistence.set(connectionId, m2);
+
+            void supabase
+              .from('call_sessions')
+              .update({
+                updated_at: new Date().toISOString(),
+                transcript_text: m2.conversationHistory || '',
+                transcript_char_count: (m2.conversationHistory || '').length,
+                ...(prospectType ? { prospect_type: prospectType } : {})
+              })
+              .eq('id', meta.sessionId)
+              .eq('user_id', meta.userId)
+              .then(() => {})
+              .catch(() => {});
+          }
+        }
+      });
     }
   }
 
