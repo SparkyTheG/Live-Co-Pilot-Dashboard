@@ -479,7 +479,7 @@ const realtimeConnections = new Map();
 const lastGoodAnalysis = new Map();
 
 // Analysis scheduling constants
-const ANALYSIS_THROTTLE_MS = 1200; // Min time between analyses (normal transcript-driven runs)
+const ANALYSIS_THROTTLE_MS = 800; // Min time between analyses (normal transcript-driven runs)
 const ANALYSIS_MAX_PENDING_MS = 25000; // Stuck detection: force-clear pending after this long
 
 // Helper function to send data to client

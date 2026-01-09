@@ -184,7 +184,7 @@ const MAX_CACHE_SIZE = 50;
 
 // Debounce tracker
 let lastAnalysisTime = 0;
-const MIN_ANALYSIS_INTERVAL = 800; // Minimum 0.8 seconds between AI analyses (backend scheduler also throttles)
+const MIN_ANALYSIS_INTERVAL = 500; // Minimum 0.5 seconds between AI analyses (backend scheduler also throttles)
 
 /**
  * Progressive analysis: run sub-agents in parallel and emit partial results as they become available.
