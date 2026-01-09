@@ -206,23 +206,32 @@ export default function LiveCoPilotDashboard() {
 
     // Diagnostic Questions are user-controlled now (no AI auto-detection).
 
-    // Ensure hotButtons and objections are arrays before setting state
-    // Use accumulated history for asked questions
+    // Merge partial updates: backend may send incremental analysis_update payloads.
+    // IMPORTANT: do NOT overwrite existing state with empty arrays for partial updates.
     const currentAskedArray = Array.from(askedQuestionsRef.current).sort((a, b) => a - b);
 
-    const sanitizedAnalysis = {
-      ...analysis,
-      hotButtons: Array.isArray(analysis.hotButtons) ? analysis.hotButtons : [],
-      objections: Array.isArray(analysis.objections) ? analysis.objections : [],
-      diagnosticQuestions: {
-        ...analysis.diagnosticQuestions,
-        // Use accumulated history
-        asked: currentAskedArray,
-        total: analysis.diagnosticQuestions?.total || questions.length,
-        completion: analysis.diagnosticQuestions?.completion || 0
-      }
+    const sanitizedPatch: any = {
+      ...analysis
     };
-    setAnalysisData(sanitizedAnalysis);
+    if (Array.isArray(analysis.hotButtons)) sanitizedPatch.hotButtons = analysis.hotButtons;
+    if (Array.isArray(analysis.objections)) sanitizedPatch.objections = analysis.objections;
+
+    setAnalysisData(prev => {
+      const merged = {
+        ...(prev || {}),
+        ...sanitizedPatch,
+      };
+
+      // Always keep diagnostic questions in a stable shape and preserve asked history.
+      merged.diagnosticQuestions = {
+        ...(merged.diagnosticQuestions || {}),
+        asked: currentAskedArray,
+        total: merged.diagnosticQuestions?.total || questions.length,
+        completion: merged.diagnosticQuestions?.completion || 0
+      };
+
+      return merged;
+    });
 
     // Update prospect type if detected differently
     if (analysis.prospectType && analysis.prospectType !== prospectType) {

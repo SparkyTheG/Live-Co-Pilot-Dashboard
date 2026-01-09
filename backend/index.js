@@ -4,7 +4,7 @@ import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
-import { analyzeConversation } from './analysis/engine.js';
+import { analyzeConversationProgressive } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
 import { runConversationSummaryAgent, runSpeakerRoleAgent } from './analysis/aiAgents.js';
 
@@ -479,7 +479,7 @@ const realtimeConnections = new Map();
 const lastGoodAnalysis = new Map();
 
 // Analysis scheduling constants
-const ANALYSIS_THROTTLE_MS = 3000; // Min time between analyses (normal transcript-driven runs)
+const ANALYSIS_THROTTLE_MS = 1200; // Min time between analyses (normal transcript-driven runs)
 const ANALYSIS_MAX_PENDING_MS = 25000; // Stuck detection: force-clear pending after this long
 
 // Helper function to send data to client
@@ -553,7 +553,27 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
       console.log(
         `[${connectionId.slice(-6)}] Running AI analysis seq=${seq} (${transcriptSnapshot.length} chars) reason=${reason}`
       );
-      const analysis = await analyzeConversation(transcriptSnapshot, ptSnapshot, csSnapshot, pwSnapshot);
+      const sendPartialIfCurrent = (partial) => {
+        const mCheck = connectionPersistence.get(connectionId);
+        if (!mCheck || mCheck._analysisSeq !== seq) return;
+        if (!partial || typeof partial !== 'object') return;
+        sendToClient(connectionId, {
+          type: 'analysis_update',
+          data: {
+            ...partial,
+            analysisSeq: seq,
+            partial: true
+          }
+        });
+      };
+
+      const analysis = await analyzeConversationProgressive(
+        transcriptSnapshot,
+        ptSnapshot,
+        csSnapshot,
+        pwSnapshot,
+        sendPartialIfCurrent
+      );
 
       // Only send if this is still the newest analysis run
       const mCheck = connectionPersistence.get(connectionId);

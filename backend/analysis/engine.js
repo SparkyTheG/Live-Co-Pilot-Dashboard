@@ -13,7 +13,14 @@
  * from the Pillars Agent's indicator scores.
  */
 
-import { runAllAgents } from './aiAgents.js';
+import {
+  runAllAgents,
+  runAllPillarAgents,
+  runHotButtonsAgent,
+  runObjectionsAgents,
+  runTruthIndexAgent,
+  runInsightsAgent
+} from './aiAgents.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -177,7 +184,166 @@ const MAX_CACHE_SIZE = 50;
 
 // Debounce tracker
 let lastAnalysisTime = 0;
-const MIN_ANALYSIS_INTERVAL = 2000; // Minimum 2 seconds between AI analyses
+const MIN_ANALYSIS_INTERVAL = 800; // Minimum 0.8 seconds between AI analyses (backend scheduler also throttles)
+
+/**
+ * Progressive analysis: run sub-agents in parallel and emit partial results as they become available.
+ * This makes the frontend feel "instant" (lubometer/pillars usually arrive first).
+ *
+ * @param {string} transcript
+ * @param {string|null} prospectTypeOverride
+ * @param {string} customScriptPrompt
+ * @param {Array|null} pillarWeights
+ * @param {(partial: any) => void} onPartial
+ */
+export async function analyzeConversationProgressive(
+  transcript,
+  prospectTypeOverride = null,
+  customScriptPrompt = '',
+  pillarWeights = null,
+  onPartial = null
+) {
+  const startTime = Date.now();
+
+  if (!transcript || transcript.trim().length === 0) {
+    return getEmptyAnalysis();
+  }
+
+  const cleanedTranscript = cleanTranscriptForAI(transcript);
+  const prospectType = prospectTypeOverride || 'foreclosure';
+
+  // Small rolling windows per agent (stable latency)
+  const tPillars = String(cleanedTranscript || '').slice(-800);
+  const tHotButtons = String(cleanedTranscript || '').slice(-800);
+  const tObjections = String(cleanedTranscript || '').slice(-800);
+  const tTruth = String(cleanedTranscript || '').slice(-800);
+  const tInsights = String(cleanedTranscript || '').slice(-800);
+
+  const emit = (p) => {
+    if (typeof onPartial !== 'function') return;
+    try { onPartial(p); } catch {}
+  };
+
+  const agentErrors = {};
+  const aiAnalysis = {
+    indicatorSignals: {},
+    hotButtonDetails: [],
+    objections: [],
+    askedQuestions: [],
+    detectedRules: [],
+    coherenceSignals: [],
+    overallCoherence: '',
+    insights: '',
+    keyMotivators: [],
+    concerns: [],
+    recommendation: '',
+    closingReadiness: 'not_ready',
+    agentErrors
+  };
+
+  let pillarsDone = false;
+  let truthDone = false;
+
+  const maybeEmitTruthIndex = () => {
+    if (!pillarsDone || !truthDone) return;
+    const truthIndex = computeTruthIndex(aiAnalysis, aiAnalysis.indicatorSignals || {}, cleanedTranscript);
+    emit({ truthIndex });
+  };
+
+  const pillarsP = runAllPillarAgents(tPillars)
+    .then((r) => {
+      aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
+      pillarsDone = true;
+      const lubometer = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
+      emit({
+        lubometer: {
+          score: lubometer.score,
+          maxScore: lubometer.maxScore || 90,
+          level: lubometer.level,
+          interpretation: lubometer.interpretation,
+          action: lubometer.action,
+          pillarScores: lubometer.pillarScores,
+          weightsUsed: lubometer.weightsUsed
+        },
+        pillars: lubometer.pillarScores
+      });
+      maybeEmitTruthIndex();
+    })
+    .catch((e) => {
+      agentErrors.pillars = String(e?.message || e || 'error');
+    });
+
+  const hotButtonsP = runHotButtonsAgent(tHotButtons)
+    .then((r) => {
+      aiAnalysis.hotButtonDetails = Array.isArray(r?.hotButtonDetails) ? r.hotButtonDetails : [];
+      emit({ hotButtons: normalizeHotButtons(aiAnalysis.hotButtonDetails) });
+    })
+    .catch((e) => {
+      agentErrors.hotButtons = String(e?.message || e || 'error');
+    });
+
+  const objectionsP = runObjectionsAgents(tObjections, customScriptPrompt)
+    .then((r) => {
+      aiAnalysis.objections = Array.isArray(r?.objections) ? r.objections : [];
+      emit({ objections: aiAnalysis.objections });
+    })
+    .catch((e) => {
+      agentErrors.objections = String(e?.message || e || 'error');
+    });
+
+  const truthP = runTruthIndexAgent(tTruth)
+    .then((r) => {
+      aiAnalysis.detectedRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
+      aiAnalysis.coherenceSignals = Array.isArray(r?.coherenceSignals) ? r.coherenceSignals : [];
+      aiAnalysis.overallCoherence = typeof r?.overallCoherence === 'string' ? r.overallCoherence : '';
+      if (r?.error) agentErrors.truthIndex = String(r.error);
+      // Marker used by computeTruthIndex to decide if agent actually ran
+      aiAnalysis.truthIndexFromAgent = !r?.error;
+      truthDone = true;
+      maybeEmitTruthIndex();
+    })
+    .catch((e) => {
+      agentErrors.truthIndex = String(e?.message || e || 'error');
+      truthDone = true;
+      aiAnalysis.truthIndexFromAgent = false;
+      maybeEmitTruthIndex();
+    });
+
+  const insightsP = runInsightsAgent(tInsights, prospectType)
+    .then((r) => {
+      aiAnalysis.insights = r?.summary || r?.insights || '';
+      aiAnalysis.keyMotivators = Array.isArray(r?.keyMotivators) ? r.keyMotivators : [];
+      aiAnalysis.concerns = Array.isArray(r?.concerns) ? r.concerns : [];
+      aiAnalysis.recommendation = r?.recommendation || '';
+      aiAnalysis.closingReadiness = r?.closingReadiness || 'not_ready';
+      emit({
+        aiInsights: {
+          summary: aiAnalysis.insights,
+          keyMotivators: aiAnalysis.keyMotivators,
+          concerns: aiAnalysis.concerns,
+          recommendation: aiAnalysis.recommendation,
+          closingReadiness: aiAnalysis.closingReadiness,
+          agentErrors
+        }
+      });
+    })
+    .catch((e) => {
+      agentErrors.insights = String(e?.message || e || 'error');
+    });
+
+  // Wait for all to settle, then build a final unified result (same shape as analyzeConversation)
+  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, insightsP]);
+
+  const result = await buildFinalResultFromAiAnalysis({
+    cleanedTranscript,
+    prospectType,
+    pillarWeights,
+    aiAnalysis,
+    startTime
+  });
+
+  return result;
+}
 
 /**
  * Main analysis function - orchestrates parallel AI agents
