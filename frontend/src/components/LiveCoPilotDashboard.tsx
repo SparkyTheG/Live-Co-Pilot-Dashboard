@@ -197,14 +197,21 @@ export default function LiveCoPilotDashboard() {
 
           if (existingIdx >= 0) {
             const existing = merged[existingIdx];
+            const pickNew = (prevVal: any, nextVal: any) => {
+              const prev = String(prevVal || '').trim();
+              const next = String(nextVal || '').trim();
+              // If backend sends a real value later, allow it to overwrite placeholders/old values.
+              if (next && next !== prev) return next;
+              return prev;
+            };
             merged[existingIdx] = {
               ...existing,
               // Keep latest probability (prefer higher)
               probability: Math.max(Number(existing.probability || 0), Number(newItem.probability || 0)),
-              // Fill in missing fields as they arrive
-              fear: String(existing.fear || '') || String(newItem.fear || ''),
-              whisper: String(existing.whisper || '') || String(newItem.whisper || ''),
-              rebuttalScript: String(existing.rebuttalScript || '') || String(newItem.rebuttalScript || ''),
+              // Fill/update fields as they arrive (scripts can arrive later)
+              fear: pickNew(existing.fear, newItem.fear),
+              whisper: pickNew(existing.whisper, newItem.whisper),
+              rebuttalScript: pickNew(existing.rebuttalScript, newItem.rebuttalScript),
               timestamp: now
             };
           } else {
