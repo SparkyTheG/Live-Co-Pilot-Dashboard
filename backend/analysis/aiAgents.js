@@ -650,12 +650,19 @@ RULES:
 - If CUSTOM BUSINESS CONTEXT is provided, you MUST adapt the rebuttal to fit that business (industry, offer type, positioning).
 - Do NOT literally repeat the context line verbatim; weave it naturally into the rebuttal (e.g., reference the relevant domain, outcomes, or approach).
 - Keep each rebuttal 2-3 sentences, confident, and non-pushy.
+- IMPORTANT: Generate a rebuttal for EVERY objection in the list below.
 
-Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"I understand. What specific questions can I answer?"}]}`;
+Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionIndex":1,"rebuttalScript":"..."},{"objectionIndex":2,"rebuttalScript":"..."}]}`;
 
-  const userPrompt = `Generate rebuttals:\n${objectionsList}`;
+  const userPrompt = `Generate rebuttals for ALL ${detectedObjections.length} objections:\n${objectionsList}`;
 
-  return await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 250);
+  const result = await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 250);
+  console.log('[RebuttalAgent] OUTPUT:', {
+    requestedCount: detectedObjections.length,
+    returnedCount: (result?.rebuttals || []).length,
+    rebuttals: result?.rebuttals || []
+  });
+  return result;
 }
 
 function pickByObjectionIndex(list, idx, valueKey) {
