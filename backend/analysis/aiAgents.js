@@ -658,6 +658,13 @@ Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"I understand. What s
   return await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 250);
 }
 
+function pickByObjectionIndex(list, idx, valueKey) {
+  const arr = Array.isArray(list) ? list : [];
+  const match = arr.find((x) => Number(x?.objectionIndex) === idx);
+  const v = match?.[valueKey];
+  return typeof v === 'string' ? v : '';
+}
+
 /**
  * COMBINED OBJECTIONS FUNCTION
  * Runs Detection first, then Fear/Whisper/Rebuttal in parallel
@@ -688,9 +695,9 @@ export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
   const objections = detectedObjections.map((obj, idx) => ({
     objectionText: obj.objectionText,
     probability: obj.probability,
-    fear: (fearResult.fears || []).find(f => f.objectionIndex === idx)?.fear || 'Fear of uncertainty',
-    whisper: (whisperResult.whispers || []).find(w => w.objectionIndex === idx)?.whisper || 'They need reassurance',
-    rebuttalScript: (rebuttalResult.rebuttals || []).find(r => r.objectionIndex === idx)?.rebuttalScript || 'Address their concern with empathy.'
+    fear: pickByObjectionIndex(fearResult?.fears, idx, 'fear') || 'Fear of uncertainty',
+    whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || 'They need reassurance',
+    rebuttalScript: pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript') || 'Address their concern with empathy.'
   }));
 
   console.log(`[ObjectionsSystem] Done in ${Date.now() - startTime}ms`);
@@ -746,8 +753,8 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   const withFearWhisper = detectedObjections.map((obj, idx) => ({
     objectionText: obj.objectionText,
     probability: obj.probability,
-    fear: (fearResult.fears || []).find(f => f.objectionIndex === idx)?.fear || '',
-    whisper: (whisperResult.whispers || []).find(w => w.objectionIndex === idx)?.whisper || '',
+    fear: pickByObjectionIndex(fearResult?.fears, idx, 'fear') || '',
+    whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
     rebuttalScript: ''
   }));
   emit({ objections: withFearWhisper });
@@ -757,9 +764,9 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   const final = detectedObjections.map((obj, idx) => ({
     objectionText: obj.objectionText,
     probability: obj.probability,
-    fear: (fearResult.fears || []).find(f => f.objectionIndex === idx)?.fear || '',
-    whisper: (whisperResult.whispers || []).find(w => w.objectionIndex === idx)?.whisper || '',
-    rebuttalScript: (rebuttalResult.rebuttals || []).find(r => r.objectionIndex === idx)?.rebuttalScript || ''
+    fear: pickByObjectionIndex(fearResult?.fears, idx, 'fear') || '',
+    whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
+    rebuttalScript: pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript') || ''
   }));
   emit({ objections: final });
 
