@@ -697,6 +697,76 @@ export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
   return { objections };
 }
 
+/**
+ * PROGRESSIVE OBJECTIONS:
+ * - Emit objections ASAP (no waiting for rebuttal scripts)
+ * - Then emit an updated objections array once scripts are ready
+ *
+ * @param {string} transcript
+ * @param {string} customScriptPrompt
+ * @param {(partial: {objections: any[]}) => void} onPartial
+ */
+export async function runObjectionsAgentsProgressive(transcript, customScriptPrompt = '', onPartial = null) {
+  const emit = (p) => {
+    if (typeof onPartial !== 'function') return;
+    try { onPartial(p); } catch {}
+  };
+
+  console.log(`[ObjectionsSystemProgressive] Starting...`);
+  const startTime = Date.now();
+
+  // Step 1: Detect objections (required)
+  const detectionResult = await runObjectionDetectionAgent(transcript);
+  if (detectionResult.error || !detectionResult.detectedObjections?.length) {
+    console.log(`[ObjectionsSystemProgressive] No objections detected`);
+    return { objections: [] };
+  }
+
+  const detectedObjections = detectionResult.detectedObjections;
+
+  // Emit immediately with placeholders (so UI is instant)
+  const base = detectedObjections.map((obj) => ({
+    objectionText: obj.objectionText,
+    probability: obj.probability,
+    fear: '',
+    whisper: '',
+    rebuttalScript: '' // will arrive later
+  }));
+  emit({ objections: base });
+
+  // Step 2: Run Fear + Whisper (parallel) and merge (optional, but cheap)
+  const fearWhisper = await Promise.allSettled([
+    runFearAnalysisAgent(detectedObjections),
+    runWhisperReframeAgent(detectedObjections)
+  ]);
+
+  const fearResult = fearWhisper[0].status === 'fulfilled' ? fearWhisper[0].value : { fears: [] };
+  const whisperResult = fearWhisper[1].status === 'fulfilled' ? fearWhisper[1].value : { whispers: [] };
+
+  const withFearWhisper = detectedObjections.map((obj, idx) => ({
+    objectionText: obj.objectionText,
+    probability: obj.probability,
+    fear: (fearResult.fears || []).find(f => f.objectionIndex === idx)?.fear || '',
+    whisper: (whisperResult.whispers || []).find(w => w.objectionIndex === idx)?.whisper || '',
+    rebuttalScript: ''
+  }));
+  emit({ objections: withFearWhisper });
+
+  // Step 3: Rebuttal scripts (slow lane) - emit when ready
+  const rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt);
+  const final = detectedObjections.map((obj, idx) => ({
+    objectionText: obj.objectionText,
+    probability: obj.probability,
+    fear: (fearResult.fears || []).find(f => f.objectionIndex === idx)?.fear || '',
+    whisper: (whisperResult.whispers || []).find(w => w.objectionIndex === idx)?.whisper || '',
+    rebuttalScript: (rebuttalResult.rebuttals || []).find(r => r.objectionIndex === idx)?.rebuttalScript || ''
+  }));
+  emit({ objections: final });
+
+  console.log(`[ObjectionsSystemProgressive] Done in ${Date.now() - startTime}ms`);
+  return { objections: final };
+}
+
 // NOTE: Diagnostic Questions AI agent removed.
 // Diagnostic questions are now user-editable content in the frontend (Admin Panel),
 // and the "asked" state is controlled manually (no AI auto-detection).

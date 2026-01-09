@@ -186,14 +186,28 @@ export default function LiveCoPilotDashboard() {
           ...obj,
           timestamp: now
         }));
-        // Merge: avoid duplicates based on similar objection text
+        // Merge: update existing items (scripts can arrive later), otherwise add new.
         const merged = [...prev];
         for (const newItem of newItems) {
-          const isDuplicate = merged.some(o =>
-            o.objectionText.toLowerCase().includes(newItem.objectionText.toLowerCase().substring(0, 20)) ||
-            newItem.objectionText.toLowerCase().includes(o.objectionText.toLowerCase().substring(0, 20))
-          );
-          if (!isDuplicate) {
+          const key = String(newItem.objectionText || '').toLowerCase().trim().substring(0, 24);
+          const existingIdx = merged.findIndex(o => {
+            const ok = String(o.objectionText || '').toLowerCase().trim().substring(0, 24);
+            return ok && (ok.includes(key) || key.includes(ok));
+          });
+
+          if (existingIdx >= 0) {
+            const existing = merged[existingIdx];
+            merged[existingIdx] = {
+              ...existing,
+              // Keep latest probability (prefer higher)
+              probability: Math.max(Number(existing.probability || 0), Number(newItem.probability || 0)),
+              // Fill in missing fields as they arrive
+              fear: String(existing.fear || '') || String(newItem.fear || ''),
+              whisper: String(existing.whisper || '') || String(newItem.whisper || ''),
+              rebuttalScript: String(existing.rebuttalScript || '') || String(newItem.rebuttalScript || ''),
+              timestamp: now
+            };
+          } else {
             merged.push(newItem);
           }
         }

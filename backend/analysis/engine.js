@@ -17,7 +17,7 @@ import {
   runAllAgents,
   runAllPillarAgents,
   runHotButtonsAgent,
-  runObjectionsAgents,
+  runObjectionsAgentsProgressive,
   runTruthIndexAgent,
   runInsightsAgent
 } from './aiAgents.js';
@@ -282,10 +282,9 @@ export async function analyzeConversationProgressive(
       agentErrors.hotButtons = String(e?.message || e || 'error');
     });
 
-  const objectionsP = runObjectionsAgents(tObjections, customScriptPrompt)
+  const objectionsP = runObjectionsAgentsProgressive(tObjections, customScriptPrompt, (p) => emit(p))
     .then((r) => {
       aiAnalysis.objections = Array.isArray(r?.objections) ? r.objections : [];
-      emit({ objections: aiAnalysis.objections });
     })
     .catch((e) => {
       agentErrors.objections = String(e?.message || e || 'error');
