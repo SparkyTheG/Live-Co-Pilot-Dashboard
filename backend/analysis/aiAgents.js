@@ -44,7 +44,7 @@ const MODEL = 'gpt-4o-mini';
 // from starving the main real-time analysis agents.
 const ACTIVE_BY_POOL = { main: 0, aux: 0 };
 const MAX_BY_POOL = {
-  main: 6, // main analysis agents
+  main: 20, // main analysis agents
   aux: 1   // background agents (summary, speaker role) - never starve main
 };
 
