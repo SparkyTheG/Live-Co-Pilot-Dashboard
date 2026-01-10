@@ -224,6 +224,51 @@ export async function analyzeConversationProgressive(
     try { onPartial(p); } catch {}
   };
 
+  // Stream buffering for scores-only agents (Lubometer pillar agents, Hot Buttons, Truth Index).
+  // We throttle/batch deltas to avoid flooding the WS during frequent analysis runs.
+  const streamBuffers = new Map(); // key -> { buf: string, lastFlushMs: number, group: string, agent: string }
+  const STREAM_FLUSH_MS = 120;
+
+  const flushStreamKey = (key, { done = false } = {}) => {
+    const st = streamBuffers.get(key);
+    if (!st) return;
+    const delta = String(st.buf || '');
+    if (!delta) return;
+    st.buf = '';
+    st.lastFlushMs = Date.now();
+    streamBuffers.set(key, st);
+    emit({
+      _stream: {
+        group: st.group,
+        agent: st.agent,
+        delta,
+        done: !!done,
+        ts: Date.now()
+      }
+    });
+  };
+
+  const flushStreamGroup = (group, { done = false } = {}) => {
+    for (const [key, st] of streamBuffers.entries()) {
+      if (st?.group !== group) continue;
+      flushStreamKey(key, { done });
+    }
+  };
+
+  const makeOnStream = (group) => (ev) => {
+    const agent = String(ev?.agent || '');
+    const delta = String(ev?.delta || '');
+    if (!agent || !delta) return;
+    const key = `${group}:${agent}`;
+    const prev = streamBuffers.get(key) || { buf: '', lastFlushMs: 0, group, agent };
+    prev.buf = String(prev.buf || '') + delta;
+    streamBuffers.set(key, prev);
+    const now = Date.now();
+    if ((now - (prev.lastFlushMs || 0)) >= STREAM_FLUSH_MS || prev.buf.length >= 256) {
+      flushStreamKey(key, { done: false });
+    }
+  };
+
   const agentErrors = {};
   const aiAnalysis = {
     indicatorSignals: {},
@@ -250,8 +295,9 @@ export async function analyzeConversationProgressive(
     emit({ truthIndex });
   };
 
-  const pillarsP = runAllPillarAgents(tPillars)
+  const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'))
     .then((r) => {
+      flushStreamGroup('lubometer', { done: true });
       aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
       pillarsDone = true;
       const lubometer = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
@@ -270,15 +316,18 @@ export async function analyzeConversationProgressive(
       maybeEmitTruthIndex();
     })
     .catch((e) => {
+      flushStreamGroup('lubometer', { done: true });
       agentErrors.pillars = String(e?.message || e || 'error');
     });
 
-  const hotButtonsP = runHotButtonsAgent(tHotButtons)
+  const hotButtonsP = runHotButtonsAgent(tHotButtons, makeOnStream('hotButtons'))
     .then((r) => {
+      flushStreamGroup('hotButtons', { done: true });
       aiAnalysis.hotButtonDetails = Array.isArray(r?.hotButtonDetails) ? r.hotButtonDetails : [];
       emit({ hotButtons: normalizeHotButtons(aiAnalysis.hotButtonDetails) });
     })
     .catch((e) => {
+      flushStreamGroup('hotButtons', { done: true });
       agentErrors.hotButtons = String(e?.message || e || 'error');
     });
 
@@ -290,8 +339,9 @@ export async function analyzeConversationProgressive(
       agentErrors.objections = String(e?.message || e || 'error');
     });
 
-  const truthP = runTruthIndexAgent(tTruth)
+  const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'))
     .then((r) => {
+      flushStreamGroup('truthIndex', { done: true });
       aiAnalysis.detectedRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
       aiAnalysis.coherenceSignals = Array.isArray(r?.coherenceSignals) ? r.coherenceSignals : [];
       aiAnalysis.overallCoherence = typeof r?.overallCoherence === 'string' ? r.overallCoherence : '';
@@ -302,6 +352,7 @@ export async function analyzeConversationProgressive(
       maybeEmitTruthIndex();
     })
     .catch((e) => {
+      flushStreamGroup('truthIndex', { done: true });
       agentErrors.truthIndex = String(e?.message || e || 'error');
       truthDone = true;
       aiAnalysis.truthIndexFromAgent = false;

@@ -479,7 +479,7 @@ const realtimeConnections = new Map();
 const lastGoodAnalysis = new Map();
 
 // Analysis scheduling constants
-const ANALYSIS_THROTTLE_MS = 800; // Min time between analyses (normal transcript-driven runs)
+const ANALYSIS_THROTTLE_MS = 400; // Min time between analyses (normal transcript-driven runs)
 const ANALYSIS_MAX_PENDING_MS = 25000; // Stuck detection: force-clear pending after this long
 
 // Helper function to send data to client
@@ -557,6 +557,19 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
         const mCheck = connectionPersistence.get(connectionId);
         if (!mCheck || mCheck._analysisSeq !== seq) return;
         if (!partial || typeof partial !== 'object') return;
+
+        // Special-case streaming deltas: forward as a dedicated WS message so the frontend
+        // can consume without interfering with analysis_update merging.
+        if (partial._stream && typeof partial._stream === 'object') {
+          sendToClient(connectionId, {
+            type: 'analysis_stream',
+            data: {
+              ...partial._stream,
+              analysisSeq: seq
+            }
+          });
+          return;
+        }
         sendToClient(connectionId, {
           type: 'analysis_update',
           data: {

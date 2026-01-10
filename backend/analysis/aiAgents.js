@@ -84,6 +84,8 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
   // Keep abort-enabled timeouts, but give enough runway for HotButtons/Objections to complete.
   const timeoutMs = Number(opts.timeoutMs ?? 8000);
   const pool = String(opts.pool || 'main') === 'aux' ? 'aux' : 'main';
+  const stream = opts.stream === true;
+  const onDelta = typeof opts.onDelta === 'function' ? opts.onDelta : null;
 
   const doCall = async (signal) => {
     const openai = getOpenAIClient();
@@ -100,18 +102,56 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
     let response;
     try {
       // Prefer strict JSON output if supported by the API/model
-      response = await openai.chat.completions.create(
-        { ...baseReq, response_format: { type: 'json_object' } },
-        // IMPORTANT: signal must be passed as a request option (not in the JSON body),
-        // otherwise the API rejects it: "Unrecognized request argument supplied: signal"
-        { signal }
-      );
+      if (stream) {
+        // Stream tokens so we can forward deltas to the frontend (scores-only agents).
+        const streamResp = await openai.chat.completions.create(
+          { ...baseReq, response_format: { type: 'json_object' }, stream: true },
+          // IMPORTANT: signal must be passed as a request option (not in the JSON body),
+          // otherwise the API rejects it: "Unrecognized request argument supplied: signal"
+          { signal }
+        );
+
+        let full = '';
+        for await (const chunk of streamResp) {
+          const delta = chunk?.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            full += delta;
+            try { onDelta?.(delta, agentName); } catch {}
+          }
+        }
+
+        // Match non-stream response shape used below
+        response = { choices: [{ message: { content: full } }] };
+      } else {
+        response = await openai.chat.completions.create(
+          { ...baseReq, response_format: { type: 'json_object' } },
+          // IMPORTANT: signal must be passed as a request option (not in the JSON body),
+          // otherwise the API rejects it: "Unrecognized request argument supplied: signal"
+          { signal }
+        );
+      }
     } catch (e) {
-      // Fallback for older API behavior: no response_format
-      response = await openai.chat.completions.create(
-        baseReq,
-        { signal }
-      );
+      // Fallback for older API behavior: no response_format / no stream
+      if (stream) {
+        const streamResp = await openai.chat.completions.create(
+          { ...baseReq, stream: true },
+          { signal }
+        );
+        let full = '';
+        for await (const chunk of streamResp) {
+          const delta = chunk?.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            full += delta;
+            try { onDelta?.(delta, agentName); } catch {}
+          }
+        }
+        response = { choices: [{ message: { content: full } }] };
+      } else {
+        response = await openai.chat.completions.create(
+          baseReq,
+          { signal }
+        );
+      }
     }
 
     let content = response?.choices?.[0]?.message?.content ?? '{}';
@@ -209,7 +249,7 @@ New chunk:
  * P1 AGENT: Pain & Desire (indicators 1-4)
  * Weight: 1.5x - MOST IMPORTANT
  */
-async function runP1Agent(transcript) {
+async function runP1Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 1: PAIN & DESIRE from prospect statements.
 
 INDICATORS (1-10 scale):
@@ -226,13 +266,19 @@ WHAT TO LOOK FOR:
 Return ONLY: {"1":6,"2":5,"3":7,"4":6}`;
 
   const userPrompt = `Score:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P1-PainDesire', 150);
+  return await callAI(systemPrompt, userPrompt, 'P1-PainDesire', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P2 AGENT: Urgency (indicators 5-8)
  */
-async function runP2Agent(transcript) {
+async function runP2Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 2: URGENCY from prospect speech.
 
 INDICATORS (1-10 scale):
@@ -250,13 +296,19 @@ WHAT TO LOOK FOR:
 Return ONLY: {"5":6,"6":5,"7":7,"8":6}`;
 
   const userPrompt = `Score:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P2-Urgency', 150);
+  return await callAI(systemPrompt, userPrompt, 'P2-Urgency', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P3 AGENT: Decisiveness (indicators 9-12)
  */
-async function runP3Agent(transcript) {
+async function runP3Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 3: DECISIVENESS from prospect speech.
 
 INDICATORS (1-10 scale):
@@ -273,14 +325,20 @@ WHAT TO LOOK FOR:
 Return ONLY: {"9":6,"10":5,"11":7,"12":6}`;
 
   const userPrompt = `Score:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P3-Decisiveness', 150);
+  return await callAI(systemPrompt, userPrompt, 'P3-Decisiveness', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P4 AGENT: Money (indicators 13-16)
  * Weight: 1.5x - MOST IMPORTANT
  */
-async function runP4Agent(transcript) {
+async function runP4Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 4: AVAILABLE MONEY indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -299,13 +357,19 @@ Score generously for clear signals. This pillar has 1.5x weight.
 Return ONLY: {"13":7,"14":6,"15":8,"16":7}`;
 
   const userPrompt = `Score Money indicators:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P4-Money', 150);
+  return await callAI(systemPrompt, userPrompt, 'P4-Money', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P5 AGENT: Responsibility (indicators 17-20)
  */
-async function runP5Agent(transcript) {
+async function runP5Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 5: RESPONSIBILITY & OWNERSHIP indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -323,14 +387,20 @@ Score generously for clear signals.
 Return ONLY: {"17":6,"18":7,"19":5,"20":6}`;
 
   const userPrompt = `Score Responsibility indicators:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P5-Responsibility', 150);
+  return await callAI(systemPrompt, userPrompt, 'P5-Responsibility', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P6 AGENT: Price Sensitivity (indicators 21-23)
  * NOTE: This pillar is REVERSE SCORED - LOW scores are GOOD
  */
-async function runP6Agent(transcript) {
+async function runP6Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 6: PRICE SENSITIVITY indicators (1-10) from PROSPECT statements.
 
 ⚠️ REVERSE SCORING: For this pillar, LOW scores (1-3) are GOOD, HIGH scores (7-10) are BAD
@@ -352,13 +422,19 @@ WHAT TO LOOK FOR (score LOW if these appear):
 Return ONLY: {"21":4,"22":3,"23":5}`;
 
   const userPrompt = `Score Price Sensitivity indicators:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P6-PriceSensitivity', 150);
+  return await callAI(systemPrompt, userPrompt, 'P6-PriceSensitivity', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * P7 AGENT: Trust (indicators 24-27)
  */
-async function runP7Agent(transcript) {
+async function runP7Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 7: TRUST indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -377,26 +453,32 @@ Score generously for clear signals.
 Return ONLY: {"24":6,"25":7,"26":5,"27":6}`;
 
   const userPrompt = `Score Trust indicators:\n"${transcript}"`;
-  return await callAI(systemPrompt, userPrompt, 'P7-Trust', 150);
+  return await callAI(systemPrompt, userPrompt, 'P7-Trust', {
+    maxTokens: 150,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
 }
 
 /**
  * RUN ALL 7 PILLAR AGENTS IN PARALLEL
  * Combines results into single indicatorSignals object
  */
-export async function runAllPillarAgents(transcript) {
+export async function runAllPillarAgents(transcript, onStream = null) {
   console.log(`[Lubometer] Starting 7 pillar agents in parallel...`);
   const startTime = Date.now();
 
   // Run all 7 pillar agents in parallel
   const [p1, p2, p3, p4, p5, p6, p7] = await Promise.all([
-    runP1Agent(transcript),
-    runP2Agent(transcript),
-    runP3Agent(transcript),
-    runP4Agent(transcript),
-    runP5Agent(transcript),
-    runP6Agent(transcript),
-    runP7Agent(transcript)
+    runP1Agent(transcript, onStream),
+    runP2Agent(transcript, onStream),
+    runP3Agent(transcript, onStream),
+    runP4Agent(transcript, onStream),
+    runP5Agent(transcript, onStream),
+    runP6Agent(transcript, onStream),
+    runP7Agent(transcript, onStream)
   ]);
 
   // Combine all indicator scores
@@ -434,7 +516,7 @@ export async function runAllPillarAgents(transcript) {
 // AGENT 2: HOT BUTTONS AGENT
 // Output: hotButtonDetails (emotional triggers with quotes)
 // ============================================================================
-export async function runHotButtonsAgent(transcript) {
+export async function runHotButtonsAgent(transcript, onStream = null) {
   const systemPrompt = `Find emotional triggers from PROSPECT speech in this sales conversation.
 
 INDICATOR IDS (choose most relevant):
@@ -458,7 +540,13 @@ Return 2-4 most important triggers. If truly nothing detected, return empty arra
   const userPrompt = `Transcript:\n"${transcript}"`;
 
   console.log(`[HotButtonsAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
-  const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', 400);
+  const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', {
+    maxTokens: 400,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
   console.log(`[HotButtonsAgent] OUTPUT: hotButtonDetails=${result?.hotButtonDetails?.length||0}, error=${result?.error||'none'}, keys=${Object.keys(result||{}).join(',')}`);
   
   return result;
@@ -794,7 +882,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 // Detects the 5 specific incoherence rules from Truth Index CSV
 // Output: detectedRules (T1-T5 with evidence), coherenceSignals, overallCoherence
 // ============================================================================
-export async function runTruthIndexAgent(transcript) {
+export async function runTruthIndexAgent(transcript, onStream = null) {
   const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
 INCOHERENCE RULES TO DETECT:
@@ -844,7 +932,13 @@ Return: {
 
   const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
 
-  const res = await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', 600);
+  const res = await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', {
+    maxTokens: 600,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
   // Mark successful agent output so the engine can distinguish it from fallbacks/timeouts.
   if (res && typeof res === 'object' && !res.error) {
     res._fromAgent = true;

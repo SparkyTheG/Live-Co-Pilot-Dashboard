@@ -50,6 +50,15 @@ export interface AnalysisUpdate {
   timestamp: string;
 }
 
+export interface AnalysisStreamEvent {
+  group: 'lubometer' | 'hotButtons' | 'truthIndex' | string;
+  agent: string;
+  delta: string;
+  done?: boolean;
+  ts?: number;
+  analysisSeq?: number;
+}
+
 export class ConversationWebSocket {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
@@ -57,6 +66,7 @@ export class ConversationWebSocket {
   private reconnectDelay = 1000;
   private url: string;
   private onAnalysisUpdate?: (analysis: AnalysisUpdate) => void;
+  private onAnalysisStream?: (ev: AnalysisStreamEvent) => void;
   private onTranscriptChunk?: (chunk: { speaker: string; text: string; ts?: number }) => void;
   private onError?: (error: Error) => void;
   private onConnect?: () => void;
@@ -193,6 +203,10 @@ export class ConversationWebSocket {
             if (data.type === 'analysis_update') {
               if (this.onAnalysisUpdate) {
                 this.onAnalysisUpdate(data.data);
+              }
+            } else if (data.type === 'analysis_stream') {
+              if (this.onAnalysisStream) {
+                this.onAnalysisStream(data.data);
               }
             } else if (data.type === 'transcript_chunk') {
               if (this.onTranscriptChunk) {
@@ -377,6 +391,10 @@ export class ConversationWebSocket {
 
   setOnAnalysisUpdate(callback: (analysis: AnalysisUpdate) => void) {
     this.onAnalysisUpdate = callback;
+  }
+
+  setOnAnalysisStream(callback: (ev: AnalysisStreamEvent) => void) {
+    this.onAnalysisStream = callback;
   }
 
   setOnTranscriptChunk(callback: (chunk: { speaker: string; text: string; ts?: number }) => void) {
