@@ -136,41 +136,51 @@ export default function LiveCoPilotDashboard() {
 
     if (hotButtonsArray.length > 0) {
       setHotButtonsHistory(prev => {
-        const newItems = hotButtonsArray.map((hb: any) => ({
-          ...hb,
-          quote: cleanQuote(hb.quote), // Clean up the quote
-          timestamp: now
-        }));
-        // Merge: update existing by ID, add new ones
         const merged = [...prev];
-        for (const newItem of newItems) {
-          const existingIdx = merged.findIndex(h => h.id === newItem.id);
+        
+        for (const newItem of hotButtonsArray) {
+          const cleanedQuote = cleanQuote(newItem.quote);
+          
+          // Find exact match by ID AND quote (prevent duplicates from same statement)
+          const existingIdx = merged.findIndex(h => 
+            h.id === newItem.id && 
+            h.quote.toLowerCase().trim() === cleanedQuote.toLowerCase().trim()
+          );
+          
           if (existingIdx >= 0) {
-            // Update existing with higher score or more recent
-            if (newItem.score >= merged[existingIdx].score) {
-              merged[existingIdx] = newItem;
+            // Update existing item: keep original timestamp, update score if higher
+            const existing = merged[existingIdx];
+            if (newItem.score > existing.score) {
+              merged[existingIdx] = {
+                ...existing,
+                score: newItem.score,
+                // Keep original timestamp so order doesn't change
+                timestamp: existing.timestamp
+              };
             }
           } else {
-            merged.push(newItem);
+            // Check if this is a duplicate quote with different ID (same statement, different detection)
+            const duplicateIdx = merged.findIndex(h => 
+              h.quote.toLowerCase().trim() === cleanedQuote.toLowerCase().trim()
+            );
+            
+            if (duplicateIdx < 0) {
+              // Truly new item - add with current timestamp at the top
+              merged.unshift({
+                ...newItem,
+                quote: cleanedQuote,
+                timestamp: now
+              });
+            }
+            // If duplicate by quote, ignore it completely
           }
         }
-        // Sort by timestamp (newest first) then by score
-        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.score - a.score);
+        
+        // Never remove old items - only cap if we exceed max
+        // Sort by timestamp (newest first) for display, but keep all up to max
+        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp);
         const capped = sorted.slice(0, MAX_HOT_BUTTONS_HISTORY);
         
-        // Avoid unnecessary state updates if top order + scores didn't change
-        if (prev.length === capped.length) {
-          let same = true;
-          for (let i = 0; i < capped.length; i++) {
-            const a = prev[i];
-            const b = capped[i];
-            if (!a || !b || a.id !== b.id || a.score !== b.score || a.quote !== b.quote) {
-              same = false;
-              break;
-            }
-          }
-          if (same) return prev;
-        }
         return capped;
       });
     }
@@ -182,45 +192,59 @@ export default function LiveCoPilotDashboard() {
 
     if (objectionsArray.length > 0) {
       setObjectionsHistory(prev => {
-        const newItems = objectionsArray.map((obj: any) => ({
-          ...obj,
-          timestamp: now
-        }));
-        // Merge: update existing items (scripts can arrive later), otherwise add new.
         const merged = [...prev];
-        for (const newItem of newItems) {
-          const key = String(newItem.objectionText || '').toLowerCase().trim().substring(0, 24);
+        
+        for (const newItem of objectionsArray) {
+          const objTextNormalized = String(newItem.objectionText || '')
+            .toLowerCase()
+            .trim()
+            .replace(/\s+/g, ' '); // normalize whitespace
+          
+          // Find exact match by normalized text (prevent duplicates)
           const existingIdx = merged.findIndex(o => {
-            const ok = String(o.objectionText || '').toLowerCase().trim().substring(0, 24);
-            return ok && (ok.includes(key) || key.includes(ok));
+            const existing = String(o.objectionText || '')
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, ' ');
+            return existing === objTextNormalized;
           });
 
           if (existingIdx >= 0) {
+            // Update existing item: preserve original timestamp, allow scripts to arrive later
             const existing = merged[existingIdx];
             const pickNew = (prevVal: any, nextVal: any) => {
               const prev = String(prevVal || '').trim();
               const next = String(nextVal || '').trim();
-              // If backend sends a real value later, allow it to overwrite placeholders/old values.
-              if (next && next !== prev) return next;
+              // Allow real values to overwrite empty/placeholder values
+              if (next && (next !== 'Generating...' && next !== prev)) return next;
               return prev;
             };
+            
             merged[existingIdx] = {
               ...existing,
-              // Keep latest probability (prefer higher)
+              // Keep highest probability seen
               probability: Math.max(Number(existing.probability || 0), Number(newItem.probability || 0)),
               // Fill/update fields as they arrive (scripts can arrive later)
               fear: pickNew(existing.fear, newItem.fear),
               whisper: pickNew(existing.whisper, newItem.whisper),
               rebuttalScript: pickNew(existing.rebuttalScript, newItem.rebuttalScript),
-              timestamp: now
+              // IMPORTANT: Keep original timestamp so order doesn't jump around
+              timestamp: existing.timestamp
             };
           } else {
-            merged.push(newItem);
+            // Truly new objection - add at the top with current timestamp
+            merged.unshift({
+              ...newItem,
+              timestamp: now
+            });
           }
         }
-        // Sort by timestamp (newest first) then by probability
-        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp || b.probability - a.probability);
+        
+        // Never remove old items - only cap if we exceed max
+        // Sort by timestamp (newest first) for display
+        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp);
         const capped = sorted.slice(0, MAX_OBJECTIONS_HISTORY);
+        
         return capped;
       });
     }
