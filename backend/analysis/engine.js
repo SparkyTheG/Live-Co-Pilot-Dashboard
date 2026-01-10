@@ -695,15 +695,16 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
     return computeTruthIndexDeterministic(indicatorSignals, transcript);
   }
 
-  // More granular scoring: base score depends on coherence + number/severity of rules
+  // Start at 100 for perfect coherence, subtract penalties for contradictions
   let base = 100;
+  
+  // Apply base reduction if AI detected low/medium coherence
   if (coherence === 'low') {
-    base = 50;
+    base = 60; // Start lower if overall coherence is poor
   } else if (coherence === 'medium') {
-    base = 70;
-  } else if (coherence === 'high') {
-    base = 90;
+    base = 80;
   }
+  // coherence === 'high' stays at 100
   
   // Subtract penalties for detected contradictions
   // Each rule has a confidence weight (0.6-1.0), use that for penalty calculation
@@ -711,7 +712,10 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
   const penalties = [];
   for (const r of rules.slice(0, 8)) {
     const confidence = Number(r?.confidence || 0.8);
-    const penaltyAmount = Math.round(confidence * 15); // T1/T2/T5 are -15pts, T3/T4 are -10pts
+    // T1, T2, T5 are major contradictions (-15pts), T3, T4 are moderate (-10pts)
+    const ruleId = typeof r === 'string' ? r : (r?.ruleId || '');
+    const basePenalty = (ruleId === 'T1' || ruleId === 'T2' || ruleId === 'T5') ? 15 : 10;
+    const penaltyAmount = Math.round(confidence * basePenalty);
     totalPenalty += penaltyAmount;
     penalties.push({
       rule: typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence'),
@@ -721,6 +725,7 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
     });
   }
   
+  // Final score can go from 0 to 100
   const score = clamp(base - totalPenalty, 0, 100);
   const signals = Array.isArray(aiAnalysis?.coherenceSignals) ? aiAnalysis.coherenceSignals : [];
   const redFlags = rules
