@@ -855,7 +855,18 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   emit({ objections: withFearWhisper });
 
   // Step 3: Rebuttal scripts (slow lane) - emit when ready
-  const rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt);
+  let rebuttalResult = { rebuttals: [] };
+  try {
+    rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt);
+    if (!rebuttalResult || rebuttalResult.error) {
+      console.warn('[ObjectionsSystemProgressive] Rebuttal agent failed or timed out');
+      rebuttalResult = { rebuttals: [] };
+    }
+  } catch (e) {
+    console.warn('[ObjectionsSystemProgressive] Rebuttal agent error:', e?.message || e);
+    rebuttalResult = { rebuttals: [] };
+  }
+  
   const final = detectedObjections.map((obj, idx) => ({
     objectionText: obj.objectionText,
     probability: obj.probability,
