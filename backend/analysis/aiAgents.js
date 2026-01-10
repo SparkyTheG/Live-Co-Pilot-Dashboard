@@ -917,6 +917,11 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
     whisper: '',
     rebuttalScript: '' // will arrive later
   }));
+  
+  // #region objections log H6 H9
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit1',message:'Emitting initial objections (empty fear/whisper/rebuttal)',data:{objectionsCount:base.length,firstObjection:base[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  // #endregion
+  
   emit({ objections: base });
 
   // Step 2: Run Fear + Whisper (parallel) and merge (optional, but cheap)
@@ -928,6 +933,10 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   const fearResult = fearWhisper[0].status === 'fulfilled' ? fearWhisper[0].value : { fears: [] };
   const whisperResult = fearWhisper[1].status === 'fulfilled' ? fearWhisper[1].value : { whispers: [] };
 
+  // #region objections log H7 H9
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:fearWhisperDone',message:'Fear+Whisper agents complete',data:{fearStatus:fearWhisper[0].status,whisperStatus:fearWhisper[1].status,fearCount:fearResult?.fears?.length||0,whisperCount:whisperResult?.whispers?.length||0,fearSample:fearResult?.fears?.[0],whisperSample:whisperResult?.whispers?.[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7_H9'})}).catch(()=>{});
+  // #endregion
+
   const withFearWhisper = detectedObjections.map((obj, idx) => ({
     objectionText: obj.objectionText,
     probability: obj.probability,
@@ -935,6 +944,11 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
     whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
     rebuttalScript: ''
   }));
+  
+  // #region objections log H6 H9
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit2',message:'Emitting objections with fear/whisper',data:{objectionsCount:withFearWhisper.length,firstObjection:withFearWhisper[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  // #endregion
+  
   emit({ objections: withFearWhisper });
 
   // Step 3: Rebuttal scripts (slow lane) - emit when ready
@@ -945,9 +959,17 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
       console.warn('[ObjectionsSystemProgressive] Rebuttal agent failed or timed out');
       rebuttalResult = { rebuttals: [] };
     }
+    
+    // #region objections log H7
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:rebuttalDone',message:'Rebuttal agent complete',data:{success:true,rebuttalsCount:rebuttalResult?.rebuttals?.length||0,rebuttalSample:rebuttalResult?.rebuttals?.[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7'})}).catch(()=>{});
+    // #endregion
   } catch (e) {
     console.warn('[ObjectionsSystemProgressive] Rebuttal agent error:', e?.message || e);
     rebuttalResult = { rebuttals: [] };
+    
+    // #region objections log H7
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:rebuttalError',message:'Rebuttal agent threw error',data:{error:String(e?.message||e)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7'})}).catch(()=>{});
+    // #endregion
   }
   
   const final = detectedObjections.map((obj, idx) => ({
@@ -957,6 +979,11 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
     whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
     rebuttalScript: pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript') || ''
   }));
+  
+  // #region objections log H6 H9
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit3',message:'Emitting final objections with rebuttals',data:{objectionsCount:final.length,firstObjection:final[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  // #endregion
+  
   emit({ objections: final });
 
   console.log(`[ObjectionsSystemProgressive] Done in ${Date.now() - startTime}ms`);

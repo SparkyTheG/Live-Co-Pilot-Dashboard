@@ -305,6 +305,11 @@ export async function analyzeConversationProgressive(
       flushStreamGroup('lubometer', { done: true });
       aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
       pillarsDone = true;
+      
+      // #region truthindex log H4
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:pillarsP:done',message:'Pillars complete, about to emit Truth Index',data:{indicatorSignalsCount:Object.keys(aiAnalysis.indicatorSignals||{}).length,tTruthLen:tTruth?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+      
       const lubometer = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
       emit({
         lubometer: {
@@ -574,6 +579,10 @@ function avgRange(indicatorSignals, a, b) {
 }
 
 function computeTruthIndexDeterministic(indicatorSignals, transcript) {
+  // #region truthindex log H1 H2 H3 H5
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:computeTruthIndexDeterministic:entry',message:'Truth Index calc started',data:{transcriptLen:transcript?.length||0,transcriptPreview:String(transcript||'').slice(-200),indicatorSignalsCount:Object.keys(indicatorSignals||{}).length,sampleIndicators:{i1:indicatorSignals?.['1'],i2:indicatorSignals?.['2'],i17:indicatorSignals?.['17'],i18:indicatorSignals?.['18'],i21:indicatorSignals?.['21']}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1_H2_H3_H5'})}).catch(()=>{});
+  // #endregion
+
   const t = String(transcript || '').toLowerCase();
 
   const painAvg = avgRange(indicatorSignals, 1, 4);
@@ -589,6 +598,10 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
   const moneyAvg = avgRange(indicatorSignals, 13, 16);
   const responsibilityAvg = avgRange(indicatorSignals, 17, 20);
   const priceSensitivityRaw = avgRange(indicatorSignals, 21, 23);
+
+  // #region truthindex log H1
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:computeTruthIndexDeterministic:averages',message:'Pillar averages computed',data:{painAvg,desireAvg,urgencyAvg,decisivenessAvg,moneyAvg,responsibilityAvg,priceSensitivityRaw,transcriptContains:{confused:t.includes('confused'),expensive:t.includes('expensive'),absolutely:t.includes('absolutely')}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
 
   const debug = String(process?.env?.DEBUG_TRUTH_INDEX || '') === '1';
   if (debug) {
@@ -666,6 +679,10 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 
   const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
   const score = clamp(100 - totalPenalty, 0, 100);
+
+  // #region truthindex log H1
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:computeTruthIndexDeterministic:result',message:'Truth Index score calculated',data:{penalties:penalties.map(p=>({rule:p.rule,penalty:p.penalty})),totalPenalty,score},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
 
   if (debug) {
     console.log(
