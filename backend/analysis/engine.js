@@ -676,63 +676,9 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 }
 
 function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
-  // If truth agent timed out/errored, use deterministic rules so Truth Index still updates.
-  if (aiAnalysis?.agentErrors?.truthIndex) {
-    return computeTruthIndexDeterministic(indicatorSignals, transcript);
-  }
-
-  // If the truth agent didn't actually run (e.g., upstream fallback object),
-  // use deterministic rules rather than returning a "default medium" score.
-  const fromAgent = Boolean(aiAnalysis?.truthIndexFromAgent);
-
-  // Prefer AI-detected rules if present; otherwise fall back to deterministic.
-  const rules = Array.isArray(aiAnalysis?.detectedRules) ? aiAnalysis.detectedRules : [];
-  const coherence = String(aiAnalysis?.overallCoherence || '').toLowerCase();
-  const hasAiSignal =
-    fromAgent &&
-    (rules.length > 0 || coherence === 'high' || coherence === 'medium' || coherence === 'low');
-  if (!hasAiSignal) {
-    return computeTruthIndexDeterministic(indicatorSignals, transcript);
-  }
-
-  // Start at 100 for perfect coherence, subtract penalties for contradictions
-  let base = 100;
-  
-  // Apply base reduction if AI detected low/medium coherence
-  if (coherence === 'low') {
-    base = 60; // Start lower if overall coherence is poor
-  } else if (coherence === 'medium') {
-    base = 80;
-  }
-  // coherence === 'high' stays at 100
-  
-  // Subtract penalties for detected contradictions
-  // Each rule has a confidence weight (0.6-1.0), use that for penalty calculation
-  let totalPenalty = 0;
-  const penalties = [];
-  for (const r of rules.slice(0, 8)) {
-    const confidence = Number(r?.confidence || 0.8);
-    // T1, T2, T5 are major contradictions (-15pts), T3, T4 are moderate (-10pts)
-    const ruleId = typeof r === 'string' ? r : (r?.ruleId || '');
-    const basePenalty = (ruleId === 'T1' || ruleId === 'T2' || ruleId === 'T5') ? 15 : 10;
-    const penaltyAmount = Math.round(confidence * basePenalty);
-    totalPenalty += penaltyAmount;
-    penalties.push({
-      rule: typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence'),
-      description: typeof r === 'string' ? r : (r?.evidence || r?.description || ''),
-      penalty: penaltyAmount,
-      details: typeof r === 'string' ? '' : (r?.evidence || '')
-    });
-  }
-  
-  // Final score can go from 0 to 100
-  const score = clamp(base - totalPenalty, 0, 100);
-  const signals = Array.isArray(aiAnalysis?.coherenceSignals) ? aiAnalysis.coherenceSignals : [];
-  const redFlags = rules
-    .map((r) => (typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence')))
-    .slice(0, 8);
-  
-  return { score, signals, redFlags, penalties };
+  // ALWAYS use deterministic calculation based on pillar scores (per Truth Index CSV spec)
+  // This ensures consistent, formula-based scoring: 100 - penalties based on T1-T5 rules
+  return computeTruthIndexDeterministic(indicatorSignals, transcript);
 }
 
 function normalizeDiagnosticQuestions(aiAnalysis) {
