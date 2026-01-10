@@ -190,24 +190,58 @@ export default function LiveCoPilotDashboard() {
     const objectionsArray = Array.isArray(analysis.objections) ? analysis.objections :
       (typeof analysis.objections === 'object' && analysis.objections !== null) ? [] : [];
 
+    // Helper: Check if two objections are semantically similar
+    const areSimilarObjections = (text1: string, text2: string): boolean => {
+      const normalize = (txt: string) => 
+        String(txt || '')
+          .toLowerCase()
+          .replace(/[^\w\s]/g, '') // remove punctuation
+          .replace(/\s+/g, ' ')
+          .trim();
+      
+      const t1 = normalize(text1);
+      const t2 = normalize(text2);
+      
+      // Exact match after normalization
+      if (t1 === t2) return true;
+      
+      // Extract key words (ignore common filler words)
+      const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 
+        'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 
+        'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 
+        'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where',
+        'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
+        'some', 'such', 'to', 'of', 'in', 'for', 'on', 'with', 'as', 'by', 'from', 'at',
+        'prospect', 'your', 'my', 'thinks', 'seem', 'seems', 'kind', 'really']);
+      
+      const getKeyWords = (txt: string) => 
+        txt.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+      
+      const words1 = new Set(getKeyWords(t1));
+      const words2 = new Set(getKeyWords(t2));
+      
+      if (words1.size === 0 || words2.size === 0) return false;
+      
+      // Count overlapping key words
+      let overlap = 0;
+      for (const word of words1) {
+        if (words2.has(word)) overlap++;
+      }
+      
+      // If 70%+ of key words overlap, consider them similar
+      const similarity = overlap / Math.min(words1.size, words2.size);
+      return similarity >= 0.7;
+    };
+
     if (objectionsArray.length > 0) {
       setObjectionsHistory(prev => {
         const merged = [...prev];
         
         for (const newItem of objectionsArray) {
-          const objTextNormalized = String(newItem.objectionText || '')
-            .toLowerCase()
-            .trim()
-            .replace(/\s+/g, ' '); // normalize whitespace
-          
-          // Find exact match by normalized text (prevent duplicates)
-          const existingIdx = merged.findIndex(o => {
-            const existing = String(o.objectionText || '')
-              .toLowerCase()
-              .trim()
-              .replace(/\s+/g, ' ');
-            return existing === objTextNormalized;
-          });
+          // Find similar objection (exact or semantic match)
+          const existingIdx = merged.findIndex(o => 
+            areSimilarObjections(o.objectionText, newItem.objectionText)
+          );
 
           if (existingIdx >= 0) {
             // Update existing item: preserve original timestamp, allow scripts to arrive later
