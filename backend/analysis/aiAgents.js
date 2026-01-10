@@ -631,6 +631,7 @@ RULES:
 - Include hesitations and concerns, not just direct objections
 - Probability: 0.8-0.95 for clear objections, 0.65-0.8 for hesitations
 - Return 1-3 most important objections
+- DO NOT return duplicate objections (same concern worded differently)
 
 Return: {"detectedObjections":[{"objectionText":"prospect concern here","probability":0.85}]}`;
 
@@ -638,7 +639,47 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
 
   console.log(`[ObjectionDetectionAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
-  console.log(`[ObjectionDetectionAgent] OUTPUT: detectedObjections=${result?.detectedObjections?.length||0}, error=${result?.error||'none'}`);
+  console.log(`[ObjectionDetectionAgent] OUTPUT (raw): detectedObjections=${result?.detectedObjections?.length||0}, error=${result?.error||'none'}`);
+  
+  // Deduplicate objections by semantic similarity (AI sometimes returns near-duplicates)
+  if (result?.detectedObjections && Array.isArray(result.detectedObjections)) {
+    const deduped = [];
+    for (const obj of result.detectedObjections) {
+      const objText = String(obj.objectionText || '').toLowerCase().replace(/[^\w\s]/g, '').trim();
+      
+      // Check if this is semantically similar to any already-added objection
+      const isDuplicate = deduped.some(existing => {
+        const existingText = String(existing.objectionText || '').toLowerCase().replace(/[^\w\s]/g, '').trim();
+        
+        // Extract key words (ignore common filler)
+        const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'your', 'my', 'seems', 'seem', 
+          'kind', 'of', 'that', 'this', 'prospect', 'thinks', 'about']);
+        const getKeyWords = (txt) => txt.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+        
+        const words1 = new Set(getKeyWords(objText));
+        const words2 = new Set(getKeyWords(existingText));
+        
+        if (words1.size === 0 || words2.size === 0) return false;
+        
+        // Count overlap
+        let overlap = 0;
+        for (const word of words1) {
+          if (words2.has(word)) overlap++;
+        }
+        
+        // 70%+ overlap = duplicate
+        const similarity = overlap / Math.min(words1.size, words2.size);
+        return similarity >= 0.7;
+      });
+      
+      if (!isDuplicate) {
+        deduped.push(obj);
+      }
+    }
+    
+    result.detectedObjections = deduped;
+    console.log(`[ObjectionDetectionAgent] OUTPUT (deduped): ${deduped.length} unique objections`);
+  }
   
   return result;
 }
