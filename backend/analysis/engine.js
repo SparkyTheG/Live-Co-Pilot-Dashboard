@@ -589,6 +589,8 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
   const responsibilityAvg = avgRange(indicatorSignals, 17, 20);
   const priceSensitivityRaw = avgRange(indicatorSignals, 21, 23);
 
+  console.log(`[TruthIndexDeterministic] PILLAR AVERAGES: pain=${painAvg.toFixed(1)}, desire=${desireAvg.toFixed(1)}, urgency=${urgencyAvg.toFixed(1)}, decisiveness=${decisivenessAvg.toFixed(1)}, money=${moneyAvg.toFixed(1)}, responsibility=${responsibilityAvg.toFixed(1)}, priceSensitivity=${priceSensitivityRaw.toFixed(1)}`);
+
   const penalties = [];
 
   // T1: High Pain + Low Urgency (≤4) –15
@@ -658,6 +660,8 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 
   const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
   const score = clamp(100 - totalPenalty, 0, 100);
+
+  console.log(`[TruthIndexDeterministic] PENALTIES: ${penalties.map(p => `${p.rule}(-${p.penalty})`).join(', ') || 'NONE'}, FINAL SCORE: ${score}`);
 
   const coherenceSignals = [];
   if (painAvg >= 7 && urgencyAvg >= 6) coherenceSignals.push('Pain aligns with urgency');

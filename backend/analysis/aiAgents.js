@@ -382,8 +382,9 @@ WHAT TO LOOK FOR:
 - Ownership: "my fault", "I should have", "I need to fix this"
 - vs blame: "they did this", "market's fault", "not fair", "can't control"
 - Action-oriented: "I'm going to", "working on it" vs "wish someone would"
+- LIES/CONTRADICTIONS: "I lied", "wasn't being honest", "that was a lie" = VERY LOW scores (1-3) on indicators 19 & 20
 
-Score generously for clear signals.
+Score generously for clear signals. If prospect admits to lying or contradicting themselves, score indicators 17-20 as 1-3.
 Return ONLY: {"17":6,"18":7,"19":5,"20":6}`;
 
   const userPrompt = `Score Responsibility indicators:\n"${transcript}"`;
@@ -636,12 +637,14 @@ RULES:
 - objectionText should capture the concern (can paraphrase if needed, 5-20 words)
 - Include hesitations and concerns, not just direct objections
 - Probability: 0.8-0.95 for clear objections, 0.65-0.8 for hesitations
-- Return 1-3 most important objections
+- PRIORITIZE THE MOST RECENT statements (end of transcript) over older ones
+- Return 1-3 most important objections from the LATEST part of the conversation
 - DO NOT return duplicate objections (same concern worded differently)
+- If no new objections in recent statements, return empty array
 
 Return: {"detectedObjections":[{"objectionText":"prospect concern here","probability":0.85}]}`;
 
-  const userPrompt = `Detect objections:\n"${transcript}"`;
+  const userPrompt = `Detect objections from the MOST RECENT statements:\n"${transcript}"`;
 
   console.log(`[ObjectionDetectionAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
