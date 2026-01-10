@@ -213,7 +213,9 @@ export async function analyzeConversationProgressive(
   const prospectType = prospectTypeOverride || 'foreclosure';
 
   // Small rolling windows per agent (stable latency)
-  const tPillars = String(cleanedTranscript || '').slice(-800);
+  // Pillars drive Lubometer + Truth Index (deterministic). Give a bit more context so
+  // indicators (esp. Responsibility) can reflect recent contradictions reliably.
+  const tPillars = String(cleanedTranscript || '').slice(-2000);
   const tHotButtons = String(cleanedTranscript || '').slice(-800);
   const tObjections = String(cleanedTranscript || '').slice(-800);
   // Truth Index needs MORE context to detect contradictions (e.g., says X early, then says Y later)
@@ -289,10 +291,11 @@ export async function analyzeConversationProgressive(
   };
 
   let pillarsDone = false;
-  let truthDone = false;
 
-  const maybeEmitTruthIndex = () => {
-    if (!pillarsDone || !truthDone) return;
+  const emitTruthIndexIfPossible = () => {
+    if (!pillarsDone) return;
+    // Truth Index is deterministic (per CSV) based on pillar indicator scores + transcript cues.
+    // Do NOT wait for the TruthIndex agent; it can be slow and shouldn't gate UI updates.
     const truthIndex = computeTruthIndex(aiAnalysis, aiAnalysis.indicatorSignals || {}, cleanedTranscript);
     emit({ truthIndex });
   };
@@ -315,7 +318,7 @@ export async function analyzeConversationProgressive(
         },
         pillars: lubometer.pillarScores
       });
-      maybeEmitTruthIndex();
+      emitTruthIndexIfPossible();
     })
     .catch((e) => {
       flushStreamGroup('lubometer', { done: true });
@@ -350,15 +353,13 @@ export async function analyzeConversationProgressive(
       if (r?.error) agentErrors.truthIndex = String(r.error);
       // Marker used by computeTruthIndex to decide if agent actually ran
       aiAnalysis.truthIndexFromAgent = !r?.error;
-      truthDone = true;
-      maybeEmitTruthIndex();
+      // TruthIndex score is already emitted from pillars; don't re-gate it here.
+      // We keep this agent for optional streaming/diagnostics only.
     })
     .catch((e) => {
       flushStreamGroup('truthIndex', { done: true });
       agentErrors.truthIndex = String(e?.message || e || 'error');
-      truthDone = true;
       aiAnalysis.truthIndexFromAgent = false;
-      maybeEmitTruthIndex();
     });
 
   const insightsP = runInsightsAgent(tInsights, prospectType)
@@ -589,7 +590,12 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
   const responsibilityAvg = avgRange(indicatorSignals, 17, 20);
   const priceSensitivityRaw = avgRange(indicatorSignals, 21, 23);
 
-  console.log(`[TruthIndexDeterministic] PILLAR AVERAGES: pain=${painAvg.toFixed(1)}, desire=${desireAvg.toFixed(1)}, urgency=${urgencyAvg.toFixed(1)}, decisiveness=${decisivenessAvg.toFixed(1)}, money=${moneyAvg.toFixed(1)}, responsibility=${responsibilityAvg.toFixed(1)}, priceSensitivity=${priceSensitivityRaw.toFixed(1)}`);
+  const debug = String(process?.env?.DEBUG_TRUTH_INDEX || '') === '1';
+  if (debug) {
+    console.log(
+      `[TruthIndexDeterministic] PILLAR AVERAGES: pain=${painAvg.toFixed(1)}, desire=${desireAvg.toFixed(1)}, urgency=${urgencyAvg.toFixed(1)}, decisiveness=${decisivenessAvg.toFixed(1)}, money=${moneyAvg.toFixed(1)}, responsibility=${responsibilityAvg.toFixed(1)}, priceSensitivity=${priceSensitivityRaw.toFixed(1)}`
+    );
+  }
 
   const penalties = [];
 
@@ -661,7 +667,11 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
   const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
   const score = clamp(100 - totalPenalty, 0, 100);
 
-  console.log(`[TruthIndexDeterministic] PENALTIES: ${penalties.map(p => `${p.rule}(-${p.penalty})`).join(', ') || 'NONE'}, FINAL SCORE: ${score}`);
+  if (debug) {
+    console.log(
+      `[TruthIndexDeterministic] PENALTIES: ${penalties.map((p) => `${p.rule}(-${p.penalty})`).join(', ') || 'NONE'}, FINAL SCORE: ${score}`
+    );
+  }
 
   const coherenceSignals = [];
   if (painAvg >= 7 && urgencyAvg >= 6) coherenceSignals.push('Pain aligns with urgency');

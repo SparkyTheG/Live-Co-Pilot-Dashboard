@@ -634,11 +634,11 @@ OBJECTION PATTERNS:
 - Fear: worried, nervous, what if, concerned, scared
 
 RULES:
-- objectionText should capture the concern (can paraphrase if needed, 5-20 words)
+- objectionText MUST be an EXACT QUOTE from the transcript (3-20 words). Do NOT paraphrase or summarize.
 - Include hesitations and concerns, not just direct objections
 - Probability: 0.8-0.95 for clear objections, 0.65-0.8 for hesitations
 - PRIORITIZE THE MOST RECENT statements (end of transcript) over older ones
-- Return 1-3 most important objections from the LATEST part of the conversation
+- Return 1-2 most important objections from the LATEST part of the conversation
 - DO NOT return duplicate objections (same concern worded differently)
 - If no new objections in recent statements, return empty array
 
@@ -650,35 +650,63 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
   const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
   console.log(`[ObjectionDetectionAgent] OUTPUT (raw): detectedObjections=${result?.detectedObjections?.length||0}, error=${result?.error||'none'}`);
   
-  // Deduplicate objections by semantic similarity (AI sometimes returns near-duplicates)
+  const normalizeText = (s) => String(s || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const stopWords = new Set([
+    'the','a','an','is','are','was','were','be','been','being','to','of','and','or','but','for','with','about','that','this',
+    'my','your','our','their','me','you','we','they','it','its','im','i','am',
+    'prospect','client','customer','buyer','seller',
+    'kind','sort','really','just','like','seems','seem'
+  ]);
+
+  const getWords = (s) => normalizeText(s)
+    .split(' ')
+    .filter((w) => w.length >= 3 && !stopWords.has(w));
+
+  const jaccard = (aWords, bWords) => {
+    const a = new Set(aWords);
+    const b = new Set(bWords);
+    if (!a.size || !b.size) return 0;
+    let inter = 0;
+    for (const w of a) if (b.has(w)) inter++;
+    const union = a.size + b.size - inter;
+    return union ? inter / union : 0;
+  };
+
+  const normalizedTranscript = normalizeText(transcript);
+
+  // 1) Hard filter: only keep objections that actually appear in the transcript (verbatim-ish)
+  if (result?.detectedObjections && Array.isArray(result.detectedObjections)) {
+    result.detectedObjections = result.detectedObjections.filter((obj) => {
+      const txt = normalizeText(obj?.objectionText);
+      if (!txt) return false;
+      // If the "quote" isn't present, it's a paraphrase; drop it to avoid duplicates like:
+      // "prospect is not sure this will work for them"
+      return normalizedTranscript.includes(txt);
+    });
+  }
+
+  // 2) Deduplicate objections by stronger semantic similarity (AI sometimes returns near-duplicates)
   if (result?.detectedObjections && Array.isArray(result.detectedObjections)) {
     const deduped = [];
     for (const obj of result.detectedObjections) {
-      const objText = String(obj.objectionText || '').toLowerCase().replace(/[^\w\s]/g, '').trim();
-      
-      // Check if this is semantically similar to any already-added objection
-      const isDuplicate = deduped.some(existing => {
-        const existingText = String(existing.objectionText || '').toLowerCase().replace(/[^\w\s]/g, '').trim();
-        
-        // Extract key words (ignore common filler)
-        const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'your', 'my', 'seems', 'seem', 
-          'kind', 'of', 'that', 'this', 'prospect', 'thinks', 'about']);
-        const getKeyWords = (txt) => txt.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
-        
-        const words1 = new Set(getKeyWords(objText));
-        const words2 = new Set(getKeyWords(existingText));
-        
-        if (words1.size === 0 || words2.size === 0) return false;
-        
-        // Count overlap
-        let overlap = 0;
-        for (const word of words1) {
-          if (words2.has(word)) overlap++;
-        }
-        
-        // 70%+ overlap = duplicate
-        const similarity = overlap / Math.min(words1.size, words2.size);
-        return similarity >= 0.7;
+      const objTextNorm = normalizeText(obj?.objectionText);
+
+      const isDuplicate = deduped.some((existing) => {
+        const existingNorm = normalizeText(existing?.objectionText);
+        if (!existingNorm) return false;
+
+        // Exact/containment checks (catch "are you sure this is going to work" variants)
+        if (existingNorm === objTextNorm) return true;
+        if (existingNorm.includes(objTextNorm) || objTextNorm.includes(existingNorm)) return true;
+
+        // Semantic via Jaccard of keywords
+        const sim = jaccard(getWords(existingNorm), getWords(objTextNorm));
+        return sim >= 0.45;
       });
       
       if (!isDuplicate) {
