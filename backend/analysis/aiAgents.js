@@ -943,6 +943,10 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 export async function runTruthIndexAgent(transcript, onStream = null) {
   const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
+CRITICAL: You need BOTH parts of a contradiction to detect incoherence:
+- Early statement showing one thing
+- Later statement contradicting it
+
 INCOHERENCE RULES TO DETECT:
 
 T1: HIGH PAIN + LOW URGENCY (-15 pts)
@@ -970,12 +974,17 @@ T5: HIGH DESIRE + LOW RESPONSIBILITY (-15 pts)
 - BUT blames others: "it's not my fault", "the market did this", "they made me"
 - Contradiction: Wants outcome but doesn't own the problem
 
+IMPORTANT:
+- ONLY flag contradictions if you find CLEAR evidence of BOTH parts
+- If you only see one side (e.g., only price concerns, no money statement), do NOT flag it
+- Use exact quotes or close paraphrasing in evidence field
+
 For each detected rule, provide:
 - ruleId: T1, T2, T3, T4, or T5
-- evidence: exact quotes or paraphrased evidence from transcript
+- evidence: exact quotes or paraphrased evidence showing BOTH parts of contradiction
 - confidence: 0.6-1.0
 
-Also detect POSITIVE coherence:
+Also detect POSITIVE coherence (when statements align):
 - Pain + urgency aligned
 - Desire + commitment aligned
 - Takes full ownership
@@ -986,10 +995,13 @@ Return: {
   ],
   "coherenceSignals": ["Pain aligns with urgency - motivated to act"],
   "overallCoherence": "high|medium|low"
-}`;
+}
+
+If no clear contradictions found, return empty detectedRules array.`;
 
   const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
 
+  console.log(`[TruthIndexAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,100)||'EMPTY'}"`);
   const res = await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', {
     maxTokens: 600,
     stream: typeof onStream === 'function',
@@ -997,6 +1009,11 @@ Return: {
       try { onStream?.({ agent, delta }); } catch {}
     }
   });
+  console.log(`[TruthIndexAgent] OUTPUT: detectedRules=${res?.detectedRules?.length||0}, coherenceSignals=${res?.coherenceSignals?.length||0}, overallCoherence=${res?.overallCoherence||'none'}, error=${res?.error||'none'}`);
+  if (res?.detectedRules?.length > 0) {
+    console.log(`[TruthIndexAgent] Rules detected:`, res.detectedRules.map(r => `${r.ruleId}(${r.confidence})`).join(', '));
+  }
+  
   // Mark successful agent output so the engine can distinguish it from fallbacks/timeouts.
   if (res && typeof res === 'object' && !res.error) {
     res._fromAgent = true;

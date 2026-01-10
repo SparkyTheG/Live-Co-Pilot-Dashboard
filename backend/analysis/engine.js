@@ -216,7 +216,9 @@ export async function analyzeConversationProgressive(
   const tPillars = String(cleanedTranscript || '').slice(-800);
   const tHotButtons = String(cleanedTranscript || '').slice(-800);
   const tObjections = String(cleanedTranscript || '').slice(-800);
-  const tTruth = String(cleanedTranscript || '').slice(-800);
+  // Truth Index needs MORE context to detect contradictions (e.g., says X early, then says Y later)
+  // Give it up to 3000 chars (~5-10 minutes of conversation) to find patterns
+  const tTruth = String(cleanedTranscript || '').slice(-3000);
   const tInsights = String(cleanedTranscript || '').slice(-800);
 
   const emit = (p) => {
