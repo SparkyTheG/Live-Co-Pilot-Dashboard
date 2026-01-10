@@ -519,6 +519,12 @@ export async function runAllPillarAgents(transcript, onStream = null) {
 export async function runHotButtonsAgent(transcript, onStream = null) {
   const systemPrompt = `Find emotional triggers from PROSPECT speech in this sales conversation.
 
+CRITICAL RULES:
+- ONLY extract quotes that ACTUALLY APPEAR in the transcript
+- DO NOT paraphrase, invent, or create quotes
+- DO NOT return hot buttons if you cannot find a real quote
+- Quote must be 3-15 words taken DIRECTLY from what the prospect said
+
 INDICATOR IDS (choose most relevant):
 1-4: Pain/Desire (worried, stressed, frustrated, want, need, hope, looking for)
 5-8: Urgency (deadline, auction, soon, running out, can't wait, now)
@@ -529,15 +535,15 @@ INDICATOR IDS (choose most relevant):
 24-27: Trust (not sure, skeptical, prove it, guarantee, really work)
 
 OUTPUT per trigger:
-- id: indicator number 1-27
-- quote: Extract meaningful phrase from transcript (3-15 words, can paraphrase slightly)
+- id: indicator number 1-27 that best matches the emotion
+- quote: EXACT phrase from transcript (3-15 words, must be verbatim or very close)
 - contextualPrompt: Follow-up question (8 words max)
 - score: 5-9 (5=mild, 7=clear, 9=intense)
 
-Return: {"hotButtonDetails":[{"id":1,"quote":"prospect's concern here","contextualPrompt":"What worries you?","score":7}]}
-Return 2-4 most important triggers. If truly nothing detected, return empty array.`;
+Return: {"hotButtonDetails":[{"id":24,"quote":"not sure it will work for me","contextualPrompt":"What would make you confident?","score":7}]}
+Return 1-3 most important triggers with REAL quotes. If no clear emotional triggers with actual quotes, return empty array.`;
 
-  const userPrompt = `Transcript:\n"${transcript}"`;
+  const userPrompt = `Find emotional triggers with EXACT quotes from prospect:\n"${transcript}"`;
 
   console.log(`[HotButtonsAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', {
