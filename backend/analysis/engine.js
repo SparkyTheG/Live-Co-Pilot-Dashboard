@@ -695,19 +695,38 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
     return computeTruthIndexDeterministic(indicatorSignals, transcript);
   }
 
-  const base = coherence === 'high' ? 80 : coherence === 'low' ? 45 : 60;
-  const penalty = clamp(rules.length * 4, 0, 30);
-  const score = clamp(base - penalty, 0, 100);
+  // More granular scoring: base score depends on coherence + number/severity of rules
+  let base = 100;
+  if (coherence === 'low') {
+    base = 50;
+  } else if (coherence === 'medium') {
+    base = 70;
+  } else if (coherence === 'high') {
+    base = 90;
+  }
+  
+  // Subtract penalties for detected contradictions
+  // Each rule has a confidence weight (0.6-1.0), use that for penalty calculation
+  let totalPenalty = 0;
+  const penalties = [];
+  for (const r of rules.slice(0, 8)) {
+    const confidence = Number(r?.confidence || 0.8);
+    const penaltyAmount = Math.round(confidence * 15); // T1/T2/T5 are -15pts, T3/T4 are -10pts
+    totalPenalty += penaltyAmount;
+    penalties.push({
+      rule: typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence'),
+      description: typeof r === 'string' ? r : (r?.evidence || r?.description || ''),
+      penalty: penaltyAmount,
+      details: typeof r === 'string' ? '' : (r?.evidence || '')
+    });
+  }
+  
+  const score = clamp(base - totalPenalty, 0, 100);
   const signals = Array.isArray(aiAnalysis?.coherenceSignals) ? aiAnalysis.coherenceSignals : [];
   const redFlags = rules
     .map((r) => (typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence')))
     .slice(0, 8);
-  const penalties = rules.slice(0, 8).map((r) => ({
-    rule: typeof r === 'string' ? r : (r?.ruleId || r?.rule || r?.name || 'incoherence'),
-    description: typeof r === 'string' ? r : (r?.evidence || r?.description || ''),
-    penalty: 4,
-    details: typeof r === 'string' ? '' : (r?.evidence || '')
-  }));
+  
   return { score, signals, redFlags, penalties };
 }
 

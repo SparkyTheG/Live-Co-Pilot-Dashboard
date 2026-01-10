@@ -791,10 +791,15 @@ Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionInd
 
   const userPrompt = `Generate rebuttals for ALL ${detectedObjections.length} objections:\n${objectionsList}`;
 
-  const result = await callAI(systemPrompt, userPrompt, 'RebuttalAgent', 250);
+  console.log(`[RebuttalAgent] Starting with timeout 12000ms for ${detectedObjections.length} objections...`);
+  const result = await callAI(systemPrompt, userPrompt, 'RebuttalAgent', { 
+    maxTokens: 250,
+    timeoutMs: 12000 // Give extra time for multiple rebuttals
+  });
   console.log('[RebuttalAgent] OUTPUT:', {
     requestedCount: detectedObjections.length,
     returnedCount: (result?.rebuttals || []).length,
+    error: result?.error || 'none',
     rebuttals: result?.rebuttals || []
   });
   return result;
