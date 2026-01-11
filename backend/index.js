@@ -528,6 +528,9 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
 
   // Capture current state for the async task (LATEST transcript + LATEST settings)
   const transcriptSnapshot = String(meta.plainTranscript || overrides.textFallback || '').trim();
+  // #region debug log - hypothesis A/C
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.js:530',message:'Transcript snapshot for analysis',data:{connId:connectionId.slice(-6),transcriptLength:transcriptSnapshot.length,transcriptLast200:transcriptSnapshot.slice(-200),reason},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
+  // #endregion
   if (transcriptSnapshot.length < 5) return; // don't run analysis on near-empty transcript
 
   const ptSnapshot = (typeof overrides.prospectType === 'string' ? overrides.prospectType : null) || meta.prospectType || null;

@@ -294,9 +294,15 @@ export async function analyzeConversationProgressive(
 
   const emitTruthIndexIfPossible = () => {
     if (!pillarsDone) return;
+    // #region debug log - hypothesis B/D
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:emitTruthIndex',message:'Computing Truth Index',data:{pillarsDone,indicatorSignalsCount:Object.keys(aiAnalysis.indicatorSignals||{}).length,sampleIndicators:{i1:aiAnalysis.indicatorSignals?.['1'],i2:aiAnalysis.indicatorSignals?.['2'],i17:aiAnalysis.indicatorSignals?.['17'],i18:aiAnalysis.indicatorSignals?.['18'],i21:aiAnalysis.indicatorSignals?.['21']}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+    // #endregion
     // Truth Index is deterministic (per CSV) based on pillar indicator scores + transcript cues.
     // Do NOT wait for the TruthIndex agent; it can be slow and shouldn't gate UI updates.
     const truthIndex = computeTruthIndex(aiAnalysis, aiAnalysis.indicatorSignals || {}, cleanedTranscript);
+    // #region debug log - hypothesis B/D
+    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:emitTruthIndexResult',message:'Truth Index computed',data:{truthIndex,transcriptLengthForTruth:tTruth.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+    // #endregion
     emit({ truthIndex });
   };
 
@@ -305,6 +311,10 @@ export async function analyzeConversationProgressive(
       flushStreamGroup('lubometer', { done: true });
       aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
       pillarsDone = true;
+      
+      // #region debug log - hypothesis B/E
+      fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:310',message:'Pillars complete',data:{indicatorSignals:aiAnalysis.indicatorSignals,transcriptLengthForPillars:tPillars.length,transcriptLast200:tPillars.slice(-200)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
+      // #endregion
       
       // #region truthindex log H4
       console.log('[DEBUG:H4] Pillars complete, about to emit Truth Index', JSON.stringify({indicatorSignalsCount:Object.keys(aiAnalysis.indicatorSignals||{}).length,tTruthLen:tTruth?.length||0}));
@@ -697,6 +707,10 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 
   const overallCoherence = score >= 75 ? 'high' : score >= 50 ? 'medium' : 'low';
   const redFlags = penalties.map((p) => p.rule).slice(0, 8);
+
+  // #region debug log - hypothesis B/D
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:computeTruthIndexResult',message:'Truth Index calculated',data:{score,penalties:penalties.map(p=>({rule:p.rule,penalty:p.penalty,details:p.details})),coherenceSignals,overallCoherence},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+  // #endregion
 
   return {
     score,
