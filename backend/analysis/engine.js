@@ -821,11 +821,30 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 }
 
 function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
-  // Start with deterministic calculation (pillar-based T1-T5 + text-pattern T6-T8)
+  // If AI agent provided a direct truthScore (continuous 0-100), use it as primary
+  // This gives smooth, context-aware scoring instead of formula-based discrete jumps
+  if (aiAnalysis.truthIndexFromAgent && typeof aiAnalysis.truthIndexFromAgent.truthScore === 'number') {
+    const aiScore = Math.round(clamp(aiAnalysis.truthIndexFromAgent.truthScore, 0, 100) * 10) / 10;
+    const reasoning = aiAnalysis.truthIndexFromAgent.reasoning || '';
+    
+    console.log(`[TruthIndex] Using AI continuous score: ${aiScore}% (reasoning: ${reasoning.slice(0, 100)}...)`);
+    
+    return {
+      score: aiScore,
+      signals: aiAnalysis.truthIndexFromAgent.coherenceSignals || [],
+      redFlags: aiAnalysis.truthIndexFromAgent.detectedRules?.map(r => r.ruleId) || [],
+      penalties: [{
+        rule: 'AI Analysis',
+        description: reasoning.slice(0, 200),
+        penalty: Math.round((100 - aiScore) * 10) / 10
+      }]
+    };
+  }
+  
+  // Fallback: Use deterministic calculation (pillar-based T1-T5 + text-pattern T6-T8)
   const deterministic = computeTruthIndexDeterministic(indicatorSignals, transcript);
   
-  // If AI agent successfully detected contradictions, apply those penalties too
-  // This allows GPT-4o mini to catch contradictions that don't match hardcoded patterns
+  // Legacy: If AI agent returned discrete rules (old format), apply those penalties too
   if (aiAnalysis.truthIndexFromAgent && Array.isArray(aiAnalysis.detectedRules) && aiAnalysis.detectedRules.length > 0) {
     const penaltyMap = { T1: 20, T2: 20, T3: 15, T4: 15, T5: 20 };
     const aiPenalties = [];
@@ -834,10 +853,7 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
       const basePenalty = penaltyMap[rule.ruleId] || 0;
       const confidence = Number(rule.confidence) || 0;
       
-      // Only apply if confidence >= 0.5 (allow lower threshold, scale by confidence)
-      // Penalty = basePenalty * confidence, so 0.5 conf = 50% penalty, 1.0 conf = 100% penalty
       if (basePenalty > 0 && confidence >= 0.5) {
-        // Check if deterministic already caught this (avoid double-penalizing same rule)
         const alreadyDetected = deterministic.penalties.some(p => p.rule.startsWith(rule.ruleId));
         if (!alreadyDetected) {
           const scaledPenalty = Math.round(basePenalty * confidence * 10) / 10;

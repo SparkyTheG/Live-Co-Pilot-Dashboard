@@ -1009,53 +1009,53 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 // Output: detectedRules (T1-T5 with evidence), coherenceSignals, overallCoherence
 // ============================================================================
 export async function runTruthIndexAgent(transcript, onStream = null) {
-  const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
+  const systemPrompt = `Analyze the COHERENCE and TRUTHFULNESS of the prospect's statements.
 
-CRITICAL: Flag ANY contradictions where someone says one thing, then contradicts themselves later.
+Your job: Rate how coherent/truthful this prospect is on a CONTINUOUS SCALE from 0-100.
 
-SPECIFIC INCOHERENCE RULES (T1-T5):
+PENALTIES TO CONSIDER:
 
-T1: HIGH PAIN + LOW URGENCY (-15 pts)
-- Says "this is killing me", "can't take it", "so stressed" BUT shows no urgency: "whenever", "no hurry"
+1. CONTRADICTIONS (major red flags):
+   - Says one thing, then says the opposite
+   - Flip-flops on basic facts (living situation, money, timeline, etc.)
+   - Changes story multiple times
+   - Admits to lying explicitly
+   
+2. BEHAVIORAL INCONSISTENCIES (moderate red flags):
+   - Claims high pain but shows no urgency to act
+   - Wants change but avoids making decisions
+   - Has money but obsesses over price
+   - Claims authority but needs approval
+   - Wants success but blames others
+   
+3. VAGUENESS/EVASION (minor red flags):
+   - Dodges questions
+   - Gives unclear or rambling answers
+   - Uses lots of "maybe", "not sure", "I don't know"
+   - Can't commit to clear answers
 
-T2: HIGH DESIRE + LOW DECISIVENESS (-15 pts)  
-- Says "I really want this", "need to change" BUT avoids decisions: "need to think", "not sure", "maybe later"
+SCORING GUIDELINES:
+- Start at 100 (perfectly coherent/truthful)
+- Subtract points based on severity and frequency:
+  * Each major contradiction: -15 to -30 points (more if extreme/explicit lying)
+  * Each behavioral inconsistency: -5 to -15 points
+  * Vagueness/evasion: -2 to -8 points per instance
+- Consider HOW MANY contradictions (1 vs 5+) and HOW SEVERE (subtle vs blatant)
+- Consider if they ADMIT to lying (very severe)
 
-T3: HIGH MONEY + HIGH PRICE SENSITIVITY (-10 pts)
-- Says "I have the funds", "can afford it" BUT resists price: "too expensive", "need discount"
+Return a CONTINUOUS score from 0-100 with reasoning:
 
-T4: CLAIMS AUTHORITY + REVEALS NEED FOR APPROVAL (-10 pts)
-- Says "I make the decisions", "my choice" THEN reveals: "need to ask spouse/partner/boss"
-
-T5: HIGH DESIRE + LOW RESPONSIBILITY (-15 pts)
-- Says "I want success", "need this to work" BUT blames others: "not my fault", "they made me"
-
-GENERAL FLIP-FLOPPING (T2 for any contradiction that doesn't fit T1/T3/T4/T5):
-- Says X, then says opposite of X (e.g., "I live there... no I don't live there")
-- Keeps changing story or can't keep facts straight (e.g., "two years... no one year... no I'm not living there... yes I am")
-- Waffles or contradicts basic facts
-- **USE T2 for these general contradictions** since they show indecisiveness
-
-IMPORTANT:
-- BE AGGRESSIVE - flag contradictions even if they're messy or unclear
-- Look for flip-flopping, changing stories, or saying opposite things
-- Waffling/uncertainty IS a contradiction if they keep changing their answer
-- Use exact quotes showing BOTH parts of contradiction
-
-For each detected rule, provide:
-- ruleId: T1, T2, T3, T4, or T5 (use T2 for general flip-flopping)
-- evidence: exact quotes showing contradiction (e.g., "Said 'X' then 'not X'")
-- confidence: 0.7-1.0
-
-Return: {
+{
+  "truthScore": 73.5,
+  "reasoning": "Contradicted themselves on payment status (-18), showed desire but avoided decisions (-12), somewhat vague on timeline (-6). Score: 100 - 36 = 64, adjusted to 73.5 for context.",
   "detectedRules": [
     {"ruleId": "T2", "evidence": "Said 'living there 2 years' then 'not living there' then 'yes living there'", "confidence": 0.9}
   ],
   "coherenceSignals": [],
-  "overallCoherence": "low"
+  "overallCoherence": "medium"
 }
 
-If NO contradictions found, return empty detectedRules array.`;
+KEY: Return a **specific decimal number** (e.g., 73.5, 88.2, 45.6) NOT a round number like 75 or 80.`;
 
   const userPrompt = `CONVERSATION CONTEXT:
 This is a sales conversation about real estate investment services. The closer is trying to help a prospect who may be facing foreclosure, behind on payments, or looking to sell their property.
