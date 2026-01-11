@@ -504,6 +504,10 @@ export async function runAllPillarAgents(transcript, onStream = null) {
   console.log(`[Lubometer] All 7 pillar agents done in ${Date.now() - startTime}ms`);
   console.log(`[Lubometer] Scored ${Object.keys(indicatorSignals).length} indicators`);
 
+  // #region debug log - pillar score fluctuation
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:507',message:'Pillar Scores Completed',data:{indicatorSignals,transcriptLength:transcript?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'pillar-scores'})}).catch(()=>{});
+  // #endregion
+
   return {
     indicatorSignals,
     pillarErrors: {
@@ -552,6 +556,10 @@ Return 1-3 most important triggers with REAL quotes. If no clear emotional trigg
   const userPrompt = `Find emotional triggers with EXACT quotes from prospect:\n"${transcript}"`;
 
   console.log(`[HotButtonsAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
+  // #region debug log - hot buttons duplication
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:555',message:'Hot Buttons Agent Input',data:{transcriptLength:transcript?.length||0,transcriptPreview:transcript?.slice(0,200)||'EMPTY'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'hotbutton-input'})}).catch(()=>{});
+  // #endregion
+  
   const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', {
     maxTokens: 400,
     stream: typeof onStream === 'function',
@@ -560,6 +568,10 @@ Return 1-3 most important triggers with REAL quotes. If no clear emotional trigg
     }
   });
   console.log(`[HotButtonsAgent] OUTPUT: hotButtonDetails=${result?.hotButtonDetails?.length||0}, error=${result?.error||'none'}, keys=${Object.keys(result||{}).join(',')}`);
+  
+  // #region debug log - hot buttons duplication
+  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:563',message:'Hot Buttons Agent Output',data:{count:result?.hotButtonDetails?.length||0,hotButtons:result?.hotButtonDetails?.map(h=>({id:h.id,quote:h.quote,score:h.score}))||[]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'hotbutton-output'})}).catch(()=>{});
+  // #endregion
   
   return result;
 }
