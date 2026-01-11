@@ -767,9 +767,52 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 }
 
 function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
-  // ALWAYS use deterministic calculation based on pillar scores (per Truth Index CSV spec)
-  // This ensures consistent, formula-based scoring: 100 - penalties based on T1-T5 rules
-  return computeTruthIndexDeterministic(indicatorSignals, transcript);
+  // Start with deterministic calculation (pillar-based T1-T5 + text-pattern T6-T8)
+  const deterministic = computeTruthIndexDeterministic(indicatorSignals, transcript);
+  
+  // If AI agent successfully detected contradictions, apply those penalties too
+  // This allows GPT-4o mini to catch contradictions that don't match hardcoded patterns
+  if (aiAnalysis.truthIndexFromAgent && Array.isArray(aiAnalysis.detectedRules) && aiAnalysis.detectedRules.length > 0) {
+    const penaltyMap = { T1: 15, T2: 15, T3: 10, T4: 10, T5: 15 };
+    const aiPenalties = [];
+    
+    for (const rule of aiAnalysis.detectedRules) {
+      const basePenalty = penaltyMap[rule.ruleId] || 0;
+      const confidence = Number(rule.confidence) || 0;
+      
+      // Only apply if confidence >= 0.7 and we have a valid penalty
+      if (basePenalty > 0 && confidence >= 0.7) {
+        // Check if deterministic already caught this (avoid double-penalizing same rule)
+        const alreadyDetected = deterministic.penalties.some(p => p.rule.startsWith(rule.ruleId));
+        if (!alreadyDetected) {
+          aiPenalties.push({
+            rule: `${rule.ruleId} (AI)`,
+            description: String(rule.evidence || 'AI-detected contradiction').slice(0, 200),
+            penalty: basePenalty,
+            confidence
+          });
+        }
+      }
+    }
+    
+    if (aiPenalties.length > 0) {
+      console.log(`[TruthIndex] AI agent added ${aiPenalties.length} penalties:`, aiPenalties.map(p => p.rule).join(', '));
+      
+      // Combine deterministic + AI penalties
+      const allPenalties = [...deterministic.penalties, ...aiPenalties];
+      const totalPenalty = allPenalties.reduce((sum, p) => sum + (p.penalty || 0), 0);
+      const score = clamp(100 - totalPenalty, 0, 100);
+      
+      return {
+        score,
+        signals: deterministic.signals,
+        redFlags: allPenalties.map(p => p.rule).slice(0, 8),
+        penalties: allPenalties.slice(0, 10) // Show up to 10 penalties
+      };
+    }
+  }
+  
+  return deterministic;
 }
 
 function normalizeDiagnosticQuestions(aiAnalysis) {
