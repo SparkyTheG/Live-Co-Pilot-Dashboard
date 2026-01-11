@@ -687,6 +687,42 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
     });
   }
 
+  // T6: Direct text contradictions - Money/Affordability
+  const sayHaveMoney = t.includes('do have the money') || t.includes('do have money') || t.includes('have the money') || t.includes('can afford');
+  const sayNoMoney = t.includes("don't have the money") || t.includes("don't have money") || t.includes("can't afford") || t.includes('no money');
+  if (sayHaveMoney && sayNoMoney) {
+    penalties.push({
+      rule: 'T6 Money Contradiction',
+      description: 'Says they have money AND don\'t have money in same conversation.',
+      penalty: 20,
+      details: 'contradictory_money_statements'
+    });
+  }
+
+  // T7: Direct text contradictions - Clarity/Confusion
+  const saysClear = t.includes('very clear') || t.includes('absolutely') || t.includes('definitely') || t.includes('for sure') || t.includes('certain');
+  const saysConfused = t.includes('confused') || t.includes('not sure') || t.includes('uncertain') || t.includes("don't know");
+  if (saysClear && saysConfused) {
+    penalties.push({
+      rule: 'T7 Clarity Contradiction',
+      description: 'Says they\'re clear/certain AND confused/uncertain in same conversation.',
+      penalty: 15,
+      details: 'contradictory_clarity_statements'
+    });
+  }
+
+  // T8: Direct text contradictions - Interest/Readiness
+  const saysReady = t.includes('ready to') || t.includes('want to move forward') || t.includes('let\'s do it') || t.includes('sign up');
+  const saysNotReady = t.includes('need time') || t.includes('need to think') || t.includes('not ready') || t.includes('maybe later');
+  if (saysReady && saysNotReady) {
+    penalties.push({
+      rule: 'T8 Readiness Contradiction',
+      description: 'Says they\'re ready AND not ready in same conversation.',
+      penalty: 15,
+      details: 'contradictory_readiness_statements'
+    });
+  }
+
   const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
   const score = clamp(100 - totalPenalty, 0, 100);
 
