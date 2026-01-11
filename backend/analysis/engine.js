@@ -201,7 +201,8 @@ export async function analyzeConversationProgressive(
   prospectTypeOverride = null,
   customScriptPrompt = '',
   pillarWeights = null,
-  onPartial = null
+  onPartial = null,
+  newTextOnly = null // Optional: only new text for hot buttons/objections to avoid re-detection
 ) {
   const startTime = Date.now();
 
@@ -216,8 +217,13 @@ export async function analyzeConversationProgressive(
   // Pillars drive Lubometer + Truth Index (deterministic). Give a bit more context so
   // indicators (esp. Responsibility) can reflect recent contradictions reliably.
   const tPillars = String(cleanedTranscript || '').slice(-2000);
-  const tHotButtons = String(cleanedTranscript || '').slice(-800);
-  const tObjections = String(cleanedTranscript || '').slice(-800);
+  
+  // Hot Buttons and Objections: Use ONLY new text if provided (to avoid re-detecting old triggers)
+  // If no new text, skip these agents entirely (return empty arrays)
+  const hasNewText = newTextOnly && String(newTextOnly).trim().length > 0;
+  const tHotButtons = hasNewText ? String(cleanTranscriptForAI(newTextOnly) || '').slice(-800) : null;
+  const tObjections = hasNewText ? String(cleanTranscriptForAI(newTextOnly) || '').slice(-800) : null;
+  
   // Truth Index needs MORE context to detect contradictions (e.g., says X early, then says Y later)
   // Give it up to 3000 chars (~5-10 minutes of conversation) to find patterns
   const tTruth = String(cleanedTranscript || '').slice(-3000);
@@ -340,24 +346,30 @@ export async function analyzeConversationProgressive(
       agentErrors.pillars = String(e?.message || e || 'error');
     });
 
-  const hotButtonsP = runHotButtonsAgent(tHotButtons, makeOnStream('hotButtons'))
-    .then((r) => {
-      flushStreamGroup('hotButtons', { done: true });
-      aiAnalysis.hotButtonDetails = Array.isArray(r?.hotButtonDetails) ? r.hotButtonDetails : [];
-      emit({ hotButtons: normalizeHotButtons(aiAnalysis.hotButtonDetails) });
-    })
-    .catch((e) => {
-      flushStreamGroup('hotButtons', { done: true });
-      agentErrors.hotButtons = String(e?.message || e || 'error');
-    });
+  // Hot Buttons: Only run if we have new text (skip if no new content)
+  const hotButtonsP = tHotButtons 
+    ? runHotButtonsAgent(tHotButtons, makeOnStream('hotButtons'))
+        .then((r) => {
+          flushStreamGroup('hotButtons', { done: true });
+          aiAnalysis.hotButtonDetails = Array.isArray(r?.hotButtonDetails) ? r.hotButtonDetails : [];
+          emit({ hotButtons: normalizeHotButtons(aiAnalysis.hotButtonDetails) });
+        })
+        .catch((e) => {
+          flushStreamGroup('hotButtons', { done: true });
+          agentErrors.hotButtons = String(e?.message || e || 'error');
+        })
+    : Promise.resolve();
 
-  const objectionsP = runObjectionsAgentsProgressive(tObjections, customScriptPrompt, (p) => emit(p))
-    .then((r) => {
-      aiAnalysis.objections = Array.isArray(r?.objections) ? r.objections : [];
-    })
-    .catch((e) => {
-      agentErrors.objections = String(e?.message || e || 'error');
-    });
+  // Objections: Only run if we have new text (skip if no new content)
+  const objectionsP = tObjections
+    ? runObjectionsAgentsProgressive(tObjections, customScriptPrompt, (p) => emit(p))
+        .then((r) => {
+          aiAnalysis.objections = Array.isArray(r?.objections) ? r.objections : [];
+        })
+        .catch((e) => {
+          agentErrors.objections = String(e?.message || e || 'error');
+        })
+    : Promise.resolve();
 
   const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'))
     .then((r) => {

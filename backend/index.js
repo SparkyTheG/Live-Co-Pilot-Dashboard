@@ -374,17 +374,30 @@ wss.on('connection', (ws, req) => {
       } else if (data.type === 'settings_update') {
         // Allow mid-call updates to settings that affect analysis (pillar weights, prompts).
         const meta = connectionPersistence.get(connectionId) || { authToken: null, sessionId: null, userId: null };
+        const prevCustom = meta.customScriptPrompt || '';
+        const prevWeights = meta.pillarWeights ? JSON.stringify(meta.pillarWeights) : null;
+        
         const nextCustom = typeof data.customScriptPrompt === 'string' ? data.customScriptPrompt : meta.customScriptPrompt || '';
         const nextWeights = Array.isArray(data.pillarWeights) ? data.pillarWeights : meta.pillarWeights || null;
+        const nextWeightsStr = nextWeights ? JSON.stringify(nextWeights) : null;
+        
+        // Check if settings actually changed
+        const settingsChanged = (nextCustom !== prevCustom) || (nextWeightsStr !== prevWeights);
+        
         meta.customScriptPrompt = nextCustom;
         meta.pillarWeights = nextWeights;
         connectionPersistence.set(connectionId, meta);
         console.log(`[WS] settings_update stored for ${connectionId.slice(-6)}`, {
           hasCustomScript: Boolean(nextCustom),
-          pillarWeightsCount: Array.isArray(nextWeights) ? nextWeights.length : 0
+          pillarWeightsCount: Array.isArray(nextWeights) ? nextWeights.length : 0,
+          settingsChanged
         });
-        // IMPORTANT: apply settings immediately (re-run analysis even if no new transcript arrived)
-        scheduleAnalysis(connectionId, {}, { force: true, reason: 'settings_update' });
+        
+        // ONLY re-run analysis if settings actually changed (avoid unnecessary re-analysis)
+        if (settingsChanged) {
+          scheduleAnalysis(connectionId, {}, { force: true, reason: 'settings_update' });
+        }
+        
         // Optional ack so frontend can update lastMessageTime if desired
         sendToClient(connectionId, { type: 'settings_update_ack', ts: Date.now() });
       } else if (data.type === 'debug_event') {
@@ -533,6 +546,11 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
   // #endregion
   if (transcriptSnapshot.length < 5) return; // don't run analysis on near-empty transcript
 
+  // Track what we've already analyzed for hot buttons/objections to avoid re-detecting old ones
+  const lastAnalyzedLength = meta._lastAnalyzedTranscriptLength || 0;
+  const newTextOnly = lastAnalyzedLength > 0 ? transcriptSnapshot.slice(lastAnalyzedLength) : transcriptSnapshot;
+  const hasNewText = newTextOnly.trim().length > 0;
+
   const ptSnapshot = (typeof overrides.prospectType === 'string' ? overrides.prospectType : null) || meta.prospectType || null;
   const csSnapshot =
     (typeof overrides.customScriptPrompt === 'string' ? overrides.customScriptPrompt : '') || meta.customScriptPrompt || '';
@@ -588,7 +606,8 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
         ptSnapshot,
         csSnapshot,
         pwSnapshot,
-        sendPartialIfCurrent
+        sendPartialIfCurrent,
+        hasNewText ? newTextOnly : null // Only analyze new text for hot buttons/objections
       );
 
       // Only send if this is still the newest analysis run
@@ -603,6 +622,10 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
             objections: Array.isArray(analysis.objections) ? analysis.objections : []
           }
         });
+
+        // Update tracked length to avoid re-analyzing old text
+        mCheck._lastAnalyzedTranscriptLength = transcriptSnapshot.length;
+        connectionPersistence.set(connectionId, mCheck);
 
         // Mark last successful analysis time for heartbeat visibility
         const mOk = connectionPersistence.get(connectionId);
