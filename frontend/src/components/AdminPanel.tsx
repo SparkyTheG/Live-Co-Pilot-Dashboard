@@ -353,7 +353,22 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
     
     setIsGeneratingQuestions(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_WS_URL?.replace('ws://', 'http://').replace('/ws', '')}/api/generate-diagnostic-questions`, {
+      // Construct API URL from WebSocket URL or use same-origin
+      const wsUrl = import.meta.env.VITE_WS_URL;
+      let apiBaseUrl: string;
+      
+      if (wsUrl) {
+        // Convert ws://host:port/ws to http://host:port
+        apiBaseUrl = wsUrl.replace('ws://', 'http://').replace('wss://', 'https://').replace('/ws', '');
+      } else if (import.meta.env.DEV) {
+        // Development: use localhost
+        apiBaseUrl = 'http://localhost:3001';
+      } else {
+        // Production: use same origin
+        apiBaseUrl = window.location.origin;
+      }
+      
+      const response = await fetch(`${apiBaseUrl}/api/generate-diagnostic-questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -363,7 +378,8 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate questions');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to generate questions`);
       }
 
       const data = await response.json();
@@ -371,10 +387,13 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
         // Replace current questions with AI-generated ones
         updateDiagnosticQuestions(dqProspectType, data.questions);
         setAiGenerationPrompt(''); // Clear prompt after success
+      } else {
+        throw new Error('Invalid response format from server');
       }
     } catch (error) {
       console.error('Error generating questions:', error);
-      setSaveError('Failed to generate questions. Please try again.');
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      setSaveError(`Failed to generate questions: ${errorMsg}`);
       setTimeout(() => setSaveError(null), 5000);
     } finally {
       setIsGeneratingQuestions(false);
