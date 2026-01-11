@@ -259,8 +259,10 @@ INDICATORS (1-10 scale):
 4. Desire Priority: How important? (1=low, 5=moderate, 10=urgent priority)
 
 WHAT TO LOOK FOR:
-- Pain words: worried, stressed, frustrated, can't, problem, issue, struggling
+- Pain words: worried, stressed, frustrated, can't, problem, issue, struggling, confused, expensive
 - Desire words: want, need, looking for, hope, goal, wish, must have
+- IMPORTANT: "confused" = indicator 2 should be 1-3 (low awareness)
+- IMPORTANT: "expensive" signals pain intensity (indicator 1 = 7-9) + high desire for solution
 - Score 6-8 for clear signals, 4-6 for moderate, 7-10 for strong
 
 Return ONLY: {"1":6,"2":5,"3":7,"4":6}`;
@@ -382,9 +384,10 @@ WHAT TO LOOK FOR:
 - Ownership: "my fault", "I should have", "I need to fix this"
 - vs blame: "they did this", "market's fault", "not fair", "can't control"
 - Action-oriented: "I'm going to", "working on it" vs "wish someone would"
+- CONFUSION: "confused", "not sure", "unclear" = score indicators 17-20 as 1-4 (low ownership)
 - LIES/CONTRADICTIONS: "I lied", "wasn't being honest", "that was a lie" = VERY LOW scores (1-3) on indicators 19 & 20
 
-Score generously for clear signals. If prospect admits to lying or contradicting themselves, score indicators 17-20 as 1-3.
+Score generously for clear signals. If prospect shows confusion, score indicators 17-20 as 1-4. If prospect admits to lying or contradicting themselves, score indicators 17-20 as 1-3.
 Return ONLY: {"17":6,"18":7,"19":5,"20":6}`;
 
   const userPrompt = `Score Responsibility indicators:\n"${transcript}"`;
@@ -411,14 +414,16 @@ INDICATORS TO SCORE:
 22. Negotiation Reflex: Always trying to negotiate? (1=accepts fair price, 10=always haggles)
 23. Structural Rigidity: Needs total control over terms? (1=flexible, 10=rigid on terms)
 
-WHAT TO LOOK FOR (score HIGH if these appear):
-- Price anxiety: "too expensive", "can't justify", "worried about cost"
+WHAT TO LOOK FOR (score HIGH 8-10 if these appear):
+- Price anxiety: "expensive", "too expensive", "can't justify", "worried about cost", "kind of expensive"
 - Negotiating: "can you lower", "what's the best price", "discount"
 - Rigid: "must be exactly", "won't budge on", "non-negotiable terms"
 
-WHAT TO LOOK FOR (score LOW if these appear):
+WHAT TO LOOK FOR (score LOW 1-3 if these appear):
 - Price acceptance: "fair price", "worth it", "not worried about cost"
 - Flexible: "whatever works", "can adjust", "open to options"
+
+IMPORTANT: Any mention of "expensive" should score indicators 21-22 as 8-9 minimum.
 
 Return ONLY: {"21":4,"22":3,"23":5}`;
 
