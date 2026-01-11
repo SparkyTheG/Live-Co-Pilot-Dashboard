@@ -1011,61 +1011,51 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 export async function runTruthIndexAgent(transcript, onStream = null) {
   const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
-CRITICAL: You need BOTH parts of a contradiction to detect incoherence:
-- Early statement showing one thing
-- Later statement contradicting it
+CRITICAL: Flag ANY contradictions where someone says one thing, then contradicts themselves later.
 
-INCOHERENCE RULES TO DETECT:
+SPECIFIC INCOHERENCE RULES (T1-T5):
 
 T1: HIGH PAIN + LOW URGENCY (-15 pts)
-- Says things like "this is killing me", "can't take it anymore", "so stressed"
-- BUT shows no urgency: no deadline, no rush, "whenever", "no hurry"
-- Contradiction: Claims suffering but not motivated to act NOW
+- Says "this is killing me", "can't take it", "so stressed" BUT shows no urgency: "whenever", "no hurry"
 
 T2: HIGH DESIRE + LOW DECISIVENESS (-15 pts)  
-- Expresses strong desire: "I really want this", "need to change", "desperate"
-- BUT avoids decisions: "need to think", "not sure", "maybe later"
-- Contradiction: Wants change but won't commit to decision
+- Says "I really want this", "need to change" BUT avoids decisions: "need to think", "not sure", "maybe later"
 
 T3: HIGH MONEY + HIGH PRICE SENSITIVITY (-10 pts)
-- Indicates money available: "I have the funds", "can afford it", "money isn't issue"
-- BUT resists price: "too expensive", "can you lower price", "need discount"
-- Contradiction: Has money but still negotiating hard
+- Says "I have the funds", "can afford it" BUT resists price: "too expensive", "need discount"
 
 T4: CLAIMS AUTHORITY + REVEALS NEED FOR APPROVAL (-10 pts)
-- First claims: "I make the decisions", "it's my choice", "I'm the decision maker"
-- THEN reveals: "need to ask spouse/partner", "boss needs to approve", "have to check with..."
-- Contradiction: Says they decide but actually needs permission
+- Says "I make the decisions", "my choice" THEN reveals: "need to ask spouse/partner/boss"
 
 T5: HIGH DESIRE + LOW RESPONSIBILITY (-15 pts)
-- Wants results: "I want success", "need this to work", "looking for solution"
-- BUT blames others: "it's not my fault", "the market did this", "they made me"
-- Contradiction: Wants outcome but doesn't own the problem
+- Says "I want success", "need this to work" BUT blames others: "not my fault", "they made me"
+
+GENERAL FLIP-FLOPPING (T2 for any contradiction that doesn't fit T1/T3/T4/T5):
+- Says X, then says opposite of X (e.g., "I live there... no I don't live there")
+- Keeps changing story or can't keep facts straight (e.g., "two years... no one year... no I'm not living there... yes I am")
+- Waffles or contradicts basic facts
+- **USE T2 for these general contradictions** since they show indecisiveness
 
 IMPORTANT:
-- ONLY flag contradictions if you find CLEAR evidence of BOTH parts
-- If you only see one side (e.g., only price concerns, no money statement), do NOT flag it
-- Use exact quotes or close paraphrasing in evidence field
+- BE AGGRESSIVE - flag contradictions even if they're messy or unclear
+- Look for flip-flopping, changing stories, or saying opposite things
+- Waffling/uncertainty IS a contradiction if they keep changing their answer
+- Use exact quotes showing BOTH parts of contradiction
 
 For each detected rule, provide:
-- ruleId: T1, T2, T3, T4, or T5
-- evidence: exact quotes or paraphrased evidence showing BOTH parts of contradiction
-- confidence: 0.6-1.0
-
-Also detect POSITIVE coherence (when statements align):
-- Pain + urgency aligned
-- Desire + commitment aligned
-- Takes full ownership
+- ruleId: T1, T2, T3, T4, or T5 (use T2 for general flip-flopping)
+- evidence: exact quotes showing contradiction (e.g., "Said 'X' then 'not X'")
+- confidence: 0.7-1.0
 
 Return: {
   "detectedRules": [
-    {"ruleId": "T4", "evidence": "Said 'I decide' but later 'need to ask my wife'", "confidence": 0.9}
+    {"ruleId": "T2", "evidence": "Said 'living there 2 years' then 'not living there' then 'yes living there'", "confidence": 0.9}
   ],
-  "coherenceSignals": ["Pain aligns with urgency - motivated to act"],
-  "overallCoherence": "high|medium|low"
+  "coherenceSignals": [],
+  "overallCoherence": "low"
 }
 
-If no clear contradictions found, return empty detectedRules array.`;
+If NO contradictions found, return empty detectedRules array.`;
 
   const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
 
