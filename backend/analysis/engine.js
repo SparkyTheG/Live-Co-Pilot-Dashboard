@@ -687,15 +687,25 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
     });
   }
 
-  // T6: Direct text contradictions - Money/Affordability
-  const sayHaveMoney = t.includes('do have the money') || t.includes('do have money') || t.includes('have the money') || t.includes('can afford');
-  const sayNoMoney = t.includes("don't have the money") || t.includes("don't have money") || t.includes("can't afford") || t.includes('no money');
+  // T6: Direct text contradictions - Money/Affordability/Payments
+  const sayHaveMoney = t.includes('do have the money') || t.includes('do have money') || t.includes('have the money') || t.includes('can afford') || t.includes('have paid') || t.includes('not behind') || t.includes('paid all');
+  const sayNoMoney = t.includes("don't have the money") || t.includes("don't have money") || t.includes("can't afford") || t.includes('no money') || t.includes('behind on') || t.includes('behind with') || t.includes('missed payment') || t.includes('cannot pay');
   if (sayHaveMoney && sayNoMoney) {
     penalties.push({
-      rule: 'T6 Money Contradiction',
-      description: 'Says they have money AND don\'t have money in same conversation.',
-      penalty: 20,
-      details: 'contradictory_money_statements'
+      rule: 'T6 Money/Payment Contradiction',
+      description: 'Says they have money/paid AND don\'t have money/behind on payments in same conversation.',
+      penalty: 25,
+      details: 'contradictory_financial_statements'
+    });
+  }
+  
+  // T6b: Explicit lying admission
+  if (t.includes('lying') || t.includes('i lied') || t.includes('was lying') || t.includes('not true') || t.includes('made that up')) {
+    penalties.push({
+      rule: 'T6b Admitted Lying',
+      description: 'Explicitly admits to lying or making things up.',
+      penalty: 30,
+      details: 'explicit_dishonesty_admission'
     });
   }
 
