@@ -1009,53 +1009,50 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 // Output: detectedRules (T1-T5 with evidence), coherenceSignals, overallCoherence
 // ============================================================================
 export async function runTruthIndexAgent(transcript, onStream = null) {
-  const systemPrompt = `Analyze the COHERENCE and TRUTHFULNESS of the prospect's statements.
+  const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
-Your job: Rate how coherent/truthful this prospect is on a CONTINUOUS SCALE from 0-100.
+You must detect which of these 5 specific rules (from the Truth Index CSV) apply:
 
-PENALTIES TO CONSIDER:
+T1: HIGH PAIN + LOW URGENCY (–15 pts)
+- Trigger: Claims deep pain but shows no urgency to act
+- Example: "this is killing me, so stressed" BUT "whenever, no hurry, no rush"
 
-1. CONTRADICTIONS (major red flags):
-   - Says one thing, then says the opposite
-   - Flip-flops on basic facts (living situation, money, timeline, etc.)
-   - Changes story multiple times
-   - Admits to lying explicitly
-   
-2. BEHAVIORAL INCONSISTENCIES (moderate red flags):
-   - Claims high pain but shows no urgency to act
-   - Wants change but avoids making decisions
-   - Has money but obsesses over price
-   - Claims authority but needs approval
-   - Wants success but blames others
-   
-3. VAGUENESS/EVASION (minor red flags):
-   - Dodges questions
-   - Gives unclear or rambling answers
-   - Uses lots of "maybe", "not sure", "I don't know"
-   - Can't commit to clear answers
+T2: HIGH DESIRE + LOW DECISIVENESS (–15 pts)  
+- Trigger: Wants change but avoids making decisions
+- Example: "I really want this, need to change" BUT "need to think, not sure, maybe later"
+- ALSO USE for GENERAL CONTRADICTIONS/FLIP-FLOPPING that don't fit T1/T3/T4/T5:
+  * Says one thing, then opposite (e.g., "I live there... no I don't")
+  * Keeps changing story or can't keep facts straight
+  * Waffles or contradicts basic facts
 
-SCORING GUIDELINES:
-- Start at 100 (perfectly coherent/truthful)
-- Subtract points based on severity and frequency:
-  * Each major contradiction: -15 to -30 points (more if extreme/explicit lying)
-  * Each behavioral inconsistency: -5 to -15 points
-  * Vagueness/evasion: -2 to -8 points per instance
-- Consider HOW MANY contradictions (1 vs 5+) and HOW SEVERE (subtle vs blatant)
-- Consider if they ADMIT to lying (very severe)
+T3: HIGH MONEY + HIGH PRICE SENSITIVITY (–10 pts)
+- Trigger: Can afford it, but still resists price
+- Example: "I have the funds, can afford it" BUT "too expensive, need discount"
 
-Return a CONTINUOUS score from 0-100 with reasoning:
+T4: CLAIMS AUTHORITY + REVEALS NEED FOR APPROVAL (–10 pts)
+- Trigger: Self-contradiction in who owns the decision
+- Example: "I make the decisions, my choice" THEN "need to ask spouse/partner/boss"
 
+T5: HIGH DESIRE + LOW RESPONSIBILITY (–15 pts)
+- Trigger: Craves result, but doesn't own the change
+- Example: "I want success, need this to work" BUT "not my fault, they made me, others are to blame"
+
+IMPORTANT:
+- BE AGGRESSIVE - flag contradictions even if messy/unclear
+- Look for ANY flip-flopping, changing stories, contradictions
+- Use exact quotes showing BOTH parts of contradiction
+- Can detect MULTIPLE instances of the same rule (each gets its own entry)
+
+Return format:
 {
-  "truthScore": 73.5,
-  "reasoning": "Contradicted themselves on payment status (-18), showed desire but avoided decisions (-12), somewhat vague on timeline (-6). Score: 100 - 36 = 64, adjusted to 73.5 for context.",
   "detectedRules": [
     {"ruleId": "T2", "evidence": "Said 'living there 2 years' then 'not living there' then 'yes living there'", "confidence": 0.9}
   ],
   "coherenceSignals": [],
-  "overallCoherence": "medium"
+  "overallCoherence": "low"
 }
 
-KEY: Return a **specific decimal number** (e.g., 73.5, 88.2, 45.6) NOT a round number like 75 or 80.`;
+If NO contradictions found, return empty detectedRules array.`;
 
   const userPrompt = `CONVERSATION CONTEXT:
 This is a sales conversation about real estate investment services. The closer is trying to help a prospect who may be facing foreclosure, behind on payments, or looking to sell their property.

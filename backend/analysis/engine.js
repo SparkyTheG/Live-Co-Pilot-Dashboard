@@ -622,57 +622,37 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 
   const penalties = [];
 
-  // T1: High Pain + Low Urgency - Variable penalty based on severity
-  // Penalty scales with: (how high pain is) * (how low urgency is)
-  // Max ~20 points for pain=10 & urgency=0
-  if (painAvg >= 6.5 && urgencyAvg >= 0 && urgencyAvg <= 4.5) {
-    const painFactor = Math.max(0, painAvg - 6.5) / 3.5; // 0 to 1 range
-    const urgencyFactor = Math.max(0, 4.5 - urgencyAvg) / 4.5; // 0 to 1 range
-    const penalty = Math.round(painFactor * urgencyFactor * 20 * 10) / 10;
-    if (penalty >= 0.5) {
-      penalties.push({
-        rule: 'T1 High Pain + Low Urgency',
-        description: 'Pain is high but urgency is low.',
-        penalty,
-        details: `painAvg=${painAvg.toFixed(1)}, urgencyAvg=${urgencyAvg.toFixed(1)}`
-      });
-    }
+  // T1: High Pain + Low Urgency (per CSV: -15 points)
+  if (painAvg >= 7 && urgencyAvg > 0 && urgencyAvg <= 4) {
+    penalties.push({
+      rule: 'T1 High Pain + Low Urgency',
+      description: 'Claims deep pain but no urgency to act',
+      penalty: 15,
+      details: `painAvg=${painAvg.toFixed(1)}, urgencyAvg=${urgencyAvg.toFixed(1)}`
+    });
   }
 
-  // T2: High Desire + Low Decisiveness - Variable penalty
-  // Max ~20 points for desire=10 & decisiveness=0
-  if (desireAvg >= 6.5 && decisivenessAvg >= 0 && decisivenessAvg <= 4.5) {
-    const desireFactor = Math.max(0, desireAvg - 6.5) / 3.5;
-    const decisivenessFactor = Math.max(0, 4.5 - decisivenessAvg) / 4.5;
-    const penalty = Math.round(desireFactor * decisivenessFactor * 20 * 10) / 10;
-    if (penalty >= 0.5) {
-      penalties.push({
-        rule: 'T2 High Desire + Low Decisiveness',
-        description: 'Desire is high but decisiveness is low.',
-        penalty,
-        details: `desireAvg=${desireAvg.toFixed(1)}, decisivenessAvg=${decisivenessAvg.toFixed(1)}`
-      });
-    }
+  // T2: High Desire + Low Decisiveness (per CSV: -15 points)
+  if (desireAvg >= 7 && decisivenessAvg > 0 && decisivenessAvg <= 4) {
+    penalties.push({
+      rule: 'T2 High Desire + Low Decisiveness',
+      description: 'Wants change but avoids decision',
+      penalty: 15,
+      details: `desireAvg=${desireAvg.toFixed(1)}, decisivenessAvg=${decisivenessAvg.toFixed(1)}`
+    });
   }
 
-  // T3: High Money + High Price Sensitivity - Variable penalty
-  // Max ~15 points for money=10 & priceSensitivity=10
-  if (moneyAvg >= 6.5 && priceSensitivityRaw >= 7.5) {
-    const moneyFactor = Math.max(0, moneyAvg - 6.5) / 3.5;
-    const priceFactor = Math.max(0, priceSensitivityRaw - 7.5) / 2.5;
-    const penalty = Math.round(moneyFactor * priceFactor * 15 * 10) / 10;
-    if (penalty >= 0.5) {
-      penalties.push({
-        rule: 'T3 High Money + High Price Sensitivity',
-        description: 'Money looks available but price sensitivity is very high.',
-        penalty,
-        details: `moneyAvg=${moneyAvg.toFixed(1)}, priceSensitivityRaw=${priceSensitivityRaw.toFixed(1)}`
-      });
-    }
+  // T3: High Money + High Price Sensitivity (per CSV: -10 points)
+  if (moneyAvg >= 7 && priceSensitivityRaw >= 8) {
+    penalties.push({
+      rule: 'T3 High Money + High Price Sensitivity',
+      description: 'Can afford it, but still resists price',
+      penalty: 10,
+      details: `moneyAvg=${moneyAvg.toFixed(1)}, priceSensitivityRaw=${priceSensitivityRaw.toFixed(1)}`
+    });
   }
 
-  // T4: Claims Authority + Reveals Need for Approval - Variable penalty based on authority level
-  // Max ~15 points for authority=10
+  // T4: Claims Authority + Reveals Need for Approval (per CSV: -10 points)
   const authority = toNum(indicatorSignals?.['9']);
   const needsApproval =
     t.includes('ask my wife') ||
@@ -688,107 +668,84 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
     t.includes('need to check') ||
     t.includes('need to talk to');
 
-  if (authority >= 6.5 && needsApproval) {
-    const authorityFactor = Math.max(0, authority - 6.5) / 3.5;
-    const penalty = Math.round(authorityFactor * 15 * 10) / 10;
-    if (penalty >= 0.5) {
-      penalties.push({
-        rule: 'T4 Claims Authority + Needs Approval',
-        description: 'Authority appears high but approval language is present.',
-        penalty,
-        details: `authority=${authority}, approvalCue=true`
-      });
-    }
+  if (authority >= 7 && needsApproval) {
+    penalties.push({
+      rule: 'T4 Claims Authority + Needs Approval',
+      description: 'Self-contradiction in who owns the decision',
+      penalty: 10,
+      details: `authority=${authority}, approvalCue=true`
+    });
   }
 
-  // T5: High Desire + Low Responsibility - Variable penalty
-  // Max ~20 points for desire=10 & responsibility=0
-  if (desireAvg >= 6.5 && responsibilityAvg >= 0 && responsibilityAvg <= 5.5) {
-    const desireFactor = Math.max(0, desireAvg - 6.5) / 3.5;
-    const responsibilityFactor = Math.max(0, 5.5 - responsibilityAvg) / 5.5;
-    const penalty = Math.round(desireFactor * responsibilityFactor * 20 * 10) / 10;
-    if (penalty >= 0.5) {
-      penalties.push({
-        rule: 'T5 High Desire + Low Responsibility',
-        description: 'Desire is high but ownership/responsibility is low.',
-        penalty,
-        details: `desireAvg=${desireAvg.toFixed(1)}, responsibilityAvg=${responsibilityAvg.toFixed(1)}`
-      });
-    }
+  // T5: High Desire + Low Responsibility (per CSV: -15 points)
+  if (desireAvg >= 7 && responsibilityAvg > 0 && responsibilityAvg <= 5) {
+    penalties.push({
+      rule: 'T5 High Desire + Low Responsibility',
+      description: 'Craves result, but doesn\'t own the change',
+      penalty: 15,
+      details: `desireAvg=${desireAvg.toFixed(1)}, responsibilityAvg=${responsibilityAvg.toFixed(1)}`
+    });
   }
 
-  // T6: Direct text contradictions - Money/Affordability/Payments
-  // Variable penalty based on how many contradictory phrases detected
+  // T6: Direct text contradictions - Money/Affordability/Payments (not in CSV, but catches text patterns)
   const haveMoney = ['do have the money', 'do have money', 'have the money', 'can afford', 'have paid', 'not behind', 'paid all'];
   const noMoney = ["don't have the money", "don't have money", "can't afford", 'no money', 'behind on', 'behind with', 'missed payment', 'cannot pay'];
   const haveCount = haveMoney.filter(phrase => t.includes(phrase)).length;
   const noCount = noMoney.filter(phrase => t.includes(phrase)).length;
   
   if (haveCount > 0 && noCount > 0) {
-    // Penalty scales with number of contradictory statements (1-3 instances → 15-30 points)
-    const severity = Math.min(haveCount + noCount, 6) / 6; // 0 to 1 range
-    const penalty = Math.round((15 + severity * 15) * 10) / 10;
     penalties.push({
-      rule: 'T6 Money/Payment Contradiction',
+      rule: 'T6 Money/Payment Contradiction (text-based)',
       description: 'Says they have money/paid AND don\'t have money/behind on payments in same conversation.',
-      penalty,
+      penalty: 20,
       details: `${haveCount} positive + ${noCount} negative statements`
     });
   }
   
-  // T6b: Explicit lying admission - Variable penalty based on how explicit
+  // T6b: Explicit lying admission (not in CSV, catches explicit dishonesty)
   const lyingPhrases = ['lying', 'i lied', 'was lying', 'not true', 'made that up', 'not being honest', 'being dishonest'];
   const lyingCount = lyingPhrases.filter(phrase => t.includes(phrase)).length;
   if (lyingCount > 0) {
-    // Penalty scales with explicitness (1-3 instances → 20-35 points)
-    const severity = Math.min(lyingCount, 4) / 4;
-    const penalty = Math.round((20 + severity * 15) * 10) / 10;
     penalties.push({
-      rule: 'T6b Admitted Lying',
+      rule: 'T6b Admitted Lying (text-based)',
       description: 'Explicitly admits to lying or making things up.',
-      penalty,
+      penalty: 30,
       details: `${lyingCount} dishonesty admission(s)`
     });
   }
 
-  // T7: Direct text contradictions - Clarity/Confusion
-  // Variable penalty based on number of contradictory signals
+  // T7: Direct text contradictions - Clarity/Confusion (not in CSV)
   const clearPhrases = ['very clear', 'absolutely', 'definitely', 'for sure', 'certain', '100%', 'no doubt'];
   const confusedPhrases = ['confused', 'not sure', 'uncertain', "don't know", 'unclear', 'maybe'];
   const clearCount = clearPhrases.filter(phrase => t.includes(phrase)).length;
   const confusedCount = confusedPhrases.filter(phrase => t.includes(phrase)).length;
   
   if (clearCount > 0 && confusedCount > 0) {
-    const severity = Math.min(clearCount + confusedCount, 6) / 6;
-    const penalty = Math.round((10 + severity * 12) * 10) / 10;
     penalties.push({
-      rule: 'T7 Clarity Contradiction',
+      rule: 'T7 Clarity Contradiction (text-based)',
       description: 'Says they\'re clear/certain AND confused/uncertain in same conversation.',
-      penalty,
+      penalty: 12,
       details: `${clearCount} clarity + ${confusedCount} confusion statements`
     });
   }
 
-  // T8: Direct text contradictions - Interest/Readiness
-  // Variable penalty based on flip-flopping severity
+  // T8: Direct text contradictions - Interest/Readiness (not in CSV)
   const readyPhrases = ['ready to', 'want to move forward', "let's do it", 'sign up', "i'm in", 'sounds good'];
   const notReadyPhrases = ['need time', 'need to think', 'not ready', 'maybe later', 'not now', 'hold off'];
   const readyCount = readyPhrases.filter(phrase => t.includes(phrase)).length;
   const notReadyCount = notReadyPhrases.filter(phrase => t.includes(phrase)).length;
   
   if (readyCount > 0 && notReadyCount > 0) {
-    const severity = Math.min(readyCount + notReadyCount, 6) / 6;
-    const penalty = Math.round((10 + severity * 12) * 10) / 10;
     penalties.push({
-      rule: 'T8 Readiness Contradiction',
+      rule: 'T8 Readiness Contradiction (text-based)',
       description: 'Says they\'re ready AND not ready in same conversation.',
-      penalty,
+      penalty: 12,
       details: `${readyCount} ready + ${notReadyCount} not-ready statements`
     });
   }
 
-  const totalPenalty = Math.round(penalties.reduce((s, p) => s + toNum(p.penalty), 0) * 10) / 10;
-  const score = Math.round(clamp(100 - totalPenalty, 0, 100) * 10) / 10;
+  const totalPenalty = penalties.reduce((s, p) => s + toNum(p.penalty), 0);
+  const score = clamp(100 - totalPenalty, 0, 100);
 
   // #region truthindex log H1
   console.log('[DEBUG:H1] Truth Index score calculated', JSON.stringify({penalties:penalties.map(p=>({rule:p.rule,penalty:p.penalty})),totalPenalty,score}));
@@ -821,46 +778,28 @@ function computeTruthIndexDeterministic(indicatorSignals, transcript) {
 }
 
 function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
-  // If AI agent provided a direct truthScore (continuous 0-100), use it as primary
-  // This gives smooth, context-aware scoring instead of formula-based discrete jumps
-  if (aiAnalysis.truthIndexFromAgent && typeof aiAnalysis.truthIndexFromAgent.truthScore === 'number') {
-    const aiScore = Math.round(clamp(aiAnalysis.truthIndexFromAgent.truthScore, 0, 100) * 10) / 10;
-    const reasoning = aiAnalysis.truthIndexFromAgent.reasoning || '';
-    
-    console.log(`[TruthIndex] Using AI continuous score: ${aiScore}% (reasoning: ${reasoning.slice(0, 100)}...)`);
-    
-    return {
-      score: aiScore,
-      signals: aiAnalysis.truthIndexFromAgent.coherenceSignals || [],
-      redFlags: aiAnalysis.truthIndexFromAgent.detectedRules?.map(r => r.ruleId) || [],
-      penalties: [{
-        rule: 'AI Analysis',
-        description: reasoning.slice(0, 200),
-        penalty: Math.round((100 - aiScore) * 10) / 10
-      }]
-    };
-  }
-  
-  // Fallback: Use deterministic calculation (pillar-based T1-T5 + text-pattern T6-T8)
+  // Start with deterministic calculation (pillar-based T1-T5, per CSV)
   const deterministic = computeTruthIndexDeterministic(indicatorSignals, transcript);
   
-  // Legacy: If AI agent returned discrete rules (old format), apply those penalties too
+  // If AI agent detected additional T1-T5 contradictions, apply those penalties too
+  // AI penalties MUST match CSV spec: T1=-15, T2=-15, T3=-10, T4=-10, T5=-15
   if (aiAnalysis.truthIndexFromAgent && Array.isArray(aiAnalysis.detectedRules) && aiAnalysis.detectedRules.length > 0) {
-    const penaltyMap = { T1: 20, T2: 20, T3: 15, T4: 15, T5: 20 };
+    const penaltyMap = { T1: 15, T2: 15, T3: 10, T4: 10, T5: 15 }; // Per CSV spec
     const aiPenalties = [];
     
     for (const rule of aiAnalysis.detectedRules) {
       const basePenalty = penaltyMap[rule.ruleId] || 0;
       const confidence = Number(rule.confidence) || 0;
       
-      if (basePenalty > 0 && confidence >= 0.5) {
+      // Only apply if confidence >= 0.7 (high confidence required)
+      if (basePenalty > 0 && confidence >= 0.7) {
+        // Check if deterministic already caught this (avoid double-penalizing same rule)
         const alreadyDetected = deterministic.penalties.some(p => p.rule.startsWith(rule.ruleId));
         if (!alreadyDetected) {
-          const scaledPenalty = Math.round(basePenalty * confidence * 10) / 10;
           aiPenalties.push({
-            rule: `${rule.ruleId} (AI)`,
+            rule: `${rule.ruleId} (AI-detected)`,
             description: String(rule.evidence || 'AI-detected contradiction').slice(0, 200),
-            penalty: scaledPenalty,
+            penalty: basePenalty, // Use exact CSV penalty, no scaling
             confidence
           });
         }
@@ -872,8 +811,8 @@ function computeTruthIndex(aiAnalysis, indicatorSignals, transcript) {
       
       // Combine deterministic + AI penalties
       const allPenalties = [...deterministic.penalties, ...aiPenalties];
-      const totalPenalty = Math.round(allPenalties.reduce((sum, p) => sum + (p.penalty || 0), 0) * 10) / 10;
-      const score = Math.round(clamp(100 - totalPenalty, 0, 100) * 10) / 10;
+      const totalPenalty = allPenalties.reduce((sum, p) => sum + (p.penalty || 0), 0);
+      const score = clamp(100 - totalPenalty, 0, 100);
       
       return {
         score,
