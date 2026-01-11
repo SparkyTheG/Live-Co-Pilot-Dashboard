@@ -919,7 +919,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   }));
   
   // #region objections log H6 H9
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit1',message:'Emitting initial objections (empty fear/whisper/rebuttal)',data:{objectionsCount:base.length,firstObjection:base[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  console.log('[DEBUG:H6_H9] Emitting initial objections (empty fear/whisper/rebuttal)', JSON.stringify({objectionsCount:base.length,firstObjection:base[0]}));
   // #endregion
   
   emit({ objections: base });
@@ -934,7 +934,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   const whisperResult = fearWhisper[1].status === 'fulfilled' ? fearWhisper[1].value : { whispers: [] };
 
   // #region objections log H7 H9
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:fearWhisperDone',message:'Fear+Whisper agents complete',data:{fearStatus:fearWhisper[0].status,whisperStatus:fearWhisper[1].status,fearCount:fearResult?.fears?.length||0,whisperCount:whisperResult?.whispers?.length||0,fearSample:fearResult?.fears?.[0],whisperSample:whisperResult?.whispers?.[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7_H9'})}).catch(()=>{});
+  console.log('[DEBUG:H7_H9] Fear+Whisper agents complete', JSON.stringify({fearStatus:fearWhisper[0].status,whisperStatus:fearWhisper[1].status,fearCount:fearResult?.fears?.length||0,whisperCount:whisperResult?.whispers?.length||0,fearSample:fearResult?.fears?.[0],whisperSample:whisperResult?.whispers?.[0]}));
   // #endregion
 
   const withFearWhisper = detectedObjections.map((obj, idx) => ({
@@ -946,7 +946,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   }));
   
   // #region objections log H6 H9
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit2',message:'Emitting objections with fear/whisper',data:{objectionsCount:withFearWhisper.length,firstObjection:withFearWhisper[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  console.log('[DEBUG:H6_H9] Emitting objections with fear/whisper', JSON.stringify({objectionsCount:withFearWhisper.length,firstObjection:withFearWhisper[0]}));
   // #endregion
   
   emit({ objections: withFearWhisper });
@@ -961,14 +961,14 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
     }
     
     // #region objections log H7
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:rebuttalDone',message:'Rebuttal agent complete',data:{success:true,rebuttalsCount:rebuttalResult?.rebuttals?.length||0,rebuttalSample:rebuttalResult?.rebuttals?.[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7'})}).catch(()=>{});
+    console.log('[DEBUG:H7] Rebuttal agent complete', JSON.stringify({success:true,rebuttalsCount:rebuttalResult?.rebuttals?.length||0,rebuttalSample:rebuttalResult?.rebuttals?.[0]}));
     // #endregion
   } catch (e) {
     console.warn('[ObjectionsSystemProgressive] Rebuttal agent error:', e?.message || e);
     rebuttalResult = { rebuttals: [] };
     
     // #region objections log H7
-    fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:rebuttalError',message:'Rebuttal agent threw error',data:{error:String(e?.message||e)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7'})}).catch(()=>{});
+    console.log('[DEBUG:H7] Rebuttal agent threw error', JSON.stringify({error:String(e?.message||e)}));
     // #endregion
   }
   
@@ -981,7 +981,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   }));
   
   // #region objections log H6 H9
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:progressive:emit3',message:'Emitting final objections with rebuttals',data:{objectionsCount:final.length,firstObjection:final[0]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6_H9'})}).catch(()=>{});
+  console.log('[DEBUG:H6_H9] Emitting final objections with rebuttals', JSON.stringify({objectionsCount:final.length,firstObjection:final[0]}));
   // #endregion
   
   emit({ objections: final });
