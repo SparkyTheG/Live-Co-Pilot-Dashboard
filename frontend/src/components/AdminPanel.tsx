@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn, FileText } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -344,6 +344,43 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
     ? settings.diagnosticQuestionsByProspectType[dqProspectType]
     : [];
 
+  // AI Generation state
+  const [aiGenerationPrompt, setAiGenerationPrompt] = useState('');
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+
+  const generateQuestionsWithAI = async () => {
+    if (!aiGenerationPrompt.trim()) return;
+    
+    setIsGeneratingQuestions(true);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_WS_URL?.replace('ws://', 'http://').replace('/ws', '')}/api/generate-diagnostic-questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: aiGenerationPrompt,
+          prospectType: dqProspectType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate questions');
+      }
+
+      const data = await response.json();
+      if (data.questions && Array.isArray(data.questions)) {
+        // Replace current questions with AI-generated ones
+        updateDiagnosticQuestions(dqProspectType, data.questions);
+        setAiGenerationPrompt(''); // Clear prompt after success
+      }
+    } catch (error) {
+      console.error('Error generating questions:', error);
+      setSaveError('Failed to generate questions. Please try again.');
+      setTimeout(() => setSaveError(null), 5000);
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -639,6 +676,57 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                 </div>
               ))
             )}
+
+            {/* AI Generation Section */}
+            <div className="mt-6 p-4 bg-gradient-to-br from-purple-900/20 to-blue-900/20 border border-purple-500/30 rounded-xl">
+              <h3 className="text-sm font-semibold text-purple-300 mb-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                AI Question Generator
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-2">
+                    Describe what questions you need (e.g., "5 questions to qualify a foreclosure prospect's financial situation")
+                  </label>
+                  <textarea
+                    value={aiGenerationPrompt}
+                    onChange={(e) => setAiGenerationPrompt(e.target.value)}
+                    placeholder="Example: Generate 5 questions to understand their motivation for selling and timeline urgency..."
+                    className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-purple-500 focus:outline-none min-h-[80px] text-sm"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={generateQuestionsWithAI}
+                    disabled={isGeneratingQuestions || !aiGenerationPrompt.trim()}
+                    className="px-4 py-2 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 rounded-lg text-purple-200 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isGeneratingQuestions ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Generate Questions
+                      </>
+                    )}
+                  </button>
+                  <div className="text-xs text-gray-500">
+                    AI will generate questions for: <span className="text-purple-300">{prospectTypes.find(pt => pt.id === dqProspectType)?.label}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="flex items-center justify-between pt-2">
               <button

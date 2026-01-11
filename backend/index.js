@@ -1036,6 +1036,95 @@ function stopListening(connectionId) {
   });
 }
 
+// API endpoint to generate diagnostic questions using AI
+app.post('/api/generate-diagnostic-questions', async (req, res) => {
+  try {
+    const { prompt, prospectType } = req.body;
+    
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    console.log(`[API] Generating diagnostic questions for ${prospectType} with prompt:`, prompt.slice(0, 100));
+
+    const systemPrompt = `You are an expert real estate sales coach. Generate diagnostic questions that sales closers should ask prospects during conversations.
+
+CRITICAL OUTPUT FORMAT:
+Return ONLY valid JSON with this exact structure:
+{
+  "questions": [
+    {
+      "question": "The actual question to ask the prospect",
+      "helper": "Why this question matters / what intel it reveals",
+      "badgeText": "Category label (e.g., Financial, Timeline, Pain Point)",
+      "badgeColor": "situation|timeline|authority|pain|financial"
+    }
+  ]
+}
+
+Badge color options:
+- situation: Blue (general situation/background)
+- timeline: Red (urgency/deadlines)
+- authority: Purple (decision-making power)
+- pain: Orange (problems/frustrations)
+- financial: Green (money/budget)
+
+Rules:
+1. Questions should be conversational, not robotic
+2. Each question should reveal specific intel for analysis
+3. Helper text explains WHY this question matters
+4. Return 3-7 questions (not too many)
+5. Badge text should be short (1-2 words)`;
+
+    const userPrompt = `Generate diagnostic questions for a ${prospectType} prospect.
+
+User's request: "${prompt}"
+
+Remember to return ONLY valid JSON in the format specified.`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 1500
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const aiContent = data.choices?.[0]?.message?.content || '';
+    
+    // Parse JSON from AI response
+    const parsed = JSON.parse(aiContent);
+    
+    if (!parsed.questions || !Array.isArray(parsed.questions)) {
+      throw new Error('Invalid response format from AI');
+    }
+
+    console.log(`[API] Generated ${parsed.questions.length} questions successfully`);
+    res.json(parsed);
+
+  } catch (error) {
+    console.error('[API] Error generating questions:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate questions',
+      details: error.message 
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
