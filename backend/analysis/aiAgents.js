@@ -1057,7 +1057,21 @@ Return: {
 
 If NO contradictions found, return empty detectedRules array.`;
 
-  const userPrompt = `Analyze for incoherence (T1-T5 contradictions):\n"${transcript}"`;
+  const userPrompt = `CONVERSATION CONTEXT:
+This is a sales conversation about real estate investment services. The closer is trying to help a prospect who may be facing foreclosure, behind on payments, or looking to sell their property.
+
+KEY FACTS TO WATCH FOR CONTRADICTIONS:
+- Whether they live in the property or not
+- How long they've owned/lived there
+- Whether they have money/can afford services
+- Whether they're behind on payments
+- Whether they need to sell urgently
+- Whether they make decisions or need approval
+
+TRANSCRIPT TO ANALYZE:
+"${transcript}"
+
+Flag ANY contradictions or flip-flopping in the above facts.`;
 
   console.log(`[TruthIndexAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,100)||'EMPTY'}"`);
   const res = await callAI(systemPrompt, userPrompt, 'TruthIndexAgent', {
