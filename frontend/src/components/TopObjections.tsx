@@ -145,11 +145,11 @@ export default function TopObjections({ realTimeObjections }: TopObjectionsProps
             {expandedObjection === objection.id && (
               <div className="px-4 pb-4 space-y-4 animate-slide-down">
                 {/* What They're Really Afraid Of */}
-                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-cyan-300 font-bold text-sm mb-1">What They're Really Afraid Of:</h4>
+                  <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-cyan-300 font-bold text-sm mb-1">What They're Really Afraid Of:</h4>
                       <p className="text-gray-300 text-sm">
                         {objection.whatTheyreReallyAfraidOf || 'Generating…'}
                       </p>
@@ -158,11 +158,11 @@ export default function TopObjections({ realTimeObjections }: TopObjectionsProps
                 </div>
 
                 {/* Reframe / Whisper */}
-                <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-blue-300 font-bold text-sm mb-1">Whisper / Reframe:</h4>
+                  <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-blue-300 font-bold text-sm mb-1">Whisper / Reframe:</h4>
                       <p className="text-gray-300 text-sm italic">
                         {objection.reframe || 'Generating…'}
                       </p>
@@ -171,14 +171,14 @@ export default function TopObjections({ realTimeObjections }: TopObjectionsProps
                 </div>
 
                 {/* Rebuttal Script */}
-                <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <MessageSquare className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-teal-300 font-bold text-sm mb-2">Rebuttal Script:</h4>
-                      <p className="text-gray-200 text-sm leading-relaxed bg-gray-900/40 p-3 rounded border border-teal-400/20">
+                  <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <MessageSquare className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-teal-300 font-bold text-sm mb-2">Rebuttal Script:</h4>
+                        <p className="text-gray-200 text-sm leading-relaxed bg-gray-900/40 p-3 rounded border border-teal-400/20">
                         "{objection.rebuttalScript || 'Generating…'}"
-                      </p>
+                        </p>
                     </div>
                   </div>
                 </div>

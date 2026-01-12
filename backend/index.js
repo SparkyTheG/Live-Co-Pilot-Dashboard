@@ -1086,7 +1086,7 @@ async function startRealtimeListening(connectionId, config) {
                           summary_json: summaryResult,
                           is_final: false,
                           updated_at: new Date().toISOString()
-                        };
+          };
 
                         // Upsert summary (update if exists, insert if new)
                         console.log(`[${connectionId}] Upserting summary to Supabase...`, { session_id: summaryData.session_id, user_id: summaryData.user_id });
@@ -1153,7 +1153,7 @@ function stopListening(connectionId) {
 app.post('/api/generate-diagnostic-questions', async (req, res) => {
   try {
     const { prompt, prospectType } = req.body;
-    
+
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'Prompt is required' });
     }
