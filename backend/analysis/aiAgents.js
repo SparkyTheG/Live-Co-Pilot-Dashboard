@@ -344,26 +344,54 @@ export async function runSpeakerRoleAgent(newChunk, conversationHistory = '') {
   if (!text) return { speaker: 'unknown' };
 
   // Keep context short + recent (avoid cost + latency)
-  const history = String(conversationHistory || '').slice(-1200);
+  const history = String(conversationHistory || '').slice(-1800);
 
-  const systemPrompt = `You label who spoke a chunk in a real estate sales call.
+  const systemPrompt = `You label who spoke a chunk in a REAL ESTATE sales conversation.
 
 Return ONLY JSON: {"speaker":"closer"} or {"speaker":"prospect"} or {"speaker":"unknown"}
 
-Rules:
-- closer = salesperson (asks questions, explains process, proposes steps, schedules, qualifies)
-- prospect = seller (talks about their situation, pain, timeline, money, objections, motivations)
-- unknown if too short/ambiguous or could be either.
+CRITICAL RULES FOR ACCURACY:
+1. **CLOSER** = Salesperson/Agent behaviors:
+   - Asks diagnostic questions ("How long?", "When did...?", "What's your timeline?", "Tell me about...")
+   - Explains services, process, options, next steps
+   - Uses qualifying questions ("Do you own the property?", "Are you behind on payments?")
+   - Proposes solutions, schedules appointments, outlines steps
+   - Educates about foreclosure, creative finance, timeline implications
+   - Uses phrases like "let me ask", "help me understand", "here's what we can do"
 
-Be conservative: prefer "unknown" over guessing when unclear.`;
+2. prospect = property owner/seller (talks about THEIR situation, pain, timeline, money, objections, motivations)
+   - Answers questions about THEIR property, situation, finances
+   - Shares PERSONAL info: "I am...", "my property", "we're behind", "I need..."
+   - Expresses concerns, objections, motivations
+   - Talks about THEIR timeline, pain points, money situation
+   - Examples: "I'm behind on payments", "My property is...", "I need to sell", "I'm worried about..."
 
-  const userPrompt = `Recent conversation (may include speaker tags, use as hint only):
+3. unknown = too short/ambiguous OR both speakers in one chunk
+
+CRITICAL RULES:
+- If chunk has BOTH question marks AND situation details → closer (asking questions)
+- If chunk is ONLY about their situation/problems → prospect
+- Questions like "How long?", "When?", "What about X?" → closer
+- Answers about their situation → prospect
+- Very short chunks (<8 words) → prefer unknown unless crystal clear
+
+Examples:
+CLOSER: "How long have you owned the property?", "What's your timeline?", "When do you need to close?"
+PROSPECT: "I'm behind on payments", "The property needs repairs", "I inherited it from my dad"`;
+
+  const userPrompt = `Recent conversation (last few exchanges for context):
 ${history}
 
-New chunk:
-"${text}"`;
+New chunk to classify:
+"${text}"
 
-  const result = await callAI(systemPrompt, userPrompt, 'SpeakerRoleAgent', { maxTokens: 40, timeoutMs: 2500, pool: 'aux' });
+Return {"speaker":"closer"} OR {"speaker":"prospect"} OR {"speaker":"unknown"}`;
+
+  const result = await callAI(systemPrompt, userPrompt, 'SpeakerRoleAgent', { 
+    maxTokens: 50, 
+    timeoutMs: 3500, 
+    pool: 'aux' 
+  });
   const sp = String(result?.speaker || '').toLowerCase();
   if (sp === 'closer' || sp === 'prospect' || sp === 'unknown') return { speaker: sp };
   return { speaker: 'unknown' };
