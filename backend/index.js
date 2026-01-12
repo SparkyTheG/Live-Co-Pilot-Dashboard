@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { createRealtimeConnection } from './realtime/listener.js';
 import { analyzeConversationProgressive } from './analysis/engine.js';
 import { createUserSupabaseClient, isSupabaseConfigured } from './supabase.js';
-import { runConversationSummaryAgent, runSpeakerRoleAgent } from './analysis/aiAgents.js';
+import { runConversationSummaryAgent, runSpeakerRoleAgent, runMemoryAgent } from './analysis/aiAgents.js';
 
 dotenv.config();
 
@@ -154,6 +154,14 @@ wss.on('connection', (ws, req) => {
     pillarWeights: null,
     // Plain transcript (no labels) for deterministic calculations
     plainTranscript: '',
+    // Hour-long context memory (updated every 5000 new transcript chars)
+    memory: null,
+    memoryVersion: 0,
+    _memoryBuffer: '',
+    _memoryPending: false,
+    _memorySeq: 0,
+    _lastMemoryOkMs: 0,
+    _lastMemoryErr: '',
     // Client mode: backend_transcribe (default) or websocket_transcribe (frontend sends text)
     clientMode: 'backend_transcribe',
     // Heartbeat diagnostics
@@ -495,6 +503,101 @@ const lastGoodAnalysis = new Map();
 const ANALYSIS_THROTTLE_MS = 400; // Min time between analyses (normal transcript-driven runs)
 const ANALYSIS_MAX_PENDING_MS = 25000; // Stuck detection: force-clear pending after this long
 
+// Memory update settings: generate/update memory every N new transcript characters
+const MEMORY_CHUNK_CHARS = 5000;
+
+function sanitizeMemoryResult(res) {
+  if (!res || typeof res !== 'object') return null;
+  if (res.error) return null;
+  const runningSummary = Array.isArray(res.runningSummary) ? res.runningSummary : [];
+  const facts = res.facts && typeof res.facts === 'object' ? res.facts : {};
+  const contradictions = Array.isArray(res.contradictions) ? res.contradictions : [];
+  return {
+    runningSummary,
+    facts,
+    contradictions,
+    updatedAt: typeof res.updatedAt === 'string' ? res.updatedAt : new Date().toISOString()
+  };
+}
+
+function tryStartMemoryUpdate(connectionId) {
+  const meta = connectionPersistence.get(connectionId);
+  if (!meta) return;
+  if (meta._memoryPending) return;
+
+  const buf = String(meta._memoryBuffer || '');
+  if (buf.length < MEMORY_CHUNK_CHARS) return;
+
+  const chunk = buf.slice(0, MEMORY_CHUNK_CHARS);
+  const rest = buf.slice(MEMORY_CHUNK_CHARS);
+  meta._memoryBuffer = rest;
+  meta._memoryPending = true;
+  meta._memorySeq = (meta._memorySeq || 0) + 1;
+  const seq = meta._memorySeq;
+  connectionPersistence.set(connectionId, meta);
+
+  setImmediate(async () => {
+    const m0 = connectionPersistence.get(connectionId);
+    if (!m0 || m0._memorySeq !== seq) return;
+
+    const prevMemory = m0.memory || null;
+    try {
+      const raw = await runMemoryAgent(prevMemory, chunk, m0.prospectType || '');
+      const updated = sanitizeMemoryResult(raw);
+      const m1 = connectionPersistence.get(connectionId);
+      if (!m1 || m1._memorySeq !== seq) return;
+
+      if (!updated) {
+        // Put chunk back at the front so we don't lose it; cap buffer to avoid runaway
+        m1._memoryBuffer = (chunk + '\n' + String(m1._memoryBuffer || '')).slice(0, 25000);
+        m1._memoryPending = false;
+        m1._lastMemoryErr = String(raw?.error || 'memory_invalid').slice(0, 200);
+        connectionPersistence.set(connectionId, m1);
+        return;
+      }
+
+      m1.memory = updated;
+      m1.memoryVersion = Number(m1.memoryVersion || 0) + 1;
+      m1._memoryPending = false;
+      m1._lastMemoryErr = '';
+      m1._lastMemoryOkMs = Date.now();
+      connectionPersistence.set(connectionId, m1);
+
+      // Persist a snapshot to Supabase (best-effort)
+      if (m1?.authToken && m1?.sessionId && m1?.userId && isSupabaseConfigured()) {
+        const supabase = createUserSupabaseClient(m1.authToken);
+        if (supabase) {
+          void supabase
+            .from('call_memory_snapshots')
+            .insert({
+              session_id: m1.sessionId,
+              user_id: m1.userId,
+              user_email: m1.userEmail || '',
+              connection_id: connectionId,
+              memory_version: m1.memoryVersion,
+              chunk_char_count: chunk.length,
+              memory_json: updated
+            })
+            .then(({ error }) => {
+              if (error) console.warn(`[WS] call_memory_snapshots insert failed: ${error.message}`);
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      const mErr = connectionPersistence.get(connectionId);
+      if (!mErr || mErr._memorySeq !== seq) return;
+      mErr._memoryBuffer = (chunk + '\n' + String(mErr._memoryBuffer || '')).slice(0, 25000);
+      mErr._memoryPending = false;
+      mErr._lastMemoryErr = String(e?.message || e || 'memory_error').slice(0, 200);
+      connectionPersistence.set(connectionId, mErr);
+    } finally {
+      // If more buffered text exists, process the next 5000 chars.
+      tryStartMemoryUpdate(connectionId);
+    }
+  });
+}
+
 // Helper function to send data to client
 function sendToClient(connectionId, data) {
   const ws = connections.get(connectionId);
@@ -607,7 +710,8 @@ function scheduleAnalysis(connectionId, overrides = {}, opts = {}) {
         csSnapshot,
         pwSnapshot,
         sendPartialIfCurrent,
-        hasNewText ? newTextOnly : null // Only analyze new text for hot buttons/objections
+        hasNewText ? newTextOnly : null, // Only analyze new text for hot buttons/objections
+        (connectionPersistence.get(connectionId)?.memory || null) // Hour-long memory context for agents
       );
 
       // Only send if this is still the newest analysis run
@@ -740,6 +844,15 @@ async function handleIncomingTextChunk(connectionId, {
       meta.plainTranscript = meta.plainTranscript.slice(-MAX_PLAIN);
     }
     connectionPersistence.set(connectionId, meta);
+  }
+
+  // Hour-long memory buffer (NEW text). When this buffer reaches 5000 chars,
+  // a background AI agent updates the compact memory object and we persist it to Supabase.
+  if (meta) {
+    const sep = meta._memoryBuffer ? '\n' : '';
+    meta._memoryBuffer = (String(meta._memoryBuffer || '') + sep + text).slice(-25000);
+    connectionPersistence.set(connectionId, meta);
+    tryStartMemoryUpdate(connectionId);
   }
 
   // Speaker-role detection is a SIDE-CAR task:

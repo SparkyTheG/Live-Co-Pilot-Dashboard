@@ -202,7 +202,8 @@ export async function analyzeConversationProgressive(
   customScriptPrompt = '',
   pillarWeights = null,
   onPartial = null,
-  newTextOnly = null // Optional: only new text for hot buttons/objections to avoid re-detection
+  newTextOnly = null, // Optional: only new text for hot buttons/objections to avoid re-detection
+  memoryContext = null // Optional: compact "memory" object/string for hour-long calls
 ) {
   const startTime = Date.now();
 
@@ -212,6 +213,22 @@ export async function analyzeConversationProgressive(
 
   const cleanedTranscript = cleanTranscriptForAI(transcript);
   const prospectType = prospectTypeOverride || 'foreclosure';
+
+  const formatMemoryForPrompt = (mem) => {
+    if (!mem) return '';
+    if (typeof mem === 'string') return mem.trim().slice(0, 1600);
+    if (typeof mem !== 'object') return String(mem || '').trim().slice(0, 1600);
+    try {
+      const runningSummary = Array.isArray(mem.runningSummary) ? mem.runningSummary.slice(-20) : [];
+      const facts = mem.facts && typeof mem.facts === 'object' ? mem.facts : {};
+      const contradictions = Array.isArray(mem.contradictions) ? mem.contradictions.slice(-10) : [];
+      const compact = { runningSummary, facts, contradictions };
+      return JSON.stringify(compact).slice(0, 1600);
+    } catch {
+      return '';
+    }
+  };
+  const memForAgents = formatMemoryForPrompt(memoryContext);
 
   // Small rolling windows per agent (stable latency)
   // Pillars drive Lubometer + Truth Index (deterministic). Give a bit more context so
@@ -312,7 +329,7 @@ export async function analyzeConversationProgressive(
     emit({ truthIndex });
   };
 
-  const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'))
+  const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'), memForAgents)
     .then((r) => {
       flushStreamGroup('lubometer', { done: true });
       aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
@@ -371,7 +388,7 @@ export async function analyzeConversationProgressive(
         })
     : Promise.resolve();
 
-  const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'))
+  const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'), memForAgents)
     .then((r) => {
       flushStreamGroup('truthIndex', { done: true });
       aiAnalysis.detectedRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
