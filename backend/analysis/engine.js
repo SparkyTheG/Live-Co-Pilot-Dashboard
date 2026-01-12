@@ -19,6 +19,7 @@ import {
   runHotButtonsAgent,
   runObjectionsAgentsProgressive,
   runTruthIndexAgent,
+  runLubometerTruthPenaltyAgent,
   runInsightsAgent
 } from './aiAgents.js';
 import fs from 'fs';
@@ -303,6 +304,7 @@ export async function analyzeConversationProgressive(
     objections: [],
     askedQuestions: [],
     detectedRules: [],
+    lubometerPenaltyRules: [],
     coherenceSignals: [],
     overallCoherence: '',
     insights: '',
@@ -314,6 +316,7 @@ export async function analyzeConversationProgressive(
   };
 
   let pillarsDone = false;
+  let lubometerBase = null;
 
   const emitTruthIndexIfPossible = () => {
     if (!pillarsDone) return;
@@ -327,6 +330,92 @@ export async function analyzeConversationProgressive(
     fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'engine.js:emitTruthIndexResult',message:'Truth Index computed',data:{truthIndex,transcriptLengthForTruth:tTruth.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
     // #endregion
     emit({ truthIndex });
+  };
+
+  const applyTruthIndexCsvPenaltiesToLubometer = ({
+    lubometer,
+    indicatorSignals,
+    transcript,
+    aiRules
+  }) => {
+    if (!lubometer || typeof lubometer !== 'object') return lubometer;
+
+    // Start from the raw score and apply at most one penalty per ruleId (T1..T5).
+    const penaltyMap = { T1: 15, T2: 15, T3: 10, T4: 10, T5: 15 };
+    const appliedByRule = new Map(); // ruleId -> { ruleId, penalty, source, evidence }
+
+    // Deterministic penalties (CSV-only): reuse TruthIndex deterministic and filter to T1..T5
+    const det = computeTruthIndexDeterministic(indicatorSignals || {}, transcript || '');
+    const detPenalties = Array.isArray(det?.penalties) ? det.penalties : [];
+    for (const p of detPenalties) {
+      const ruleId = String(p?.rule || '').slice(0, 2); // "T1", "T2", ...
+      if (!penaltyMap[ruleId]) continue;
+      if (appliedByRule.has(ruleId)) continue;
+      appliedByRule.set(ruleId, {
+        ruleId,
+        rule: String(p?.rule || ''),
+        description: String(p?.description || ''),
+        penalty: penaltyMap[ruleId],
+        source: 'deterministic',
+        evidence: String(p?.details || '')
+      });
+    }
+
+    // AI penalties (from dedicated Lubometer agent): allow if confidence >= 0.7
+    const aiDetected = Array.isArray(aiRules) ? aiRules : [];
+    for (const r of aiDetected) {
+      const ruleId = String(r?.ruleId || '').trim();
+      const conf = Number(r?.confidence || 0);
+      if (!penaltyMap[ruleId]) continue;
+      if (conf < 0.7) continue;
+      if (appliedByRule.has(ruleId)) continue;
+      appliedByRule.set(ruleId, {
+        ruleId,
+        rule: `${ruleId} (AI-detected)`,
+        description: 'Detected from conversation language',
+        penalty: penaltyMap[ruleId],
+        source: 'ai',
+        evidence: String(r?.evidence || '').slice(0, 240),
+        confidence: conf
+      });
+    }
+
+    const penalties = Array.from(appliedByRule.values());
+    const totalPenalty = penalties.reduce((sum, p) => sum + (Number(p?.penalty) || 0), 0);
+    const rawScore = Number(lubometer.score || 0);
+    const newScore = clamp(rawScore - totalPenalty, 0, Number(lubometer.maxScore || 9999));
+
+    return {
+      ...lubometer,
+      totalBeforePenalties: rawScore,
+      score: Math.round(newScore),
+      penalties
+    };
+  };
+
+  const emitLubometerIfPossible = () => {
+    if (!pillarsDone) return;
+    if (!lubometerBase) return;
+    const updated = applyTruthIndexCsvPenaltiesToLubometer({
+      lubometer: lubometerBase,
+      indicatorSignals: aiAnalysis.indicatorSignals || {},
+      transcript: cleanedTranscript,
+      aiRules: aiAnalysis.lubometerPenaltyRules || []
+    });
+    emit({
+      lubometer: {
+        score: updated.score,
+        maxScore: updated.maxScore || 90,
+        level: updated.level,
+        interpretation: updated.interpretation,
+        action: updated.action,
+        pillarScores: updated.pillarScores,
+        weightsUsed: updated.weightsUsed,
+        totalBeforePenalties: updated.totalBeforePenalties,
+        penalties: Array.isArray(updated.penalties) ? updated.penalties : []
+      },
+      pillars: updated.pillarScores
+    });
   };
 
   const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'), memForAgents)
@@ -343,19 +432,8 @@ export async function analyzeConversationProgressive(
       console.log('[DEBUG:H4] Pillars complete, about to emit Truth Index', JSON.stringify({indicatorSignalsCount:Object.keys(aiAnalysis.indicatorSignals||{}).length,tTruthLen:tTruth?.length||0}));
       // #endregion
       
-      const lubometer = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
-      emit({
-        lubometer: {
-          score: lubometer.score,
-          maxScore: lubometer.maxScore || 90,
-          level: lubometer.level,
-          interpretation: lubometer.interpretation,
-          action: lubometer.action,
-          pillarScores: lubometer.pillarScores,
-          weightsUsed: lubometer.weightsUsed
-        },
-        pillars: lubometer.pillarScores
-      });
+      lubometerBase = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
+      emitLubometerIfPossible();
       emitTruthIndexIfPossible();
     })
     .catch((e) => {
@@ -406,6 +484,17 @@ export async function analyzeConversationProgressive(
       aiAnalysis.truthIndexFromAgent = false;
     });
 
+  const lubometerPenaltyP = runLubometerTruthPenaltyAgent(tTruth, null, memForAgents)
+    .then((r) => {
+      aiAnalysis.lubometerPenaltyRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
+      if (r?.error) agentErrors.lubometerPenalty = String(r.error);
+      // If pillars already emitted, re-emit lubometer with penalties applied.
+      if (pillarsDone) emitLubometerIfPossible();
+    })
+    .catch((e) => {
+      agentErrors.lubometerPenalty = String(e?.message || e || 'error');
+    });
+
   const insightsP = runInsightsAgent(tInsights, prospectType)
     .then((r) => {
       aiAnalysis.insights = r?.summary || r?.insights || '';
@@ -429,7 +518,7 @@ export async function analyzeConversationProgressive(
     });
 
   // Wait for all to settle, then build a final unified result (same shape as analyzeConversation)
-  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, insightsP]);
+  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, lubometerPenaltyP, insightsP]);
 
   const result = await buildFinalResultFromAiAnalysis({
     cleanedTranscript,
@@ -872,7 +961,13 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
   console.log(`  - Insights: ${aiAnalysis.closingReadiness || 'unknown'} readiness`);
 
   const indicatorSignals = aiAnalysis.indicatorSignals || {};
-  const lubometer = computeLubometer(indicatorSignals, pillarWeights);
+  const lubometerRaw = computeLubometer(indicatorSignals, pillarWeights);
+  const lubometer = applyTruthIndexCsvPenaltiesToLubometer({
+    lubometer: lubometerRaw,
+    indicatorSignals,
+    transcript: cleanedTranscript,
+    aiRules: aiAnalysis.lubometerPenaltyRules || []
+  });
   const truthIndex = computeTruthIndex(aiAnalysis, indicatorSignals, cleanedTranscript);
   const hotButtons = normalizeHotButtons(aiAnalysis.hotButtonDetails);
   const objections = Array.isArray(aiAnalysis.objections) ? aiAnalysis.objections : [];
@@ -890,8 +985,8 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
       pillarScores: lubometer.pillarScores,
       weightsUsed: lubometer.weightsUsed,
       weightedScores: {},
-      totalBeforePenalties: lubometer.score,
-      penalties: []
+      totalBeforePenalties: lubometer.totalBeforePenalties ?? lubometer.score,
+      penalties: Array.isArray(lubometer.penalties) ? lubometer.penalties : []
     },
     truthIndex: {
       score: truthIndex.score,

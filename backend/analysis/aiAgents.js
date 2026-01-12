@@ -284,6 +284,55 @@ ${chunk}
 }
 
 // ============================================================================
+// AGENT: LUBOMETER TRUTH PENALTY AGENT (T1-T5 from Truth Index CSV)
+// Detects the same 5 incoherence rules, but intended to apply as penalties to Lubometer.
+// Output: detectedRules (T1-T5 with evidence)
+// ============================================================================
+export async function runLubometerTruthPenaltyAgent(transcript, onStream = null, memoryContext = null) {
+  const mem = normalizeMemoryForPrompt(memoryContext);
+
+  const systemPrompt = `Detect which Truth Index CSV penalties apply based on the PROSPECT's language.
+
+Rules (apply ONLY these 5):
+T1: High Pain + Low Urgency (–15 pts)
+T2: High Desire + Low Decisiveness (–15 pts)
+T3: High Money Access + High Price Sensitivity (–10 pts)
+T4: Claims Authority + Reveals Need for Approval (–10 pts)
+T5: High Desire + Low Responsibility (–15 pts)
+
+IMPORTANT:
+- Return ONLY valid JSON.
+- Be conservative: only flag a rule if there's clear evidence in the transcript.
+- Provide short evidence using exact or near-exact quotes found in the transcript.
+
+Return format:
+{
+  "detectedRules": [
+    {"ruleId":"T2","evidence":"Quote-like evidence from transcript","confidence":0.85}
+  ]
+}`;
+
+  const userPrompt = `You are analyzing a long sales call transcript.
+${mem ? `\nMEMORY (facts/contradictions so far):\n${mem}\n` : ''}
+
+TRANSCRIPT:
+"${String(transcript || '')}"
+
+Return detectedRules (T1-T5) only. If none, return {"detectedRules":[]}.`;
+
+  const res = await callAI(systemPrompt, userPrompt, 'LubometerTruthPenaltyAgent', {
+    maxTokens: 450,
+    timeoutMs: 8000,
+    stream: typeof onStream === 'function',
+    onDelta: (delta, agent) => {
+      try { onStream?.({ agent, delta }); } catch {}
+    }
+  });
+  if (res && typeof res === 'object' && !res.error) res._fromAgent = true;
+  return res;
+}
+
+// ============================================================================
 // SPEAKER ROLE AGENT (AI)
 // Classifies each committed chunk as: closer | prospect | unknown
 // Used for:
