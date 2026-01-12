@@ -340,9 +340,9 @@ export async function analyzeConversationProgressive(
   }) => {
     if (!lubometer || typeof lubometer !== 'object') return lubometer;
 
-    // Start from the raw score and apply at most one penalty per ruleId (T1..T5).
+    // Apply ALL detected penalties (multiple instances of same rule allowed).
     const penaltyMap = { T1: 15, T2: 15, T3: 10, T4: 10, T5: 15 };
-    const appliedByRule = new Map(); // ruleId -> { ruleId, penalty, source, evidence }
+    const penalties = [];
 
     // Deterministic penalties (CSV-only): reuse TruthIndex deterministic and filter to T1..T5
     const det = computeTruthIndexDeterministic(indicatorSignals || {}, transcript || '');
@@ -350,8 +350,7 @@ export async function analyzeConversationProgressive(
     for (const p of detPenalties) {
       const ruleId = String(p?.rule || '').slice(0, 2); // "T1", "T2", ...
       if (!penaltyMap[ruleId]) continue;
-      if (appliedByRule.has(ruleId)) continue;
-      appliedByRule.set(ruleId, {
+      penalties.push({
         ruleId,
         rule: String(p?.rule || ''),
         description: String(p?.description || ''),
@@ -368,8 +367,7 @@ export async function analyzeConversationProgressive(
       const conf = Number(r?.confidence || 0);
       if (!penaltyMap[ruleId]) continue;
       if (conf < 0.7) continue;
-      if (appliedByRule.has(ruleId)) continue;
-      appliedByRule.set(ruleId, {
+      penalties.push({
         ruleId,
         rule: `${ruleId} (AI-detected)`,
         description: 'Detected from conversation language',
@@ -380,7 +378,6 @@ export async function analyzeConversationProgressive(
       });
     }
 
-    const penalties = Array.from(appliedByRule.values());
     const totalPenalty = penalties.reduce((sum, p) => sum + (Number(p?.penalty) || 0), 0);
     const rawScore = Number(lubometer.score || 0);
     const newScore = clamp(rawScore - totalPenalty, 0, Number(lubometer.maxScore || 9999));
