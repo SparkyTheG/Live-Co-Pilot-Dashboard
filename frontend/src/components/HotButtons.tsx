@@ -153,14 +153,31 @@ export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
         )}
       </div>
 
-      {/* Footer Message */}
-      {emotionalLevers && Object.keys(emotionalLevers).length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-700/50">
-          <p className="text-xs text-gray-500 text-center italic">
-            🎯 <span className="text-gray-400">Press THIS emotional lever right now</span>
-          </p>
-        </div>
-      )}
+      {/* Footer Message - Shows Highest Scoring Lever */}
+      {emotionalLevers && Object.keys(emotionalLevers).length > 0 && (() => {
+        // Find the highest scoring emotional lever
+        const leversList = [
+          { key: 'riskTolerance', label: 'Risk Tolerance', value: emotionalLevers.riskTolerance || 0 },
+          { key: 'fearOfFailure', label: 'Fear of Failure', value: emotionalLevers.fearOfFailure || 0 },
+          { key: 'urgency', label: 'Urgency', value: emotionalLevers.urgency || 0 },
+          { key: 'familyPressure', label: 'Family Pressure', value: emotionalLevers.familyPressure || 0 },
+          { key: 'desireForCertainty', label: 'Desire for Certainty', value: emotionalLevers.desireForCertainty || 0 }
+        ];
+        
+        const highestLever = leversList.reduce((max, lever) => 
+          lever.value > max.value ? lever : max
+        , leversList[0]);
+        
+        return (
+          <div className="mt-4 pt-4 border-t border-gray-700/50">
+            <p className="text-xs text-gray-500 text-center italic">
+              🎯 <span className="text-gray-400">Press </span>
+              <span className="text-orange-400 font-bold uppercase">{highestLever.label}</span>
+              <span className="text-gray-400"> emotional lever right now</span>
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
