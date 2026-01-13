@@ -49,6 +49,15 @@
   }
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .animate-energy-pulse {
   animation: energyPulse 3s ease-in-out infinite;
 }
@@ -59,6 +68,10 @@
 
 .animate-slide-up {
   animation: slideUp 0.4s ease-out forwards;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
 }
 
 .hex-grid {

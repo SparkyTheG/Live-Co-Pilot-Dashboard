@@ -734,23 +734,57 @@ export default function LiveCoPilotDashboard() {
                 </div>
               </div>
 
-              {/* Readiness Score */}
-              <div className="text-center mb-6">
-                <div className={`text-6xl font-bold bg-gradient-to-r ${lubometerColor.gradient} bg-clip-text text-transparent mb-2`}>
-                  {lubometerScore}
+              {/* Probability of Close */}
+              <div className="text-center mb-4">
+                <div className="text-sm text-gray-400 mb-2">Probability of Close</div>
+                <div className={`text-7xl font-bold bg-gradient-to-r ${lubometerColor.gradient} bg-clip-text text-transparent mb-3 transition-all duration-500`}>
+                  {completionPercentage}%
                 </div>
-                <div className={`text-xl font-bold ${lubometerColor.text} mb-2`}>{lubometerLevel}</div>
-                <div className="text-gray-300 text-sm">
+              </div>
+
+              {/* Strategic Status Label */}
+              <div className="text-center mb-6">
+                <div className={`inline-block px-6 py-2 rounded-full border-2 ${lubometerColor.text} ${
+                  lubometerLevel === 'HIGH' ? 'bg-emerald-500/10 border-emerald-400/50' :
+                  lubometerLevel === 'MEDIUM' ? 'bg-cyan-500/10 border-cyan-400/50' :
+                  'bg-blue-500/10 border-blue-400/50'
+                }`}>
+                  <div className={`text-lg font-bold ${lubometerColor.text}`}>
+                    {completionPercentage >= 75 ? 'Ready — Push' :
+                     completionPercentage >= 50 ? 'Warming Up — Build Value' :
+                     completionPercentage >= 25 ? 'Too Cold — Build Trust' :
+                     'Not Ready — Qualify First'}
+                  </div>
+                </div>
+                <div className="text-gray-300 text-sm mt-3">
                   {lubometerText}
                 </div>
               </div>
 
-              {/* Readiness Bar */}
-              <div className="w-full bg-gray-800/50 rounded-full h-4 overflow-hidden mb-6">
+              {/* Giant Hypnotic Bar */}
+              <div className="w-full bg-gray-800/50 rounded-full h-8 overflow-hidden mb-2 relative shadow-lg">
                 <div
-                  className={`h-full bg-gradient-to-r ${lubometerColor.bar} transition-all duration-500`}
-                  style={{ width: `${Math.min(100, (lubometerScore / lubometerMaxScore) * 100)}%` }}
-                ></div>
+                  className={`h-full bg-gradient-to-r ${lubometerColor.bar} transition-all duration-500 relative overflow-hidden`}
+                  style={{ width: `${Math.min(100, completionPercentage)}%` }}
+                >
+                  {/* Animated shimmer effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
+                </div>
+                {/* Percentage text overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-sm font-bold ${completionPercentage > 50 ? 'text-white' : 'text-gray-400'}`}>
+                    {lubometerScore} / {lubometerMaxScore}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Score labels */}
+              <div className="flex justify-between text-xs text-gray-500 mb-6">
+                <span>0%</span>
+                <span className="text-yellow-400">25%</span>
+                <span className="text-cyan-400">50%</span>
+                <span className="text-emerald-400">75%</span>
+                <span className="text-emerald-300">100%</span>
               </div>
 
               {/* Action Section */}
