@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CheckCircle2, Circle, Target, Gauge, Sparkles, Shield, Mic } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Gauge, Shield, Mic } from 'lucide-react';
 import { ProspectType } from '../data/coPilotData';
 import { diagnosticQuestions } from '../data/diagnosticQuestions';
 import { useSettings } from '../contexts/SettingsContext';
 import TopObjections from './TopObjections';
+import HotButtons from './HotButtons';
 import RecordingButton from './coPilot/RecordingButton';
 
 
@@ -64,16 +65,7 @@ export default function LiveCoPilotDashboard() {
   const [callDuration, setCallDuration] = useState<string>('00:00:00');
   const { settings } = useSettings();
 
-  // Accumulated history for hot buttons and objections (persists across updates)
-  const [hotButtonsHistory, setHotButtonsHistory] = useState<Array<{
-    id: number;
-    name: string;
-    description?: string;
-    quote: string;
-    score: number;
-    prompt: string;
-    timestamp: number;
-  }>>([]);
+  // Accumulated history for objections (persists across updates)
   const [objectionsHistory, setObjectionsHistory] = useState<Array<{
     objectionText: string;
     fear: string;
@@ -89,7 +81,6 @@ export default function LiveCoPilotDashboard() {
   const askedQuestionsRef = useRef<Set<number>>(new Set());
 
   // Prevent unbounded growth during long sessions
-  const MAX_HOT_BUTTONS_HISTORY = 25;
   const MAX_OBJECTIONS_HISTORY = 25;
 
   // Reset asked questions and best scores when prospect type changes (different questions for different types)
@@ -151,62 +142,6 @@ export default function LiveCoPilotDashboard() {
     });
 
     const now = Date.now();
-
-    // Accumulate hot buttons (avoid duplicates by ID, keep most recent)
-    // DEFENSIVE: Ensure hotButtons is always an array
-    const hotButtonsArray = Array.isArray(analysis.hotButtons) ? analysis.hotButtons :
-      (typeof analysis.hotButtons === 'object' && analysis.hotButtons !== null) ? [] : [];
-
-    if (hotButtonsArray.length > 0) {
-      setHotButtonsHistory(prev => {
-        const merged = [...prev];
-        
-        for (const newItem of hotButtonsArray) {
-          const cleanedQuote = cleanQuote(newItem.quote);
-          
-          // Find exact match by ID AND quote (prevent duplicates from same statement)
-          const existingIdx = merged.findIndex(h => 
-            h.id === newItem.id && 
-            h.quote.toLowerCase().trim() === cleanedQuote.toLowerCase().trim()
-          );
-          
-          if (existingIdx >= 0) {
-            // Update existing item: keep original timestamp, update score if higher
-            const existing = merged[existingIdx];
-            if (newItem.score > existing.score) {
-              merged[existingIdx] = {
-                ...existing,
-                score: newItem.score,
-                // Keep original timestamp so order doesn't change
-                timestamp: existing.timestamp
-              };
-            }
-          } else {
-            // Check if this is a duplicate quote with different ID (same statement, different detection)
-            const duplicateIdx = merged.findIndex(h => 
-              h.quote.toLowerCase().trim() === cleanedQuote.toLowerCase().trim()
-            );
-            
-            if (duplicateIdx < 0) {
-              // Truly new item - add with current timestamp at the top
-              merged.unshift({
-                ...newItem,
-                quote: cleanedQuote,
-                timestamp: now
-              });
-          }
-            // If duplicate by quote, ignore it completely
-          }
-        }
-        
-        // Never remove old items - only cap if we exceed max
-        // Sort by timestamp (newest first) for display, but keep all up to max
-        const sorted = merged.sort((a, b) => b.timestamp - a.timestamp);
-        const capped = sorted.slice(0, MAX_HOT_BUTTONS_HISTORY);
-        
-        return capped;
-      });
-    }
 
     // Accumulate objections (avoid duplicates by text similarity)
     // DEFENSIVE: Ensure objections is always an array
@@ -806,76 +741,8 @@ export default function LiveCoPilotDashboard() {
               </div>
             </div>
 
-            {/* Hot Buttons */}
-            <div className="backdrop-blur-xl bg-gray-900/40 border border-gray-700/50 rounded-2xl p-6 flex flex-col" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Sparkles className="w-7 h-7 text-cyan-400" />
-                    <div className="absolute inset-0 blur-md bg-cyan-400/30"></div>
-                  </div>
-                  <h3 className="text-2xl font-bold text-white">Hot Buttons</h3>
-                </div>
-                {hotButtonsHistory.length > 0 && (
-                  <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded-full">
-                    {hotButtonsHistory.length} detected
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-3 overflow-y-auto pr-2 flex-1 custom-scrollbar">
-                {hotButtonsHistory.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <p className="mb-2">No hot buttons detected yet.</p>
-                    <p className="text-sm">Start recording to analyze conversation and detect all 27 indicators.</p>
-                  </div>
-                ) : (
-                  hotButtonsHistory.map((hotButton, idx) => {
-                    // Color based on indicator ID ranges (grouped by pillar)
-                    const colors = [
-                      { bg: 'from-blue-600/20 via-cyan-600/15 to-blue-700/20', border: 'border-cyan-400/40', text: 'text-cyan-400' }, // P1 (1-4)
-                      { bg: 'from-teal-600/20 via-emerald-600/15 to-teal-700/20', border: 'border-teal-400/40', text: 'text-teal-300' }, // P2 (5-8)
-                      { bg: 'from-emerald-600/20 via-green-600/15 to-emerald-700/20', border: 'border-emerald-400/40', text: 'text-emerald-300' }, // P3 (9-12)
-                      { bg: 'from-purple-600/20 via-pink-600/15 to-purple-700/20', border: 'border-purple-400/40', text: 'text-purple-300' }, // P4 (13-16)
-                      { bg: 'from-orange-600/20 via-red-600/15 to-orange-700/20', border: 'border-orange-400/40', text: 'text-orange-300' }, // P5 (17-20)
-                      { bg: 'from-yellow-600/20 via-amber-600/15 to-yellow-700/20', border: 'border-yellow-400/40', text: 'text-yellow-300' }, // P6 (21-23)
-                      { bg: 'from-indigo-600/20 via-blue-600/15 to-indigo-700/20', border: 'border-indigo-400/40', text: 'text-indigo-300' } // P7 (24-27)
-                    ];
-                    const pillarIndex = Math.floor((hotButton.id - 1) / 4) % 7;
-                    const colorSet = colors[pillarIndex] || colors[0];
-
-                    return (
-                      <div
-                        key={`${hotButton.id}-${idx}`}
-                        className={`bg-gradient-to-br ${colorSet.bg} border ${colorSet.border} rounded-lg p-4 shadow-lg`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className={`${colorSet.text} font-bold text-xs tracking-wide`}>
-                            #{hotButton.id} {hotButton.name}
-                          </div>
-                          <div className={`${colorSet.text} text-xs font-semibold`}>
-                            Score: {hotButton.score?.toFixed(1) || 'N/A'}
-                          </div>
-                        </div>
-                        {hotButton.description && (
-                          <p className="text-gray-300 text-xs mb-2">
-                            {hotButton.description}
-                          </p>
-                        )}
-                        <p className="text-gray-100 text-sm italic font-medium mb-2 line-clamp-3">
-                          "{hotButton.quote}"
-                        </p>
-                        {hotButton.prompt && (
-                          <p className="text-gray-300 text-xs mt-2 italic">
-                            💡 {hotButton.prompt}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+            {/* Hot Buttons - Emotional Levers */}
+            <HotButtons emotionalLevers={analysisData?.emotionalLevers} />
           </div>
 
           {/* RIGHT: Live Intel */}

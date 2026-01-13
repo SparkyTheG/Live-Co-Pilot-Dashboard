@@ -16,7 +16,6 @@
 import {
   runAllAgents,
   runAllPillarAgents,
-  runHotButtonsAgent,
   runObjectionsAgentsProgressive,
   runTruthIndexAgent,
   runInsightsAgent
@@ -282,7 +281,7 @@ export async function analyzeConversationProgressive(
   const agentErrors = {};
   const aiAnalysis = {
     indicatorSignals: {},
-    hotButtonDetails: [],
+    emotionalLevers: {},
     objections: [],
     askedQuestions: [],
     detectedRules: [],
@@ -414,25 +413,18 @@ export async function analyzeConversationProgressive(
       lubometerBase = computeLubometer(aiAnalysis.indicatorSignals, pillarWeights);
       emitLubometerIfPossible();
       emitTruthIndexIfPossible();
+      
+      // Calculate emotional levers from the 27 indicators
+      aiAnalysis.emotionalLevers = computeEmotionalLevers(aiAnalysis.indicatorSignals);
+      emit({ emotionalLevers: aiAnalysis.emotionalLevers });
+      console.log('[Engine] Emotional levers calculated from indicators:', aiAnalysis.emotionalLevers);
     })
     .catch((e) => {
       flushStreamGroup('lubometer', { done: true });
       agentErrors.pillars = String(e?.message || e || 'error');
     });
 
-  // Hot Buttons: Only run if we have new text (skip if no new content)
-  const hotButtonsP = tHotButtons 
-    ? runHotButtonsAgent(tHotButtons, makeOnStream('hotButtons'))
-        .then((r) => {
-          flushStreamGroup('hotButtons', { done: true });
-          aiAnalysis.hotButtonDetails = Array.isArray(r?.hotButtonDetails) ? r.hotButtonDetails : [];
-          emit({ hotButtons: normalizeHotButtons(aiAnalysis.hotButtonDetails) });
-        })
-        .catch((e) => {
-          flushStreamGroup('hotButtons', { done: true });
-          agentErrors.hotButtons = String(e?.message || e || 'error');
-        })
-    : Promise.resolve();
+  // Emotional levers are calculated from indicators (no separate hot buttons agent)
 
   // Objections: Only run if we have new text (skip if no new content)
   const objectionsP = tObjections
@@ -491,7 +483,7 @@ export async function analyzeConversationProgressive(
     });
 
   // Wait for all to settle, then build a final unified result (same shape as analyzeConversation)
-  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, insightsP]);
+  await Promise.allSettled([pillarsP, objectionsP, truthP, insightsP]);
 
   const result = await buildFinalResultFromAiAnalysis({
     cleanedTranscript,
@@ -664,6 +656,55 @@ function computeLubometer(indicatorSignals, pillarWeights) {
         ? 'Ask diagnostic questions to sharpen pain and urgency.'
         : 'Do not close yet; deepen pain/urgency and establish trust.';
   return { score, maxScore, level, interpretation, action, pillarScores: pillarAvg, weightsUsed };
+}
+
+/**
+ * Calculate 5 emotional levers from the 27 indicators.
+ * This tells the closer: "Press THIS emotional lever right now."
+ */
+function computeEmotionalLevers(indicatorSignals) {
+  // Helper to get average of indicator range
+  const avg = (start, end) => avgRange(indicatorSignals, start, end);
+  const get = (id) => clamp(toNum(indicatorSignals?.[String(id)]), 0, 10);
+
+  // 1. RISK TOLERANCE (0-10)
+  // Derived from: Pain/Desire (high = willing to act) + Decisiveness (high = ready to commit)
+  // Inverse of fear indicators
+  const painDesire = avg(1, 4); // P1: Pain & Desire
+  const decisiveness = avg(9, 12); // P3: Decisiveness
+  const riskTolerance = clamp((painDesire * 0.4) + (decisiveness * 0.6), 0, 10);
+
+  // 2. FEAR OF FAILURE (0-10)
+  // Derived from: Low Trust (24-27) + Low Decisiveness (9-12) + High Responsibility concerns (17-20)
+  const trust = avg(24, 27); // P7: Trust
+  const responsibility = avg(17, 20); // P5: Responsibility
+  // Inverse trust = fear, low decisiveness = fear, concerns about responsibility = fear
+  const fearOfFailure = clamp((10 - trust) * 0.5 + (10 - decisiveness) * 0.3 + responsibility * 0.2, 0, 10);
+
+  // 3. URGENCY (0-10)
+  // Directly from P2: Urgency indicators (5-8)
+  const urgency = avg(5, 8);
+
+  // 4. FAMILY PRESSURE (0-10)
+  // Derived from: Authority indicators (low authority = need approval from others)
+  // P6 indicators 21-23 relate to authority/decision-making
+  const authority = avg(21, 23); // P6: Authority (price sensitivity actually, but let's check indicator 4 for authority mentions)
+  // Actually, let's look at specific indicators that mention family/spouse
+  // For now, use inverse of decisiveness as proxy (if indecisive, likely needs family approval)
+  const familyPressure = clamp((10 - decisiveness) * 0.7 + (10 - authority) * 0.3, 0, 10);
+
+  // 5. DESIRE FOR CERTAINTY (0-10)  
+  // Derived from: Low Trust (needs proof) + Price Sensitivity (wants guarantees)
+  const priceSensitivity = avg(21, 23); // P6: Price sensitivity (concerns about value)
+  const desireForCertainty = clamp((10 - trust) * 0.6 + priceSensitivity * 0.4, 0, 10);
+
+  return {
+    riskTolerance: Number(riskTolerance.toFixed(1)),
+    fearOfFailure: Number(fearOfFailure.toFixed(1)),
+    urgency: Number(urgency.toFixed(1)),
+    familyPressure: Number(familyPressure.toFixed(1)),
+    desireForCertainty: Number(desireForCertainty.toFixed(1))
+  };
 }
 
 function avgRange(indicatorSignals, a, b) {
@@ -927,7 +968,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
   // Log agent results summary
   console.log(`[Engine] Agent Results Summary:`);
   console.log(`  - Pillars: ${Object.keys(aiAnalysis.indicatorSignals || {}).length} indicators scored`);
-  console.log(`  - Hot Buttons: ${(aiAnalysis.hotButtonDetails || []).length} detected`);
+  console.log(`  - Emotional Levers: ${Object.keys(aiAnalysis.emotionalLevers || {}).length} detected`);
   console.log(`  - Objections: ${(aiAnalysis.objections || []).length} detected`);
   console.log(`  - Diagnostic Questions: ${(aiAnalysis.askedQuestions || []).length} asked`);
   console.log(`  - Truth Index: ${aiAnalysis.overallCoherence || 'unknown'} coherence`);
@@ -942,7 +983,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
     aiRules: aiAnalysis.lubometerPenaltyRules || []
   });
   const truthIndex = computeTruthIndex(aiAnalysis, indicatorSignals, cleanedTranscript);
-  const hotButtons = normalizeHotButtons(aiAnalysis.hotButtonDetails);
+  const emotionalLevers = aiAnalysis.emotionalLevers || {};
   const objections = Array.isArray(aiAnalysis.objections) ? aiAnalysis.objections : [];
   const diagnosticQuestions = normalizeDiagnosticQuestions(aiAnalysis);
 
@@ -968,7 +1009,7 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
       penalties: truthIndex.penalties
     },
     pillars: lubometer.pillarScores,
-    hotButtons,
+    emotionalLevers,
     objections: Array.isArray(objections) ? objections : [],
     dials: extractDials(),
     diagnosticQuestions,
@@ -987,8 +1028,8 @@ async function buildFinalResultFromAiAnalysis({ cleanedTranscript, prospectType,
   console.log(`[Engine] ====== ANALYSIS COMPLETE in ${Date.now() - startTime}ms ======\n`);
 
   // Final defensive check
-  if (!Array.isArray(result.hotButtons)) {
-    result.hotButtons = [];
+  if (!result.emotionalLevers || typeof result.emotionalLevers !== 'object') {
+    result.emotionalLevers = {};
   }
   if (!Array.isArray(result.objections)) {
     result.objections = [];
@@ -1076,7 +1117,7 @@ function getEmptyAnalysis() {
       penalties: []
     },
     pillars: {},
-    hotButtons: [],
+    emotionalLevers: {},
     objections: [],
     dials: {
       urgency: '',

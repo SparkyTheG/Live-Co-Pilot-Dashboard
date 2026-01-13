@@ -561,55 +561,8 @@ export async function runAllPillarAgents(transcript, onStream = null) {
 // AGENT 2: HOT BUTTONS AGENT
 // Output: hotButtonDetails (emotional triggers with quotes)
 // ============================================================================
-export async function runHotButtonsAgent(transcript, onStream = null) {
-  const systemPrompt = `Find emotional triggers from PROSPECT speech in this sales conversation.
-
-CRITICAL RULES:
-- ONLY extract quotes that ACTUALLY APPEAR in the transcript
-- DO NOT paraphrase, invent, or create quotes
-- DO NOT return hot buttons if you cannot find a real quote
-- Quote must be 3-15 words taken DIRECTLY from what the prospect said
-
-INDICATOR IDS (choose most relevant):
-1-4: Pain/Desire (worried, stressed, frustrated, want, need, hope, looking for)
-5-8: Urgency (deadline, auction, soon, running out, can't wait, now)
-9-12: Decisiveness (I decide, ready, let's do it, committed)
-13-16: Money (afford, budget, expensive, cost, investment, financing)
-17-20: Responsibility (my fault, I should, need to fix, responsible for)
-21-23: Price Sensitivity (too much, cheaper, discount, better deal)
-24-27: Trust (not sure, skeptical, prove it, guarantee, really work)
-
-OUTPUT per trigger:
-- id: indicator number 1-27 that best matches the emotion
-- quote: EXACT phrase from transcript (3-15 words, must be verbatim or very close)
-- contextualPrompt: Follow-up question (8 words max)
-- score: 5-9 (5=mild, 7=clear, 9=intense)
-
-Return: {"hotButtonDetails":[{"id":24,"quote":"not sure it will work for me","contextualPrompt":"What would make you confident?","score":7}]}
-Return 1-3 most important triggers with REAL quotes. If no clear emotional triggers with actual quotes, return empty array.`;
-
-  const userPrompt = `Find emotional triggers with EXACT quotes from prospect:\n"${transcript}"`;
-
-  console.log(`[HotButtonsAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
-  // #region debug log - hot buttons duplication
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:555',message:'Hot Buttons Agent Input',data:{transcriptLength:transcript?.length||0,transcriptPreview:transcript?.slice(0,200)||'EMPTY'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'hotbutton-input'})}).catch(()=>{});
-  // #endregion
-  
-  const result = await callAI(systemPrompt, userPrompt, 'HotButtonsAgent', {
-    maxTokens: 400,
-    stream: typeof onStream === 'function',
-    onDelta: (delta, agent) => {
-      try { onStream?.({ agent, delta }); } catch {}
-    }
-  });
-  console.log(`[HotButtonsAgent] OUTPUT: hotButtonDetails=${result?.hotButtonDetails?.length||0}, error=${result?.error||'none'}, keys=${Object.keys(result||{}).join(',')}`);
-  
-  // #region debug log - hot buttons duplication
-  fetch('http://127.0.0.1:7242/ingest/cdfb1a12-ab48-4aa1-805a-5f93e754ce9a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiAgents.js:563',message:'Hot Buttons Agent Output',data:{count:result?.hotButtonDetails?.length||0,hotButtons:result?.hotButtonDetails?.map(h=>({id:h.id,quote:h.quote,score:h.score}))||[]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'hotbutton-output'})}).catch(()=>{});
-  // #endregion
-  
-  return result;
-}
+// Hot Buttons Agent removed - emotional levers are now calculated from the 27 indicators in engine.js
+// This keeps the system consistent and leverages the existing pillar analysis
 
 // ============================================================================
 // UNIFIED ANALYSIS AGENT (single-call, inspired by zero-stress-sales-main)
