@@ -493,12 +493,12 @@ export default function LiveCoPilotDashboard() {
                 onAnalysisUpdate={handleAnalysisUpdate}
                 onRecordingStateChange={(isRecording) => {
                   setIsCallActive(isRecording);
-                  if (isRecording) {
+                  // Only set call start time if it's not already set (first time recording)
+                  if (isRecording && !callStartTime) {
                     setCallStartTime(Date.now());
                     setCallDuration('00:00:00');
-                  } else {
-                    setCallStartTime(null);
                   }
+                  // Don't reset timer when stopping - let it persist for the session
                 }}
               />
 
@@ -569,7 +569,7 @@ export default function LiveCoPilotDashboard() {
             </div>
 
             {/* Call Timer */}
-            <div className="flex items-center justify-center gap-4">
+            <div className="flex flex-col items-center justify-center gap-2">
               <div>
                 <div className="text-sm text-gray-400 mb-1 text-center">Call Duration</div>
                 <div className={`text-4xl font-bold font-mono ${isCallActive ? 'text-emerald-400' : 'text-gray-600'}`}>
@@ -582,6 +582,18 @@ export default function LiveCoPilotDashboard() {
                   </div>
                 )}
               </div>
+              {callStartTime && !isCallActive && (
+                <button
+                  onClick={() => {
+                    setCallStartTime(null);
+                    setCallDuration('00:00:00');
+                  }}
+                  className="text-xs px-3 py-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 rounded transition-colors"
+                  title="Reset call timer"
+                >
+                  Reset Timer
+                </button>
+              )}
             </div>
 
             {/* Real-time Transcript */}

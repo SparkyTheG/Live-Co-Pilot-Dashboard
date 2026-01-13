@@ -1,16 +1,16 @@
 /**
  * Main Analysis Engine - Multi-Agent Architecture
  * 
- * Uses 6 specialized AI agents running in PARALLEL for faster analysis:
+ * Uses 5 specialized AI agents running in PARALLEL for faster analysis:
  * 1. Pillars Agent - Scores 27 indicators (used for Lubometer calculation)
  * 2. Hot Buttons Agent - Extracts emotional triggers with quotes
  * 3. Objections Agent - Detects objections with rebuttals
- * 4. Diagnostic Questions Agent - Tracks which questions were asked
- * 5. Truth Index Agent - Analyzes coherence signals
- * 6. Insights Agent - Generates overall analysis summary
+ * 4. Truth Index Agent - Analyzes coherence signals AND provides penalties for Lubometer
+ * 5. Insights Agent - Generates overall analysis summary
  * 
  * Lubometer and Truth Index CALCULATIONS are done locally (math, not AI)
  * from the Pillars Agent's indicator scores.
+ * Truth Index agent detects T1-T5 contradictions that penalize BOTH systems.
  */
 
 import {
@@ -19,7 +19,6 @@ import {
   runHotButtonsAgent,
   runObjectionsAgentsProgressive,
   runTruthIndexAgent,
-  runLubometerTruthPenaltyAgent,
   runInsightsAgent
 } from './aiAgents.js';
 import fs from 'fs';
@@ -455,8 +454,10 @@ export async function analyzeConversationProgressive(
       if (r?.error) agentErrors.truthIndex = String(r.error);
       // Marker used by computeTruthIndex to decide if agent actually ran
       aiAnalysis.truthIndexFromAgent = !r?.error;
-      // TruthIndex score is already emitted from pillars; don't re-gate it here.
-      // We keep this agent for optional streaming/diagnostics only.
+      // Truth Index agent now ALSO provides penalties for Lubometer
+      aiAnalysis.lubometerPenaltyRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
+      // If pillars already emitted, re-emit lubometer with penalties applied
+      if (pillarsDone) emitLubometerIfPossible();
     })
     .catch((e) => {
       flushStreamGroup('truthIndex', { done: true });
@@ -464,17 +465,9 @@ export async function analyzeConversationProgressive(
       aiAnalysis.truthIndexFromAgent = false;
     });
 
-  const lubometerPenaltyP = runLubometerTruthPenaltyAgent(tTruth, null)
-    .then((r) => {
-      aiAnalysis.lubometerPenaltyRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
-      if (r?.error) agentErrors.lubometerPenalty = String(r.error);
-      // If pillars already emitted, re-emit lubometer with penalties applied.
-      if (pillarsDone) emitLubometerIfPossible();
-    })
-    .catch((e) => {
-      agentErrors.lubometerPenalty = String(e?.message || e || 'error');
-    });
-
+  // Truth Index agent now handles penalties for BOTH Truth Index and Lubometer
+  // No separate Lubometer penalty agent needed
+  
   const insightsP = runInsightsAgent(tInsights, prospectType)
     .then((r) => {
       aiAnalysis.insights = r?.summary || r?.insights || '';
@@ -498,7 +491,7 @@ export async function analyzeConversationProgressive(
     });
 
   // Wait for all to settle, then build a final unified result (same shape as analyzeConversation)
-  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, lubometerPenaltyP, insightsP]);
+  await Promise.allSettled([pillarsP, hotButtonsP, objectionsP, truthP, insightsP]);
 
   const result = await buildFinalResultFromAiAnalysis({
     cleanedTranscript,
