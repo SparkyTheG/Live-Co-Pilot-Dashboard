@@ -502,14 +502,6 @@ export default function LiveCoPilotDashboard() {
                 }}
               />
 
-              {/* Live transcript (from backend) - Scrollable */}
-              <div className="max-w-[520px] px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">
-                <div className="text-xs text-gray-400 mb-1">Live transcript (backend) - scroll to view all</div>
-                <div className="text-sm text-gray-200 leading-snug max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
-                  {liveTranscript || 'Waiting for speech…'}
-                </div>
-              </div>
-
               {/* Truth Index Display */}
               <div className="flex items-center gap-3 px-5 py-3 bg-gray-800/50 border border-gray-700 rounded-xl">
                 <div className="relative">
