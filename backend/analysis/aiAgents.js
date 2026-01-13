@@ -857,36 +857,54 @@ export async function runRebuttalScriptAgent(detectedObjections, customScriptPro
     contextPreview: trimmedContext ? trimmedContext.slice(0, 70) : ''
   });
 
-  const systemPrompt = `Generate REBUTTAL scripts that COUNTER, DISPROVE, or CONTRADICT each objection with evidence and logic.${customContext}
+  const systemPrompt = `Generate REBUTTAL scripts that COUNTER, DISPROVE, or CONTRADICT each objection with logic and reasoning.${customContext}
 
 REBUTTAL DEFINITION:
 A rebuttal is evidence or arguments introduced to counter, disprove, or contradict the opposing party's evidence or argument.
 
 FORMAT (ONE SENTENCE per rebuttal):
-- Present counter-evidence or facts that disprove the objection
 - Use logic and reasoning to contradict their concern
 - Be direct, assertive, and confident (NOT empathetic or soft)
 - Show why their objection is WRONG or based on faulty assumptions
+- Focus on consequences, urgency, or reality checks
+
+CRITICAL - DO NOT FABRICATE STATISTICS:
+❌ NEVER make up specific numbers, percentages, or statistics
+❌ NEVER say things like "90% of users", "$3,000/month savings", "10,000 businesses"
+✅ ALWAYS use qualitative terms: "most clients", "many businesses", "typically", "often"
+✅ ONLY use specific numbers if they appear in the CUSTOM BUSINESS CONTEXT above
 
 EXAMPLES:
 Objection: "I don't have the money"
 ❌ BAD: "I understand money is tight, let's explore options that work for you."
-✅ GOOD: "Most clients who said that ended up saving $3,000/month after our solution covered their mortgage payments."
+❌ BAD: "Most clients saved $3,000/month after implementation." (fabricated number)
+✅ GOOD: "Most clients who said that found the solution actually saved them money by preventing foreclosure costs."
+✅ GOOD: "The cost of doing nothing is typically far higher than taking action now."
 
 Objection: "I need to think about it"
 ❌ BAD: "That's completely natural, take your time to consider."
-✅ GOOD: "The timeline doesn't wait—every day you delay costs you $150 in late fees and drops your credit score further."
+❌ BAD: "Every day costs you $150 in late fees." (fabricated number)
+✅ GOOD: "Thinking time won't stop the foreclosure timeline—every delay makes your options more limited."
+✅ GOOD: "The people who wait usually end up with fewer options and higher costs."
 
 Objection: "I want to talk to my spouse first"
 ❌ BAD: "Of course, family decisions are important."
 ✅ GOOD: "Your spouse will thank you for preventing foreclosure—waiting to discuss it just puts your family home at greater risk."
+✅ GOOD: "Most spouses appreciate decisive action when the home is at stake rather than delayed conversations."
+
+Objection: "I'm confused about your service"
+❌ BAD: "Let me clarify for you, it's quite simple actually."
+❌ BAD: "Our solution simplified processes for 10,000 businesses." (fabricated number)
+✅ GOOD: "Confusion often comes from overthinking—our approach is straightforward and has worked for many clients in your exact situation."
 
 RULES:
 - ONE SENTENCE only (no 2-3 sentences, just ONE)
-- Direct counter-argument with specific evidence/facts/logic
+- Direct counter-argument with logic and reasoning (NO fabricated numbers)
 - Assertive and confident tone (you're the expert)
 - NO empathy phrases like "I understand", "That's valid", "It's natural"
-- If CUSTOM BUSINESS CONTEXT provided, use it to strengthen your rebuttal with domain-specific facts
+- NO made-up statistics or specific numbers unless in CUSTOM BUSINESS CONTEXT
+- Use qualitative language: "most", "many", "typically", "often", "usually"
+- If CUSTOM BUSINESS CONTEXT provided, use its specific facts/numbers
 - Generate a rebuttal for EVERY objection in the list
 
 Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionIndex":1,"rebuttalScript":"..."}]}`;
@@ -1048,9 +1066,9 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   
   const final = detectedObjections.map((obj, idx) => {
     const rebuttal = pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript');
-    // If rebuttal agent failed and no rebuttal found, provide a fallback that matches the assertive rebuttal style
+    // If rebuttal agent failed and no rebuttal found, provide a fallback that's assertive but honest (no fake numbers)
     const fallbackRebuttal = rebuttalFailed && !rebuttal 
-      ? "Every successful client had the same concern initially—what changed their mind was seeing the proven results and realizing the cost of inaction was far greater."
+      ? "Most successful clients had the same concern initially—what changed their mind was realizing the cost of inaction far outweighed taking action."
       : rebuttal || '';
     
     return {
