@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, AlertCircle, Lightbulb, MessageSquare, Target, Sparkles } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface RealTimeObjection {
   objectionText: string;
@@ -14,53 +13,20 @@ interface TopObjectionsProps {
 }
 
 export default function TopObjections({ realTimeObjections }: TopObjectionsProps) {
-  const [expandedObjection, setExpandedObjection] = useState<string | null>(null);
+  // Show only TOP 3 objections, sorted by probability
+  const top3Objections = (realTimeObjections || [])
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, 3);
 
-  const makeStableId = (text: string) => {
-    const t = String(text || '').toLowerCase().trim();
-    // Stable key so expanded state survives resorting and progressive updates.
-    // Keep it short but deterministic.
-    return `obj-${t.replace(/\s+/g, ' ').slice(0, 60)}`;
-  };
-
-  // Use real-time objections only - no static fallback (show all, not limited to 5)
-  const objectionsToDisplay = realTimeObjections && realTimeObjections.length > 0
-    ? realTimeObjections.map((obj) => ({
-        id: makeStableId(obj.objectionText),
-        objectionText: obj.objectionText,
-        probability: Math.round(obj.probability * 100),
-        whatTheyreReallyAfraidOf: obj.fear,
-        reframe: obj.whisper,
-        rebuttalScript: obj.rebuttalScript,
-        controlQuestion: '',
-        whyItWorks: [],
-        advanceQuestion: ''
-      }))
-    : [];
-
-  const getColorClass = (probability: number, type: 'gradient' | 'text' | 'border' | 'glow') => {
-    if (probability >= 80) {
-      return {
-        gradient: 'from-cyan-500 to-teal-500',
-        text: 'text-cyan-400',
-        border: 'border-cyan-400/50',
-        glow: 'shadow-cyan-500/20'
-      }[type];
-    }
-    if (probability >= 70) {
-      return {
-        gradient: 'from-teal-500 to-cyan-500',
-        text: 'text-teal-400',
-        border: 'border-teal-400/50',
-        glow: 'shadow-teal-500/20'
-      }[type];
-    }
-    return {
-      gradient: 'from-blue-500 to-cyan-500',
-      text: 'text-blue-400',
-      border: 'border-blue-400/50',
-      glow: 'shadow-blue-500/20'
-    }[type];
+  // Extract one-sentence versions from multi-sentence content
+  const getFirstSentence = (text: string): string => {
+    if (!text) return '';
+    const cleaned = text.trim();
+    // Split by period, exclamation, or question mark followed by space or end
+    const match = cleaned.match(/^[^.!?]+[.!?](?:\s|$)/);
+    if (match) return match[0].trim();
+    // If no sentence ending found, take first 100 chars
+    return cleaned.length > 100 ? cleaned.slice(0, 97) + '...' : cleaned;
   };
 
   return (
@@ -69,167 +35,128 @@ export default function TopObjections({ realTimeObjections }: TopObjectionsProps
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Sparkles className="w-7 h-7 text-cyan-400" />
-            <div className="absolute inset-0 blur-md bg-cyan-400/30"></div>
+            <AlertTriangle className="w-7 h-7 text-red-400" />
+            <div className="absolute inset-0 blur-md bg-red-400/30"></div>
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Top Objections</h2>
-            <p className="text-sm text-gray-400 mt-1">Objections with handling strategies</p>
+            <h2 className="text-2xl font-bold text-white">Top Objections Right Now</h2>
+            <p className="text-sm text-gray-400 mt-1">Live predicted objections</p>
           </div>
         </div>
-        {objectionsToDisplay.length > 0 && (
+        {top3Objections.length > 0 && (
           <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded-full">
-            {objectionsToDisplay.length} detected
+            Top {top3Objections.length}
           </span>
         )}
       </div>
 
-      {/* Objections List - Scrollable */}
-      <div className="space-y-3 overflow-y-auto pr-2 flex-1 custom-scrollbar">
-        {objectionsToDisplay.length === 0 && (
-          <div className="text-center py-8 text-gray-400">
-            No objections detected yet. Start recording to see real-time analysis.
+      {/* Top 3 Objections List */}
+      <div className="space-y-4 overflow-y-auto pr-2 flex-1 custom-scrollbar">
+        {top3Objections.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="mb-2">No objections detected yet.</p>
+            <p className="text-sm">Start recording to see live predictions.</p>
           </div>
+        ) : (
+          top3Objections.map((objection, index) => {
+            const probability = Math.round(objection.probability * 100);
+            
+            // Color coding based on probability
+            const getColor = () => {
+              if (probability >= 80) return {
+                bg: 'from-red-600/20 to-orange-600/20',
+                border: 'border-red-400/50',
+                text: 'text-red-400',
+                badge: 'bg-red-500/20 text-red-300'
+              };
+              if (probability >= 70) return {
+                bg: 'from-orange-600/20 to-yellow-600/20',
+                border: 'border-orange-400/50',
+                text: 'text-orange-400',
+                badge: 'bg-orange-500/20 text-orange-300'
+              };
+              return {
+                bg: 'from-yellow-600/20 to-amber-600/20',
+                border: 'border-yellow-400/50',
+                text: 'text-yellow-400',
+                badge: 'bg-yellow-500/20 text-yellow-300'
+              };
+            };
+            
+            const color = getColor();
+
+            return (
+              <div
+                key={`objection-${index}`}
+                className={`bg-gradient-to-br ${color.bg} border-2 ${color.border} rounded-xl p-5 shadow-lg transition-all duration-300 hover:shadow-xl`}
+              >
+                {/* Objection Title with Rank */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-full ${color.badge} flex items-center justify-center font-bold text-lg`}>
+                      {index + 1}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={`text-lg font-bold ${color.text} leading-tight`}>
+                        {objection.objectionText}
+                      </h3>
+                    </div>
+                  </div>
+                  <div className={`flex-shrink-0 px-3 py-1 ${color.badge} rounded-full text-sm font-bold ml-3`}>
+                    {probability}%
+                  </div>
+                </div>
+
+                {/* Three Key Insights */}
+                <div className="space-y-3">
+                  {/* Diagnosis (Fear) */}
+                  <div className="flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-cyan-400 mt-2 flex-shrink-0"></div>
+                    <div className="flex-1">
+                      <span className="text-cyan-300 font-semibold text-xs uppercase tracking-wide">Diagnosis:</span>
+                      <p className="text-gray-200 text-sm mt-1">
+                        {getFirstSentence(objection.fear) || 'Fear not identified yet'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Emotional Driver (Whisper) */}
+                  <div className="flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-purple-400 mt-2 flex-shrink-0"></div>
+                    <div className="flex-1">
+                      <span className="text-purple-300 font-semibold text-xs uppercase tracking-wide">Emotional Driver:</span>
+                      <p className="text-gray-200 text-sm italic mt-1">
+                        {getFirstSentence(objection.whisper) || 'Analyzing emotional state...'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Rebuttal */}
+                  <div className="flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-emerald-400 mt-2 flex-shrink-0"></div>
+                    <div className="flex-1">
+                      <span className="text-emerald-300 font-semibold text-xs uppercase tracking-wide">Rebuttal:</span>
+                      <p className="text-gray-200 text-sm mt-1 font-medium">
+                        {getFirstSentence(objection.rebuttalScript) || 'Generating rebuttal...'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
         )}
-        {objectionsToDisplay.map((objection, index) => (
-          <div
-            key={objection.id}
-            className={`bg-gray-800/40 border-2 rounded-xl transition-all duration-300 ${
-              expandedObjection === objection.id
-                ? `${getColorClass(objection.probability, 'border')} shadow-lg ${getColorClass(objection.probability, 'glow')}`
-                : 'border-gray-700/40 hover:border-gray-600/60'
-            }`}
-          >
-            {/* Objection Header */}
-            <button
-              onClick={() => setExpandedObjection(expandedObjection === objection.id ? null : objection.id)}
-              className="w-full p-4 text-left"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-start gap-3 flex-1">
-                  <span className={`text-2xl font-bold ${getColorClass(objection.probability, 'text')}`}>
-                    #{index + 1}
-                  </span>
-                  <div className="flex-1">
-                    <span className="text-white font-medium text-lg">{objection.objectionText}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">Probability:</span>
-                      <span className={`text-sm font-bold ${getColorClass(objection.probability, 'text')}`}>
-                        {objection.probability}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-lg font-bold ${getColorClass(objection.probability, 'text')}`}>
-                    {objection.probability}%
-                  </span>
-                  {expandedObjection === objection.id ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
-              </div>
-
-              {/* Probability Bar */}
-              <div className="w-full bg-gray-800/50 rounded-full h-2 overflow-hidden">
-                <div
-                  className={`h-full bg-gradient-to-r ${getColorClass(objection.probability, 'gradient')} transition-all duration-500`}
-                  style={{ width: `${objection.probability}%` }}
-                ></div>
-              </div>
-            </button>
-
-                {/* Expanded Content */}
-            {expandedObjection === objection.id && (
-              <div className="px-4 pb-4 space-y-4 animate-slide-down">
-                {/* What They're Really Afraid Of */}
-                  <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-cyan-300 font-bold text-sm mb-1">What They're Really Afraid Of:</h4>
-                      <p className="text-gray-300 text-sm">
-                        {objection.whatTheyreReallyAfraidOf || 'Generating…'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Reframe / Whisper */}
-                  <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <Lightbulb className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-blue-300 font-bold text-sm mb-1">Whisper / Reframe:</h4>
-                      <p className="text-gray-300 text-sm italic">
-                        {objection.reframe || 'Generating…'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Rebuttal Script */}
-                  <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <MessageSquare className="w-5 h-5 text-teal-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-teal-300 font-bold text-sm mb-2">Rebuttal Script:</h4>
-                        <p className="text-gray-200 text-sm leading-relaxed bg-gray-900/40 p-3 rounded border border-teal-400/20">
-                        "{objection.rebuttalScript || 'Generating…'}"
-                        </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Control Question */}
-                {objection.controlQuestion && (
-                  <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-400/30 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <Target className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-blue-300 font-bold text-sm mb-2">Control Question:</h4>
-                        <p className="text-gray-200 text-sm italic">"{objection.controlQuestion}"</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Why It Works */}
-                {objection.whyItWorks && objection.whyItWorks.length > 0 && (
-                  <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-400/30 rounded-lg p-4">
-                    <h4 className="text-green-300 font-bold text-sm mb-2">Why It Works:</h4>
-                    <ul className="space-y-1">
-                      {objection.whyItWorks.map((reason, idx) => (
-                        <li key={idx} className="text-gray-300 text-sm flex items-start gap-2">
-                          <span className="text-green-400 mt-0.5">✓</span>
-                          <span>{reason}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Advance Question */}
-                {objection.advanceQuestion && (
-                  <div className="bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border border-teal-400/30 rounded-lg p-4">
-                    <h4 className="text-teal-300 font-bold text-sm mb-2">Advance Question:</h4>
-                    <p className="text-gray-200 text-sm italic">"{objection.advanceQuestion}"</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
       </div>
 
-      {/* Training Note */}
-      <div className="mt-6 p-4 bg-gradient-to-r from-cyan-500/10 to-teal-500/10 border border-cyan-400/30 rounded-xl">
-        <p className="text-cyan-300 text-sm font-medium">
-          💡 <span className="font-bold">Training Tip:</span> You're not overcoming objections — you're resolving fear with structure and clarity.
-        </p>
-      </div>
+      {/* Whispering Angel Tagline */}
+      {top3Objections.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-700/50">
+          <p className="text-xs text-gray-500 text-center italic">
+            💡 <span className="text-gray-400">The whispering angel — making weak closers look dangerous</span>
+          </p>
+        </div>
+      )}
     </div>
   );
 }
