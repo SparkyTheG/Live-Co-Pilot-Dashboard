@@ -378,9 +378,19 @@ export default function LiveCoPilotDashboard() {
 
   // Use real analysis data only - no mock/calculated fallbacks
 
+  // Calculate maxScore from pillar weights (so it updates immediately when weights change in Admin Panel)
+  const calculateMaxScoreFromWeights = () => {
+    const weights = settings.pillarWeights || [];
+    let maxScore = 0;
+    for (const pillar of weights) {
+      maxScore += (pillar.weight || 1) * 10;
+    }
+    return Math.round(maxScore) || 90; // Fallback to 90 if weights are missing
+  };
+
   // Only use real lubometer score from analysis
-  // Use dynamic maxScore from backend (defaults to 90 if not provided)
-  const lubometerMaxScore = analysisData?.lubometer?.maxScore || 90;
+  // Use maxScore from backend analysis if available, otherwise calculate from current weights
+  const lubometerMaxScore = analysisData?.lubometer?.maxScore || calculateMaxScoreFromWeights();
   const lubometerScoreRaw = analysisData?.lubometer?.score ?? 0;
   const completionPercentage = lubometerScoreRaw > 0
     ? Math.round((lubometerScoreRaw / lubometerMaxScore) * 100)
