@@ -857,20 +857,39 @@ export async function runRebuttalScriptAgent(detectedObjections, customScriptPro
     contextPreview: trimmedContext ? trimmedContext.slice(0, 70) : ''
   });
 
-  const systemPrompt = `Generate empathetic rebuttal scripts (2-3 sentences each).${customContext}
+  const systemPrompt = `Generate REBUTTAL scripts that COUNTER, DISPROVE, or CONTRADICT each objection with evidence and logic.${customContext}
 
-FORMAT:
-1. Start with empathy: "I understand..." / "That's valid..." / "It's natural..."
-2. Acknowledge concern genuinely
-3. Provide value/next step
+REBUTTAL DEFINITION:
+A rebuttal is evidence or arguments introduced to counter, disprove, or contradict the opposing party's evidence or argument.
+
+FORMAT (ONE SENTENCE per rebuttal):
+- Present counter-evidence or facts that disprove the objection
+- Use logic and reasoning to contradict their concern
+- Be direct, assertive, and confident (NOT empathetic or soft)
+- Show why their objection is WRONG or based on faulty assumptions
+
+EXAMPLES:
+Objection: "I don't have the money"
+❌ BAD: "I understand money is tight, let's explore options that work for you."
+✅ GOOD: "Most clients who said that ended up saving $3,000/month after our solution covered their mortgage payments."
+
+Objection: "I need to think about it"
+❌ BAD: "That's completely natural, take your time to consider."
+✅ GOOD: "The timeline doesn't wait—every day you delay costs you $150 in late fees and drops your credit score further."
+
+Objection: "I want to talk to my spouse first"
+❌ BAD: "Of course, family decisions are important."
+✅ GOOD: "Your spouse will thank you for preventing foreclosure—waiting to discuss it just puts your family home at greater risk."
 
 RULES:
-- If CUSTOM BUSINESS CONTEXT is provided, you MUST adapt the rebuttal to fit that business (industry, offer type, positioning).
-- Do NOT literally repeat the context line verbatim; weave it naturally into the rebuttal (e.g., reference the relevant domain, outcomes, or approach).
-- Keep each rebuttal 2-3 sentences, confident, and non-pushy.
-- IMPORTANT: Generate a rebuttal for EVERY objection in the list below.
+- ONE SENTENCE only (no 2-3 sentences, just ONE)
+- Direct counter-argument with specific evidence/facts/logic
+- Assertive and confident tone (you're the expert)
+- NO empathy phrases like "I understand", "That's valid", "It's natural"
+- If CUSTOM BUSINESS CONTEXT provided, use it to strengthen your rebuttal with domain-specific facts
+- Generate a rebuttal for EVERY objection in the list
 
-Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionIndex":1,"rebuttalScript":"..."},{"objectionIndex":2,"rebuttalScript":"..."}]}`;
+Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionIndex":1,"rebuttalScript":"..."}]}`;
 
   const userPrompt = `Generate rebuttals for ALL ${detectedObjections.length} objections:\n${objectionsList}`;
 
@@ -1029,9 +1048,9 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   
   const final = detectedObjections.map((obj, idx) => {
     const rebuttal = pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript');
-    // If rebuttal agent failed and no rebuttal found, provide a generic fallback instead of empty string
+    // If rebuttal agent failed and no rebuttal found, provide a fallback that matches the assertive rebuttal style
     const fallbackRebuttal = rebuttalFailed && !rebuttal 
-      ? "I understand your concern. Let me address that - this is something many people initially worry about, but here's what makes this different..."
+      ? "Every successful client had the same concern initially—what changed their mind was seeing the proven results and realizing the cost of inaction was far greater."
       : rebuttal || '';
     
     return {
