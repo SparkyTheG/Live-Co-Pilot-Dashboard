@@ -203,8 +203,7 @@ export async function analyzeConversationProgressive(
   customScriptPrompt = '',
   pillarWeights = null,
   onPartial = null,
-  newTextOnly = null, // Optional: only new text for hot buttons/objections to avoid re-detection
-  memoryContext = null // Optional: compact "memory" object/string for hour-long calls
+  newTextOnly = null // Optional: only new text for hot buttons/objections to avoid re-detection
 ) {
   const startTime = Date.now();
 
@@ -214,22 +213,6 @@ export async function analyzeConversationProgressive(
 
   const cleanedTranscript = cleanTranscriptForAI(transcript);
   const prospectType = prospectTypeOverride || 'foreclosure';
-
-  const formatMemoryForPrompt = (mem) => {
-    if (!mem) return '';
-    if (typeof mem === 'string') return mem.trim().slice(0, 1600);
-    if (typeof mem !== 'object') return String(mem || '').trim().slice(0, 1600);
-    try {
-      const runningSummary = Array.isArray(mem.runningSummary) ? mem.runningSummary.slice(-20) : [];
-      const facts = mem.facts && typeof mem.facts === 'object' ? mem.facts : {};
-      const contradictions = Array.isArray(mem.contradictions) ? mem.contradictions.slice(-10) : [];
-      const compact = { runningSummary, facts, contradictions };
-      return JSON.stringify(compact).slice(0, 1600);
-    } catch {
-      return '';
-    }
-  };
-  const memForAgents = formatMemoryForPrompt(memoryContext);
 
   // Small rolling windows per agent (stable latency)
   // Pillars drive Lubometer + Truth Index (deterministic). Give a bit more context so
@@ -415,7 +398,7 @@ export async function analyzeConversationProgressive(
     });
   };
 
-  const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'), memForAgents)
+  const pillarsP = runAllPillarAgents(tPillars, makeOnStream('lubometer'))
     .then((r) => {
       flushStreamGroup('lubometer', { done: true });
       aiAnalysis.indicatorSignals = r?.indicatorSignals || {};
@@ -463,7 +446,7 @@ export async function analyzeConversationProgressive(
         })
     : Promise.resolve();
 
-  const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'), memForAgents)
+  const truthP = runTruthIndexAgent(tTruth, makeOnStream('truthIndex'))
     .then((r) => {
       flushStreamGroup('truthIndex', { done: true });
       aiAnalysis.detectedRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
@@ -481,7 +464,7 @@ export async function analyzeConversationProgressive(
       aiAnalysis.truthIndexFromAgent = false;
     });
 
-  const lubometerPenaltyP = runLubometerTruthPenaltyAgent(tTruth, null, memForAgents)
+  const lubometerPenaltyP = runLubometerTruthPenaltyAgent(tTruth, null)
     .then((r) => {
       aiAnalysis.lubometerPenaltyRules = Array.isArray(r?.detectedRules) ? r.detectedRules : [];
       if (r?.error) agentErrors.lubometerPenalty = String(r.error);

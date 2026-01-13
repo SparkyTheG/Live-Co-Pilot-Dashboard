@@ -171,7 +171,7 @@ export default function LiveCoPilotDashboard() {
                 quote: cleanedQuote,
                 timestamp: now
               });
-            }
+          }
             // If duplicate by quote, ignore it completely
           }
         }
@@ -307,7 +307,7 @@ export default function LiveCoPilotDashboard() {
         asked: currentAskedArray,
         total: merged.diagnosticQuestions?.total || questions.length,
         completion: merged.diagnosticQuestions?.completion || 0
-      };
+    };
 
       return merged;
     });
@@ -618,7 +618,7 @@ export default function LiveCoPilotDashboard() {
                               {q.question}
                             </div>
                             {q.why && (
-                              <div className="text-sm text-gray-400 mb-2 italic">{q.why}</div>
+                            <div className="text-sm text-gray-400 mb-2 italic">{q.why}</div>
                             )}
                             <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${categoryColors[q.category] || categoryColors.situation}`}>
                               {(q as any).badgeText || categoryLabels[q.category] || 'Category'}
@@ -647,7 +647,7 @@ export default function LiveCoPilotDashboard() {
                   <p className="text-sm text-gray-400">Prospect readiness level</p>
                 </div>
               </div>
-              
+
               {/* Readiness Score */}
               <div className="text-center mb-6">
                 <div className={`text-6xl font-bold bg-gradient-to-r ${lubometerColor.gradient} bg-clip-text text-transparent mb-2`}>

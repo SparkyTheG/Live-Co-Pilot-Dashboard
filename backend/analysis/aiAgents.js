@@ -204,93 +204,11 @@ async function callAI(systemPrompt, userPrompt, agentName, maxTokensOrOptions = 
 }
 
 // ============================================================================
-// MEMORY HELPERS + MEMORY AGENT (hour-long context)
-// ============================================================================
-function normalizeMemoryForPrompt(memoryContext) {
-  if (!memoryContext) return '';
-  if (typeof memoryContext === 'string') return memoryContext.trim();
-  try {
-    return JSON.stringify(memoryContext);
-  } catch {
-    return String(memoryContext || '').trim();
-  }
-}
-
-/**
- * MEMORY AGENT
- * Incrementally updates a compact per-call memory object from NEW transcript chunks.
- * This runs in the 'aux' pool so it never starves the real-time analysis agents.
- */
-export async function runMemoryAgent(previousMemory, newTranscriptChunk, prospectType = '') {
-  const prev = previousMemory && typeof previousMemory === 'object' ? previousMemory : null;
-  const chunk = String(newTranscriptChunk || '').trim();
-  const pt = String(prospectType || '').trim();
-
-  const systemPrompt = `You maintain a compact, structured "memory" for a long sales call.
-
-You will be given:
-- previousMemory: prior memory JSON (may be null)
-- newTranscriptChunk: NEW transcript text since last update (about ~5000 chars)
-
-Your job:
-- Update the memory to reflect the conversation so far
-- Preserve already-known facts unless contradicted by newer text
-- If contradictions appear, record them in contradictions[]
-
-CRITICAL RULES:
-- Return ONLY valid JSON (no markdown, no commentary).
-- Keep memory SMALL and stable. Do NOT bloat.
-- Do NOT invent quotes. If you include a quote in contradictions evidence, it MUST be present in the new transcript chunk.
-- Prefer "unknown" over guessing.
-
-OUTPUT SCHEMA (return exactly these top-level keys):
-{
-  "runningSummary": ["bullet", "..."],        // 10-25 bullets max, <= 18 words each
-  "facts": {                                  // small structured facts; keep keys stable
-    "propertyOccupancy": "unknown|owner_occupied|tenant|vacant",
-    "ownershipStatus": "unknown|owner|not_owner|unclear",
-    "timeline": "unknown|immediate|weeks|months|no_rush",
-    "financialSituation": "unknown|behind_on_payments|current|unclear",
-    "decisionMaker": "unknown|self|spouse|partner|other",
-    "motivation": "unknown|high|medium|low",
-    "keyConstraints": ["..."]                 // 0-6 items
-  },
-  "contradictions": [
-    {
-      "topic": "string",
-      "earlierClaim": "string",
-      "laterClaim": "string",
-      "evidenceQuotes": ["verbatim quote from new chunk", "optional second quote"],
-      "severity": 1-5
-    }
-  ],
-  "updatedAt": "ISO-8601 timestamp"
-}`;
-
-  const userPrompt = `prospectType: ${pt || 'unknown'}
-
-previousMemory (may be null):
-${prev ? JSON.stringify(prev) : 'null'}
-
-newTranscriptChunk (NEW text only):
-${chunk}
-`;
-
-  return await callAI(systemPrompt, userPrompt, 'MemoryAgent', {
-    maxTokens: 900,
-    timeoutMs: 9000,
-    pool: 'aux'
-  });
-}
-
-// ============================================================================
 // AGENT: LUBOMETER TRUTH PENALTY AGENT (T1-T5 from Truth Index CSV)
 // Detects the same 5 incoherence rules, but intended to apply as penalties to Lubometer.
 // Output: detectedRules (T1-T5 with evidence)
 // ============================================================================
-export async function runLubometerTruthPenaltyAgent(transcript, onStream = null, memoryContext = null) {
-  const mem = normalizeMemoryForPrompt(memoryContext);
-
+export async function runLubometerTruthPenaltyAgent(transcript, onStream = null) {
   const systemPrompt = `Detect which Truth Index CSV penalties apply based on the PROSPECT's language.
 
 Rules (apply ONLY these 5):
@@ -313,7 +231,6 @@ Return format:
 }`;
 
   const userPrompt = `You are analyzing a long sales call transcript.
-${mem ? `\nMEMORY (facts/contradictions so far):\n${mem}\n` : ''}
 
 TRANSCRIPT:
 "${String(transcript || '')}"
@@ -406,7 +323,7 @@ Return {"speaker":"closer"} OR {"speaker":"prospect"} OR {"speaker":"unknown"}`;
  * P1 AGENT: Pain & Desire (indicators 1-4)
  * Weight: 1.5x - MOST IMPORTANT
  */
-async function runP1Agent(transcript, onStream = null, memoryContext = null) {
+async function runP1Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 1: PAIN & DESIRE from prospect statements.
 
 INDICATORS (1-10 scale):
@@ -424,10 +341,7 @@ WHAT TO LOOK FOR:
 
 Return ONLY: {"1":6,"2":5,"3":7,"4":6}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score:\n"${transcript}"`;
+  const userPrompt = `Score:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P1-PainDesire', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -440,7 +354,7 @@ Return ONLY: {"1":6,"2":5,"3":7,"4":6}`;
 /**
  * P2 AGENT: Urgency (indicators 5-8)
  */
-async function runP2Agent(transcript, onStream = null, memoryContext = null) {
+async function runP2Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 2: URGENCY from prospect speech.
 
 INDICATORS (1-10 scale):
@@ -457,10 +371,7 @@ WHAT TO LOOK FOR:
 
 Return ONLY: {"5":6,"6":5,"7":7,"8":6}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score:\n"${transcript}"`;
+  const userPrompt = `Score:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P2-Urgency', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -473,7 +384,7 @@ Return ONLY: {"5":6,"6":5,"7":7,"8":6}`;
 /**
  * P3 AGENT: Decisiveness (indicators 9-12)
  */
-async function runP3Agent(transcript, onStream = null, memoryContext = null) {
+async function runP3Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 3: DECISIVENESS from prospect speech.
 
 INDICATORS (1-10 scale):
@@ -489,10 +400,7 @@ WHAT TO LOOK FOR:
 
 Return ONLY: {"9":6,"10":5,"11":7,"12":6}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score:\n"${transcript}"`;
+  const userPrompt = `Score:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P3-Decisiveness', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -506,7 +414,7 @@ Return ONLY: {"9":6,"10":5,"11":7,"12":6}`;
  * P4 AGENT: Money (indicators 13-16)
  * Weight: 1.5x - MOST IMPORTANT
  */
-async function runP4Agent(transcript, onStream = null, memoryContext = null) {
+async function runP4Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 4: AVAILABLE MONEY indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -524,10 +432,7 @@ WHAT TO LOOK FOR:
 Score generously for clear signals. This pillar has 1.5x weight.
 Return ONLY: {"13":7,"14":6,"15":8,"16":7}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score Money indicators:\n"${transcript}"`;
+  const userPrompt = `Score Money indicators:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P4-Money', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -540,7 +445,7 @@ Return ONLY: {"13":7,"14":6,"15":8,"16":7}`;
 /**
  * P5 AGENT: Responsibility (indicators 17-20)
  */
-async function runP5Agent(transcript, onStream = null, memoryContext = null) {
+async function runP5Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 5: RESPONSIBILITY & OWNERSHIP indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -559,10 +464,7 @@ WHAT TO LOOK FOR:
 Score generously for clear signals. If prospect shows confusion, score indicators 17-20 as 1-4. If prospect admits to lying or contradicting themselves, score indicators 17-20 as 1-3.
 Return ONLY: {"17":6,"18":7,"19":5,"20":6}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score Responsibility indicators:\n"${transcript}"`;
+  const userPrompt = `Score Responsibility indicators:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P5-Responsibility', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -576,7 +478,7 @@ Return ONLY: {"17":6,"18":7,"19":5,"20":6}`;
  * P6 AGENT: Price Sensitivity (indicators 21-23)
  * NOTE: This pillar is REVERSE SCORED - LOW scores are GOOD
  */
-async function runP6Agent(transcript, onStream = null, memoryContext = null) {
+async function runP6Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 6: PRICE SENSITIVITY indicators (1-10) from PROSPECT statements.
 
 ⚠️ REVERSE SCORING: For this pillar, LOW scores (1-3) are GOOD, HIGH scores (7-10) are BAD
@@ -599,10 +501,7 @@ IMPORTANT: Any mention of "expensive" should score indicators 21-22 as 8-9 minim
 
 Return ONLY: {"21":4,"22":3,"23":5}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score Price Sensitivity indicators:\n"${transcript}"`;
+  const userPrompt = `Score Price Sensitivity indicators:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P6-PriceSensitivity', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -615,7 +514,7 @@ Return ONLY: {"21":4,"22":3,"23":5}`;
 /**
  * P7 AGENT: Trust (indicators 24-27)
  */
-async function runP7Agent(transcript, onStream = null, memoryContext = null) {
+async function runP7Agent(transcript, onStream = null) {
   const systemPrompt = `Score PILLAR 7: TRUST indicators (1-10) from PROSPECT statements.
 
 INDICATORS TO SCORE:
@@ -633,10 +532,7 @@ WHAT TO LOOK FOR:
 Score generously for clear signals.
 Return ONLY: {"24":6,"25":7,"26":5,"27":6}`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
-  const userPrompt = mem
-    ? `CONVERSATION MEMORY (most important facts so far):\n${mem}\n\nRECENT TRANSCRIPT:\n"${transcript}"`
-    : `Score Trust indicators:\n"${transcript}"`;
+  const userPrompt = `Score Trust indicators:\n"${transcript}"`;
   return await callAI(systemPrompt, userPrompt, 'P7-Trust', {
     maxTokens: 150,
     stream: typeof onStream === 'function',
@@ -650,19 +546,19 @@ Return ONLY: {"24":6,"25":7,"26":5,"27":6}`;
  * RUN ALL 7 PILLAR AGENTS IN PARALLEL
  * Combines results into single indicatorSignals object
  */
-export async function runAllPillarAgents(transcript, onStream = null, memoryContext = null) {
+export async function runAllPillarAgents(transcript, onStream = null) {
   console.log(`[Lubometer] Starting 7 pillar agents in parallel...`);
   const startTime = Date.now();
 
   // Run all 7 pillar agents in parallel
   const [p1, p2, p3, p4, p5, p6, p7] = await Promise.all([
-    runP1Agent(transcript, onStream, memoryContext),
-    runP2Agent(transcript, onStream, memoryContext),
-    runP3Agent(transcript, onStream, memoryContext),
-    runP4Agent(transcript, onStream, memoryContext),
-    runP5Agent(transcript, onStream, memoryContext),
-    runP6Agent(transcript, onStream, memoryContext),
-    runP7Agent(transcript, onStream, memoryContext)
+    runP1Agent(transcript, onStream),
+    runP2Agent(transcript, onStream),
+    runP3Agent(transcript, onStream),
+    runP4Agent(transcript, onStream),
+    runP5Agent(transcript, onStream),
+    runP6Agent(transcript, onStream),
+    runP7Agent(transcript, onStream)
   ]);
 
   // Combine all indicator scores
@@ -1198,7 +1094,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 // Detects the 5 specific incoherence rules from Truth Index CSV
 // Output: detectedRules (T1-T5 with evidence), coherenceSignals, overallCoherence
 // ============================================================================
-export async function runTruthIndexAgent(transcript, onStream = null, memoryContext = null) {
+export async function runTruthIndexAgent(transcript, onStream = null) {
   const systemPrompt = `Detect INCOHERENCE patterns (contradictions) in prospect's statements.
 
 You must detect which of these 5 specific rules (from the Truth Index CSV) apply:
@@ -1244,7 +1140,6 @@ Return format:
 
 If NO contradictions found, return empty detectedRules array.`;
 
-  const mem = normalizeMemoryForPrompt(memoryContext);
   const userPrompt = `CONVERSATION CONTEXT:
 This is a sales conversation about real estate investment services. The closer is trying to help a prospect who may be facing foreclosure, behind on payments, or looking to sell their property.
 
@@ -1255,8 +1150,6 @@ KEY FACTS TO WATCH FOR CONTRADICTIONS:
 - Whether they're behind on payments
 - Whether they need to sell urgently
 - Whether they make decisions or need approval
-
-${mem ? `\nCONVERSATION MEMORY (facts + contradictions so far):\n${mem}\n` : ''}
 
 TRANSCRIPT TO ANALYZE:
 "${transcript}"
