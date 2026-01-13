@@ -8,12 +8,14 @@ interface RecordingButtonProps {
   prospectType: string;
   onTranscriptUpdate?: (transcript: string) => void;
   onAnalysisUpdate?: (analysis: any) => void;
+  onRecordingStateChange?: (isRecording: boolean) => void;
 }
 
 export default function RecordingButton({
   prospectType,
   onTranscriptUpdate,
-  onAnalysisUpdate
+  onAnalysisUpdate,
+  onRecordingStateChange
 }: RecordingButtonProps) {
   const { session } = useAuth();
   // Get admin settings (custom script prompt + pillar weights)
@@ -311,6 +313,7 @@ export default function RecordingButton({
         setIsRecording(true);
         isRecordingRef.current = true;
         setIsConnecting(false);
+        onRecordingStateChange?.(true);
         console.log('✅ ElevenLabs Scribe streaming started (PCM16@16k)', { inSampleRate });
               return;
             }
@@ -385,6 +388,7 @@ export default function RecordingButton({
       setIsRecording(true);
       isRecordingRef.current = true;
       setIsConnecting(false);
+      onRecordingStateChange?.(true);
     } catch (err: any) {
       console.error('Error starting recording:', err);
       const errorMessage = err.message || 'Failed to start recording';
@@ -400,6 +404,7 @@ export default function RecordingButton({
       setIsConnecting(false);
       setIsRecording(false);
       isRecordingRef.current = false;
+      onRecordingStateChange?.(false);
     }
   };
 
@@ -461,6 +466,7 @@ export default function RecordingButton({
     }
 
     setIsRecording(false);
+    onRecordingStateChange?.(false);
     console.log('✅ Frontend: Recording stopped and cleaned up');
   };
 

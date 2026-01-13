@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CheckCircle2, Circle, Target, Gauge, Sparkles, Shield } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Gauge, Sparkles, Shield, Mic } from 'lucide-react';
 import { ProspectType } from '../data/coPilotData';
 import { diagnosticQuestions } from '../data/diagnosticQuestions';
 import { useSettings } from '../contexts/SettingsContext';
@@ -59,6 +59,9 @@ export default function LiveCoPilotDashboard() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [questionStates, setQuestionStates] = useState<Record<number, { asked: boolean }>>({});
   const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [isCallActive, setIsCallActive] = useState<boolean>(false);
+  const [callStartTime, setCallStartTime] = useState<number | null>(null);
+  const [callDuration, setCallDuration] = useState<string>('00:00:00');
   const { settings } = useSettings();
 
   // Accumulated history for hot buttons and objections (persists across updates)
@@ -101,6 +104,26 @@ export default function LiveCoPilotDashboard() {
   useEffect(() => {
     askedQuestionsRef.current = askedQuestionsHistory;
   }, [askedQuestionsHistory]);
+
+  // Call timer - updates every second when call is active
+  useEffect(() => {
+    if (!isCallActive || !callStartTime) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - callStartTime;
+      const hours = Math.floor(elapsed / 3600000);
+      const minutes = Math.floor((elapsed % 3600000) / 60000);
+      const seconds = Math.floor((elapsed % 60000) / 1000);
+      
+      setCallDuration(
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isCallActive, callStartTime]);
 
   // Get questions for this prospect type (render + validation)
   // IMPORTANT: Dashboard renderer expects { question, why, category }.
@@ -468,6 +491,15 @@ export default function LiveCoPilotDashboard() {
                   });
                 }}
                 onAnalysisUpdate={handleAnalysisUpdate}
+                onRecordingStateChange={(isRecording) => {
+                  setIsCallActive(isRecording);
+                  if (isRecording) {
+                    setCallStartTime(Date.now());
+                    setCallDuration('00:00:00');
+                  } else {
+                    setCallStartTime(null);
+                  }
+                }}
               />
 
               {/* Live transcript (from backend) - Scrollable */}
@@ -516,6 +548,56 @@ export default function LiveCoPilotDashboard() {
                 </div>
                 <div className="text-sm text-gray-400">
                   {analysisData ? 'Analysis Active' : 'Ready for analysis'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Call Input Section */}
+        <div className="mb-6 backdrop-blur-xl bg-gray-900/40 border-2 border-cyan-500/30 rounded-2xl p-6">
+          <div className="grid grid-cols-3 gap-6">
+            {/* Listening Source */}
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Mic className={`w-8 h-8 ${isCallActive ? 'text-red-500 animate-pulse' : 'text-gray-500'}`} />
+                {isCallActive && (
+                  <div className="absolute inset-0 blur-lg bg-red-500/40 animate-pulse"></div>
+                )}
+              </div>
+              <div>
+                <div className="text-sm text-gray-400 mb-1">Listening From:</div>
+                <div className={`text-2xl font-bold ${isCallActive ? 'text-cyan-400' : 'text-gray-500'}`}>
+                  {isCallActive ? 'Microphone' : 'Not Listening'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {isCallActive ? 'Live transcription active' : 'Click mic button to start'}
+                </div>
+              </div>
+            </div>
+
+            {/* Call Timer */}
+            <div className="flex items-center justify-center gap-4">
+              <div>
+                <div className="text-sm text-gray-400 mb-1 text-center">Call Duration</div>
+                <div className={`text-4xl font-bold font-mono ${isCallActive ? 'text-emerald-400' : 'text-gray-600'}`}>
+                  {callDuration}
+                </div>
+                {isCallActive && (
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-red-400 font-medium">RECORDING</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Real-time Transcript */}
+            <div className="flex flex-col">
+              <div className="text-sm text-gray-400 mb-2">Real-time Transcript:</div>
+              <div className="flex-1 px-4 py-3 bg-gray-800/60 border border-gray-700 rounded-xl overflow-y-auto max-h-[120px] scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                <div className="text-sm text-gray-200 leading-relaxed">
+                  {liveTranscript || (isCallActive ? 'Listening for speech...' : 'Start recording to see live transcript')}
                 </div>
               </div>
             </div>
