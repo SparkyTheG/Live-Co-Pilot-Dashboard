@@ -874,10 +874,10 @@ Return: {"rebuttals":[{"objectionIndex":0,"rebuttalScript":"..."},{"objectionInd
 
   const userPrompt = `Generate rebuttals for ALL ${detectedObjections.length} objections:\n${objectionsList}`;
 
-  console.log(`[RebuttalAgent] Starting with timeout 12000ms for ${detectedObjections.length} objections...`);
+  console.log(`[RebuttalAgent] Starting with timeout 15000ms for ${detectedObjections.length} objections...`);
   const result = await callAI(systemPrompt, userPrompt, 'RebuttalAgent', { 
-    maxTokens: 250,
-    timeoutMs: 12000 // Give extra time for multiple rebuttals
+    maxTokens: 300,
+    timeoutMs: 15000 // Give extra time for multiple rebuttals (increased from 12s)
   });
   console.log('[RebuttalAgent] OUTPUT:', {
     requestedCount: detectedObjections.length,
@@ -1005,11 +1005,13 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 
   // Step 3: Rebuttal scripts (slow lane) - emit when ready
   let rebuttalResult = { rebuttals: [] };
+  let rebuttalFailed = false;
   try {
     rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt);
     if (!rebuttalResult || rebuttalResult.error) {
       console.warn('[ObjectionsSystemProgressive] Rebuttal agent failed or timed out');
       rebuttalResult = { rebuttals: [] };
+      rebuttalFailed = true;
     }
     
     // #region objections log H7
@@ -1018,19 +1020,28 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   } catch (e) {
     console.warn('[ObjectionsSystemProgressive] Rebuttal agent error:', e?.message || e);
     rebuttalResult = { rebuttals: [] };
+    rebuttalFailed = true;
     
     // #region objections log H7
     console.log('[DEBUG:H7] Rebuttal agent threw error', JSON.stringify({error:String(e?.message||e)}));
     // #endregion
   }
   
-  const final = detectedObjections.map((obj, idx) => ({
-    objectionText: obj.objectionText,
-    probability: obj.probability,
-    fear: pickByObjectionIndex(fearResult?.fears, idx, 'fear') || '',
-    whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
-    rebuttalScript: pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript') || ''
-  }));
+  const final = detectedObjections.map((obj, idx) => {
+    const rebuttal = pickByObjectionIndex(rebuttalResult?.rebuttals, idx, 'rebuttalScript');
+    // If rebuttal agent failed and no rebuttal found, provide a generic fallback instead of empty string
+    const fallbackRebuttal = rebuttalFailed && !rebuttal 
+      ? "I understand your concern. Let me address that - this is something many people initially worry about, but here's what makes this different..."
+      : rebuttal || '';
+    
+    return {
+      objectionText: obj.objectionText,
+      probability: obj.probability,
+      fear: pickByObjectionIndex(fearResult?.fears, idx, 'fear') || '',
+      whisper: pickByObjectionIndex(whisperResult?.whispers, idx, 'whisper') || '',
+      rebuttalScript: fallbackRebuttal
+    };
+  });
   
   // #region objections log H6 H9
   console.log('[DEBUG:H6_H9] Emitting final objections with rebuttals', JSON.stringify({objectionsCount:final.length,firstObjection:final[0]}));
