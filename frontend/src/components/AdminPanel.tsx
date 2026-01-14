@@ -683,7 +683,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                           type="button"
                           onClick={() => {
                             const next = dqList.filter((_, i) => i !== idx);
-                            updateDiagnosticQuestions(dqProspectType, next);
+                            updateDiagnosticQuestions(dqStrategy, next);
                           }}
                           className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 rounded-lg text-red-300 text-xs"
                         >
