@@ -125,9 +125,11 @@ export default function LiveCoPilotDashboard() {
     return () => clearInterval(interval);
   }, [isCallActive, callStartTime]);
 
-  // Get questions based on strategy (simplified - we'll use a generic set for now)
-  // For strategies, we use a simplified question set focused on the deal structure
-  const getQuestionsForStrategy = (strat: StrategyType) => {
+  // Get questions for this strategy (from Admin Panel or defaults)
+  // IMPORTANT: Dashboard renderer expects { question, why, category }.
+  // Settings editor stores { question, helper, badgeText, badgeColor }.
+  const questionsFromSettings = settings.diagnosticQuestionsByStrategy?.[strategy];
+  const getDefaultQuestionsForStrategy = (strat: StrategyType) => {
     const baseQuestions = [
       { question: 'What\'s motivating this decision right now?', why: 'Understand urgency and pain points', category: 'situation', badgeText: 'Motivation' },
       { question: 'What\'s your timeline for making this happen?', why: 'Establish urgency', category: 'timeline', badgeText: 'Timeline' },
@@ -156,7 +158,16 @@ export default function LiveCoPilotDashboard() {
     }
   };
   
-  const questions = getQuestionsForStrategy(strategy);
+  const questions = (Array.isArray(questionsFromSettings) && questionsFromSettings.length > 0)
+    ? questionsFromSettings.map((q: any) => ({
+        question: String(q?.question || ''),
+        why: String(q?.helper || ''),
+        // Use badgeColor as the category key for styling
+        category: (q?.badgeColor || 'situation'),
+        // Use explicit badge text if provided
+        badgeText: String(q?.badgeText || '')
+      }))
+    : getDefaultQuestionsForStrategy(strategy);
 
   // Extract analysis update handler so it can be reused
   const handleAnalysisUpdate = useCallback((analysis: any) => {

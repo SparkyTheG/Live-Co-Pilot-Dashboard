@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Settings, Scale, MessageSquare, RotateCcw, Save, Check, AlertCircle, Mail, Lock, UserPlus, LogIn, FileText } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { prospectTypes } from '../data/coPilotData';
+import { strategyOptions } from '../data/coPilotData';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -339,9 +339,9 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
     return settings.pillarWeights.reduce((sum, p) => sum + p.weight * 10, 0);
   };
 
-  const [dqProspectType, setDqProspectType] = useState<string>('foreclosure');
-  const dqList = Array.isArray(settings.diagnosticQuestionsByProspectType?.[dqProspectType])
-    ? settings.diagnosticQuestionsByProspectType[dqProspectType]
+  const [dqStrategy, setDqStrategy] = useState<string>('subject-to');
+  const dqList = Array.isArray(settings.diagnosticQuestionsByStrategy?.[dqStrategy])
+    ? settings.diagnosticQuestionsByStrategy[dqStrategy]
     : [];
 
   // AI Generation state
@@ -385,7 +385,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
       const data = await response.json();
       if (data.questions && Array.isArray(data.questions)) {
         // Replace current questions with AI-generated ones
-        updateDiagnosticQuestions(dqProspectType, data.questions);
+        updateDiagnosticQuestions(dqStrategy, data.questions);
         setAiGenerationPrompt(''); // Clear prompt after success
       } else {
         throw new Error('Invalid response format from server');
@@ -610,15 +610,15 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-xl font-bold text-white">Diagnostic Questions Editor</h2>
-              <p className="text-sm text-gray-400">Edit the question, helper text, and badge for each prospect type</p>
+              <p className="text-sm text-gray-400">Edit the question, helper text, and badge for each deal strategy</p>
             </div>
             <select
-              value={dqProspectType}
-              onChange={(e) => setDqProspectType(e.target.value)}
-              className="bg-gray-900 border border-gray-600 rounded-xl px-4 py-2 text-white focus:border-cyan-500 focus:outline-none"
+              value={dqStrategy}
+              onChange={(e) => setDqStrategy(e.target.value)}
+              className="bg-gradient-to-r from-cyan-900/40 to-teal-900/40 text-white px-6 py-3 rounded-xl border-2 border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 text-lg font-bold shadow-lg shadow-cyan-500/20 hover:border-cyan-400 transition-all cursor-pointer"
             >
-              {prospectTypes.map((pt) => (
-                <option key={pt.id} value={pt.id}>{pt.label}</option>
+              {strategyOptions.map((strat) => (
+                <option key={strat.id} value={strat.id} className="bg-gray-900">{strat.label}</option>
               ))}
             </select>
           </div>
@@ -626,7 +626,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
           <div className="space-y-3">
             {dqList.length === 0 ? (
               <div className="text-gray-400 text-sm">
-                No custom questions saved yet for this prospect type. Add your first one below.
+                No custom questions saved yet for this strategy. Add your first one below.
               </div>
             ) : (
               dqList.map((q, idx) => (
@@ -638,7 +638,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                         value={q.question}
                         onChange={(e) => {
                           const next = dqList.map((x, i) => i === idx ? { ...x, question: e.target.value } : x);
-                          updateDiagnosticQuestions(dqProspectType, next);
+                          updateDiagnosticQuestions(dqStrategy, next);
                         }}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
                       />
@@ -647,7 +647,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                         value={q.helper}
                         onChange={(e) => {
                           const next = dqList.map((x, i) => i === idx ? { ...x, helper: e.target.value } : x);
-                          updateDiagnosticQuestions(dqProspectType, next);
+                          updateDiagnosticQuestions(dqStrategy, next);
                         }}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
                       />
@@ -658,7 +658,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                         value={q.badgeText}
                         onChange={(e) => {
                           const next = dqList.map((x, i) => i === idx ? { ...x, badgeText: e.target.value } : x);
-                          updateDiagnosticQuestions(dqProspectType, next);
+                          updateDiagnosticQuestions(dqStrategy, next);
                         }}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
                       />
@@ -667,7 +667,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                         value={q.badgeColor}
                         onChange={(e) => {
                           const next = dqList.map((x, i) => i === idx ? { ...x, badgeColor: e.target.value as any } : x);
-                          updateDiagnosticQuestions(dqProspectType, next);
+                          updateDiagnosticQuestions(dqStrategy, next);
                         }}
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
                       >

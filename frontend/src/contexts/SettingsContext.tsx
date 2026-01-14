@@ -26,7 +26,9 @@ export interface AdminSettings {
   pillarWeights: PillarWeight[];
   priceTiers: PriceTierSetting[];
   customScriptPrompt: string;
-  diagnosticQuestionsByProspectType: Record<string, EditableDiagnosticQuestion[]>;
+  diagnosticQuestionsByStrategy: Record<string, EditableDiagnosticQuestion[]>;
+  // Legacy field for backward compatibility
+  diagnosticQuestionsByProspectType?: Record<string, EditableDiagnosticQuestion[]>;
 }
 
 const DEFAULT_SETTINGS: AdminSettings = {
@@ -45,7 +47,7 @@ const DEFAULT_SETTINGS: AdminSettings = {
     { label: 'Elite', price: 15997 },
   ],
   customScriptPrompt: '',
-  diagnosticQuestionsByProspectType: {},
+  diagnosticQuestionsByStrategy: {},
 };
 
 interface SettingsContextType {
@@ -53,7 +55,7 @@ interface SettingsContextType {
   updatePillarWeight: (pillarId: string, weight: number) => void;
   updatePriceTier: (index: number, price: number, label?: string) => void;
   updateCustomPrompt: (prompt: string) => void;
-  updateDiagnosticQuestions: (prospectType: string, questions: EditableDiagnosticQuestion[]) => void;
+  updateDiagnosticQuestions: (strategy: string, questions: EditableDiagnosticQuestion[]) => void;
   resetToDefaults: () => void;
   saveToSupabase: () => Promise<{ success: boolean; error?: string }>;
   saving: boolean;
@@ -80,10 +82,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         pillarWeights: Array.isArray(parsed.pillarWeights) ? parsed.pillarWeights : DEFAULT_SETTINGS.pillarWeights,
         priceTiers: Array.isArray(parsed.priceTiers) ? parsed.priceTiers : DEFAULT_SETTINGS.priceTiers,
         customScriptPrompt: typeof parsed.customScriptPrompt === 'string' ? parsed.customScriptPrompt.slice(0, 70) : DEFAULT_SETTINGS.customScriptPrompt,
-        diagnosticQuestionsByProspectType:
-          parsed.diagnosticQuestionsByProspectType && typeof parsed.diagnosticQuestionsByProspectType === 'object'
-            ? parsed.diagnosticQuestionsByProspectType
-            : DEFAULT_SETTINGS.diagnosticQuestionsByProspectType,
+        diagnosticQuestionsByStrategy:
+          parsed.diagnosticQuestionsByStrategy && typeof parsed.diagnosticQuestionsByStrategy === 'object'
+            ? parsed.diagnosticQuestionsByStrategy
+            : parsed.diagnosticQuestionsByProspectType && typeof parsed.diagnosticQuestionsByProspectType === 'object'
+            ? parsed.diagnosticQuestionsByProspectType // Migrate from old field
+            : DEFAULT_SETTINGS.diagnosticQuestionsByStrategy,
       };
     };
   }, []);
@@ -225,12 +229,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const updateDiagnosticQuestions: SettingsContextType['updateDiagnosticQuestions'] = (prospectType, questions) => {
+  const updateDiagnosticQuestions: SettingsContextType['updateDiagnosticQuestions'] = (strategy, questions) => {
     setSettings(prev => ({
       ...prev,
-      diagnosticQuestionsByProspectType: {
-        ...(prev.diagnosticQuestionsByProspectType || {}),
-        [prospectType]: Array.isArray(questions) ? questions : []
+      diagnosticQuestionsByStrategy: {
+        ...(prev.diagnosticQuestionsByStrategy || {}),
+        [strategy]: Array.isArray(questions) ? questions : []
       }
     }));
   };
