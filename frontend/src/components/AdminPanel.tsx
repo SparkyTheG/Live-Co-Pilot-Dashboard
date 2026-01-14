@@ -373,7 +373,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: aiGenerationPrompt,
-          prospectType: dqProspectType
+          strategy: dqStrategy
         })
       });
 
@@ -741,7 +741,7 @@ export default function AdminPanel({ onBack, onViewSummaries }: AdminPanelProps)
                     )}
                   </button>
                   <div className="text-xs text-gray-500">
-                    AI will generate questions for: <span className="text-purple-300">{prospectTypes.find(pt => pt.id === dqProspectType)?.label}</span>
+                    AI will generate questions for: <span className="text-purple-300">{strategyOptions.find(s => s.id === dqStrategy)?.label}</span>
                   </div>
                 </div>
               </div>
