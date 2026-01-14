@@ -8,25 +8,15 @@ interface RealTimeObjection {
   rebuttalScript: string;
 }
 
-interface StrategyObjection {
-  objection: string;
-  fear: string;
-  whisper: string;
-}
-
 interface TopObjectionsProps {
   realTimeObjections?: RealTimeObjection[];
-  strategyObjections?: StrategyObjection[];
 }
 
-export default function TopObjections({ realTimeObjections, strategyObjections }: TopObjectionsProps) {
+export default function TopObjections({ realTimeObjections }: TopObjectionsProps) {
   // Show only TOP 3 objections, sorted by probability
   const top3Objections = (realTimeObjections || [])
     .sort((a, b) => b.probability - a.probability)
     .slice(0, 3);
-  
-  // Show strategy-specific objections when no real-time objections exist
-  const hasRealTimeObjections = top3Objections.length > 0;
 
   // Extract one-sentence versions from multi-sentence content
   const getFirstSentence = (text: string): string => {
@@ -62,42 +52,11 @@ export default function TopObjections({ realTimeObjections, strategyObjections }
 
       {/* Top 3 Objections List */}
       <div className="space-y-4 overflow-y-auto pr-2 flex-1 custom-scrollbar">
-        {!hasRealTimeObjections && strategyObjections && strategyObjections.length > 0 ? (
-          // Show strategy-specific objections when no real-time data
-          <div className="space-y-3">
-            <div className="text-center mb-4 py-2 bg-cyan-500/10 border border-cyan-400/30 rounded-lg">
-              <p className="text-xs text-cyan-300">📋 Common objections for this strategy</p>
-            </div>
-            {strategyObjections.map((obj, idx) => (
-              <div
-                key={`strategy-${idx}`}
-                className="bg-gradient-to-br from-gray-800/40 to-gray-700/40 border-2 border-gray-600/50 rounded-xl p-4 shadow-lg"
-              >
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-sm">
-                    {idx + 1}
-                  </div>
-                  <h3 className="text-lg font-bold text-white flex-1">{obj.objection}</h3>
-                </div>
-                
-                <div className="space-y-2 pl-10">
-                  <div>
-                    <span className="text-xs font-semibold text-red-300">😰 Fear:</span>
-                    <p className="text-sm text-gray-300 mt-1">{obj.fear}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-emerald-300">💬 Whisper:</span>
-                    <p className="text-sm text-gray-300 mt-1 italic">{obj.whisper}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : top3Objections.length === 0 ? (
+        {top3Objections.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="mb-2">No objections detected yet.</p>
-            <p className="text-sm">Start recording to see live predictions.</p>
+            <p className="text-sm">Start recording to see AI-generated strategy-specific objections.</p>
           </div>
         ) : (
           top3Objections.map((objection, index) => {

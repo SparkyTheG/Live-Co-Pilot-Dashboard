@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle2, Circle, Target, Gauge, Shield, Mic } from 'lucide-react';
-import { StrategyType, strategyOptions, strategyData } from '../data/coPilotData';
+import { StrategyType, strategyOptions } from '../data/coPilotData';
 import { useSettings } from '../contexts/SettingsContext';
 import TopObjections from './TopObjections';
 import HotButtons from './HotButtons';
@@ -743,14 +743,13 @@ export default function LiveCoPilotDashboard() {
             </div>
 
             {/* Hot Buttons - Emotional Levers */}
-            <HotButtons emotionalLevers={analysisData?.emotionalLevers} strategyHotButtons={strategyData[strategy].hotButtons} />
+            <HotButtons emotionalLevers={analysisData?.emotionalLevers} />
           </div>
 
           {/* RIGHT: Live Intel */}
           <div className="space-y-6">
             <TopObjections
               realTimeObjections={objectionsHistory}
-              strategyObjections={strategyData[strategy].objections}
             />
           </div>
         </div>

@@ -427,8 +427,9 @@ export async function analyzeConversationProgressive(
   // Emotional levers are calculated from indicators (no separate hot buttons agent)
 
   // Objections: Only run if we have new text (skip if no new content)
+  // Pass prospectType as strategy to objections system
   const objectionsP = tObjections
-    ? runObjectionsAgentsProgressive(tObjections, customScriptPrompt, (p) => emit(p))
+    ? runObjectionsAgentsProgressive(tObjections, customScriptPrompt, prospectType, (p) => emit(p))
         .then((r) => {
           aiAnalysis.objections = Array.isArray(r?.objections) ? r.objections : [];
         })

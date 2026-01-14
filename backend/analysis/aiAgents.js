@@ -40,6 +40,49 @@ function getOpenAIClient() {
 
 const MODEL = 'gpt-4o-mini';
 
+/**
+ * Strategy Context - Provides strategy-specific guidance to AI agents
+ */
+function getStrategyContext(strategy) {
+  const strategies = {
+    'lease-purchase': {
+      name: 'Lease Purchase',
+      description: 'Tenant becomes buyer over time with rent credits building toward down payment',
+      commonObjections: `Common objections for Lease Purchase:
+- "What if I can't qualify at the end?" (fear of wasting time/money)
+- "How do rent credits work?" (fear of being cheated)
+- "What if the market crashes?" (fear of overpaying)
+- "What if you sell the house before I can buy it?" (fear of losing investment)`,
+      painPoints: 'Credit issues, can\'t qualify now, tired of renting, want to build equity',
+      urgency: 'Want to stop wasting money on rent, need stable housing for family'
+    },
+    'subject-to': {
+      name: 'Subject-To',
+      description: 'Taking over existing mortgage payments while deed transfers to buyer',
+      commonObjections: `Common objections for Subject-To:
+- "What if you stop paying?" (fear of foreclosure and credit destruction)
+- "Is this legal?" (fear of being scammed or sued)
+- "What about the due-on-sale clause?" (fear of bank calling the loan)
+- "What if you just walk away?" (fear of being left with the mess)`,
+      painPoints: 'Behind on payments, facing foreclosure, can\'t afford house anymore, credit concerns',
+      urgency: 'Foreclosure timeline, mounting debt, family stress, need immediate relief'
+    },
+    'seller-finance': {
+      name: 'Seller Finance',
+      description: 'Seller carries the note and receives monthly payments with interest',
+      commonObjections: `Common objections for Seller Finance:
+- "What if they stop paying?" (fear of foreclosure process and legal costs)
+- "How do I know they'll qualify?" (fear of selling to unqualified buyer)
+- "What about taxes?" (fear of IRS penalties or complications)
+- "What if they trash the property?" (fear of property damage)`,
+      painPoints: 'Need monthly income, want to avoid capital gains taxes, can\'t find qualified traditional buyers',
+      urgency: 'Need cash flow, tax deadline approaching, property sitting on market'
+    }
+  };
+
+  return strategies[strategy] || strategies['subject-to']; // default to subject-to
+}
+
 // Request pools to prevent rate limiting AND prevent background agents (summary/speaker)
 // from starving the main real-time analysis agents.
 const ACTIVE_BY_POOL = { main: 0, aux: 0 };
@@ -624,22 +667,29 @@ ${t}`;
 // ============================================================================
 
 /**
- * AGENT 3a: OBJECTION DETECTION
+ * AGENT 3a: OBJECTION DETECTION (Strategy-Aware)
  * Output: detectedObjections [{objectionText, probability}]
  */
-export async function runObjectionDetectionAgent(transcript) {
+export async function runObjectionDetectionAgent(transcript, strategy = '') {
+  const strategyContext = getStrategyContext(strategy);
+  
   const systemPrompt = `Detect prospect objections, concerns, or hesitations in this sales conversation.
 
-OBJECTION PATTERNS:
+DEAL STRATEGY CONTEXT: ${strategyContext.name}
+${strategyContext.commonObjections}
+
+GENERAL OBJECTION PATTERNS:
 - Price: expensive, cost, afford, money, budget, too much, cheaper
 - Timing: think about it, wait, later, not ready, need time, maybe
 - Trust: not sure, skeptical, guarantee, proof, really work, sounds too good
 - Authority: ask spouse/partner, need to talk to, not my decision
 - Competition: other options, shopping around, comparing, another company
 - Fear: worried, nervous, what if, concerned, scared
+- Structure: confused, don't understand, how does this work
 
 RULES:
 - objectionText MUST be an EXACT QUOTE from the transcript (3-20 words). Do NOT paraphrase or summarize.
+- Focus on objections SPECIFIC to the ${strategyContext.name} strategy
 - Include hesitations and concerns, not just direct objections
 - Probability: 0.8-0.95 for clear objections, 0.65-0.8 for hesitations
 - PRIORITIZE THE MOST RECENT statements (end of transcript) over older ones
@@ -651,7 +701,7 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
 
   const userPrompt = `Detect objections from the MOST RECENT statements:\n"${transcript}"`;
 
-  console.log(`[ObjectionDetectionAgent] INPUT: transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
+  console.log(`[ObjectionDetectionAgent] INPUT: strategy=${strategy}, transcript length=${transcript?.length||0}, preview="${transcript?.slice(0,80)||'EMPTY'}"`);
   const result = await callAI(systemPrompt, userPrompt, 'ObjectionDetectionAgent', 200);
   console.log(`[ObjectionDetectionAgent] OUTPUT (raw): detectedObjections=${result?.detectedObjections?.length||0}, error=${result?.error||'none'}`);
   
@@ -727,27 +777,35 @@ Return: {"detectedObjections":[{"objectionText":"prospect concern here","probabi
 }
 
 /**
- * AGENT 3b: FEAR ANALYSIS
- * Input: detected objections
+ * AGENT 3b: FEAR ANALYSIS (Strategy-Aware)
+ * Input: detected objections + strategy
  * Output: fears [{objectionIndex, fear}]
  */
-export async function runFearAnalysisAgent(detectedObjections) {
+export async function runFearAnalysisAgent(detectedObjections, strategy = '') {
   if (!detectedObjections || detectedObjections.length === 0) {
     return { fears: [] };
   }
 
+  const strategyContext = getStrategyContext(strategy);
   const objectionsList = detectedObjections.map((obj, idx) => 
     `${idx}. "${obj.objectionText}"`
   ).join('\n');
 
   const systemPrompt = `Identify the UNDERLYING FEAR behind each objection. Be specific and psychological.
 
-FEAR PATTERNS:
+DEAL STRATEGY: ${strategyContext.name}
+CONTEXT: ${strategyContext.description}
+
+STRATEGY-SPECIFIC FEAR PATTERNS:
+${strategyContext.commonObjections}
+
+GENERAL FEAR PATTERNS:
 "expensive" → Fear of wasting money, making wrong financial choice
 "need to think" → Fear of commitment, making wrong decision
 "not sure it works" → Fear of failure, disappointment
 "ask spouse" → Fear of conflict, not being in control
 "tried before" → Fear of repeating past failures
+"don't understand" → Fear of being tricked or manipulated
 
 Return: {"fears":[{"objectionIndex":0,"fear":"Fear of making a financial mistake"}]}`;
 
@@ -757,24 +815,31 @@ Return: {"fears":[{"objectionIndex":0,"fear":"Fear of making a financial mistake
 }
 
 /**
- * AGENT 3c: WHISPER/REFRAME
- * Input: detected objections
+ * AGENT 3c: WHISPER/REFRAME (Strategy-Aware)
+ * Input: detected objections + strategy
  * Output: whispers [{objectionIndex, whisper}]
  */
-export async function runWhisperReframeAgent(detectedObjections) {
+export async function runWhisperReframeAgent(detectedObjections, strategy = '') {
   if (!detectedObjections || detectedObjections.length === 0) {
     return { whispers: [] };
   }
 
+  const strategyContext = getStrategyContext(strategy);
   const objectionsList = detectedObjections.map((obj, idx) => 
     `${idx}. "${obj.objectionText}"`
   ).join('\n');
 
   const systemPrompt = `Generate a SHORT insight ("whisper") for each objection. This is an internal thought for the salesperson.
 
+DEAL STRATEGY: ${strategyContext.name} - ${strategyContext.description}
+
 FORMAT: "They need..." or "They want..." (under 12 words)
 
-EXAMPLES:
+STRATEGY-SPECIFIC EXAMPLES FOR ${strategyContext.name}:
+- Focus on addressing ${strategyContext.painPoints}
+- Emphasize urgency: ${strategyContext.urgency}
+
+GENERAL EXAMPLES:
 "expensive" → "They need to see value before price"
 "think about it" → "They need certainty before committing"
 "ask spouse" → "They need to feel in control"
@@ -787,15 +852,16 @@ Return: {"whispers":[{"objectionIndex":0,"whisper":"They need to see immediate v
 }
 
 /**
- * AGENT 3d: REBUTTAL SCRIPT
- * Input: detected objections + customScriptPrompt
+ * AGENT 3d: REBUTTAL SCRIPT (Strategy-Aware)
+ * Input: detected objections + customScriptPrompt + strategy
  * Output: rebuttals [{objectionIndex, rebuttalScript}]
  */
-export async function runRebuttalScriptAgent(detectedObjections, customScriptPrompt = '') {
+export async function runRebuttalScriptAgent(detectedObjections, customScriptPrompt = '', strategy = '') {
   if (!detectedObjections || detectedObjections.length === 0) {
     return { rebuttals: [] };
   }
 
+  const strategyContext = getStrategyContext(strategy);
   const objectionsList = detectedObjections.map((obj, idx) => 
     `${idx}. "${obj.objectionText}"`
   ).join('\n');
@@ -805,12 +871,18 @@ export async function runRebuttalScriptAgent(detectedObjections, customScriptPro
     ? `\n\nCUSTOM BUSINESS CONTEXT (must use for tone/positioning):\n- ${trimmedContext}\n`
     : '';
 
+  const strategyGuidance = `\n\nDEAL STRATEGY: ${strategyContext.name}
+STRATEGY DESCRIPTION: ${strategyContext.description}
+KEY PAIN POINTS TO ADDRESS: ${strategyContext.painPoints}
+URGENCY FACTORS: ${strategyContext.urgency}\n`;
+
   console.log('[RebuttalAgent] context', {
     hasCustomContext: Boolean(trimmedContext),
+    strategy: strategy || 'none',
     contextPreview: trimmedContext ? trimmedContext.slice(0, 70) : ''
   });
 
-  const systemPrompt = `Generate REBUTTAL scripts that COUNTER, DISPROVE, or CONTRADICT each objection with logic and reasoning.${customContext}
+  const systemPrompt = `Generate REBUTTAL scripts that COUNTER, DISPROVE, or CONTRADICT each objection with logic and reasoning.${strategyGuidance}${customContext}
 
 REBUTTAL DEFINITION:
 A rebuttal is evidence or arguments introduced to counter, disprove, or contradict the opposing party's evidence or argument.
@@ -886,15 +958,15 @@ function pickByObjectionIndex(list, idx, valueKey) {
 }
 
 /**
- * COMBINED OBJECTIONS FUNCTION
+ * COMBINED OBJECTIONS FUNCTION (Strategy-Aware)
  * Runs Detection first, then Fear/Whisper/Rebuttal in parallel
  */
-export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
-  console.log(`[ObjectionsSystem] Starting...`);
+export async function runObjectionsAgents(transcript, customScriptPrompt = '', strategy = '') {
+  console.log(`[ObjectionsSystem] Starting with strategy: ${strategy || 'none'}...`);
   const startTime = Date.now();
 
   // Step 1: Detect objections
-  const detectionResult = await runObjectionDetectionAgent(transcript);
+  const detectionResult = await runObjectionDetectionAgent(transcript, strategy);
   
   if (detectionResult.error || !detectionResult.detectedObjections?.length) {
     console.log(`[ObjectionsSystem] No objections detected`);
@@ -906,9 +978,9 @@ export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
 
   // Step 2: Run Fear, Whisper, Rebuttal in PARALLEL (they only need objections, not full transcript)
   const [fearResult, whisperResult, rebuttalResult] = await Promise.all([
-    runFearAnalysisAgent(detectedObjections),
-    runWhisperReframeAgent(detectedObjections),
-    runRebuttalScriptAgent(detectedObjections, customScriptPrompt)
+    runFearAnalysisAgent(detectedObjections, strategy),
+    runWhisperReframeAgent(detectedObjections, strategy),
+    runRebuttalScriptAgent(detectedObjections, customScriptPrompt, strategy)
   ]);
 
   // Step 3: Combine results
@@ -925,25 +997,26 @@ export async function runObjectionsAgents(transcript, customScriptPrompt = '') {
 }
 
 /**
- * PROGRESSIVE OBJECTIONS:
+ * PROGRESSIVE OBJECTIONS (Strategy-Aware):
  * - Emit objections ASAP (no waiting for rebuttal scripts)
  * - Then emit an updated objections array once scripts are ready
  *
  * @param {string} transcript
  * @param {string} customScriptPrompt
+ * @param {string} strategy
  * @param {(partial: {objections: any[]}) => void} onPartial
  */
-export async function runObjectionsAgentsProgressive(transcript, customScriptPrompt = '', onPartial = null) {
+export async function runObjectionsAgentsProgressive(transcript, customScriptPrompt = '', strategy = '', onPartial = null) {
   const emit = (p) => {
     if (typeof onPartial !== 'function') return;
     try { onPartial(p); } catch {}
   };
 
-  console.log(`[ObjectionsSystemProgressive] Starting...`);
+  console.log(`[ObjectionsSystemProgressive] Starting with strategy: ${strategy || 'none'}...`);
   const startTime = Date.now();
 
   // Step 1: Detect objections (required)
-  const detectionResult = await runObjectionDetectionAgent(transcript);
+  const detectionResult = await runObjectionDetectionAgent(transcript, strategy);
   if (detectionResult.error || !detectionResult.detectedObjections?.length) {
     console.log(`[ObjectionsSystemProgressive] No objections detected`);
     return { objections: [] };
@@ -968,8 +1041,8 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
 
   // Step 2: Run Fear + Whisper (parallel) and merge (optional, but cheap)
   const fearWhisper = await Promise.allSettled([
-    runFearAnalysisAgent(detectedObjections),
-    runWhisperReframeAgent(detectedObjections)
+    runFearAnalysisAgent(detectedObjections, strategy),
+    runWhisperReframeAgent(detectedObjections, strategy)
   ]);
 
   const fearResult = fearWhisper[0].status === 'fulfilled' ? fearWhisper[0].value : { fears: [] };
@@ -997,7 +1070,7 @@ export async function runObjectionsAgentsProgressive(transcript, customScriptPro
   let rebuttalResult = { rebuttals: [] };
   let rebuttalFailed = false;
   try {
-    rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt);
+    rebuttalResult = await runRebuttalScriptAgent(detectedObjections, customScriptPrompt, strategy);
     if (!rebuttalResult || rebuttalResult.error) {
       console.warn('[ObjectionsSystemProgressive] Rebuttal agent failed or timed out');
       rebuttalResult = { rebuttals: [] };
