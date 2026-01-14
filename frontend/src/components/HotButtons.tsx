@@ -1,66 +1,160 @@
 import { Activity } from 'lucide-react';
 
 interface EmotionalLevers {
-  riskTolerance?: number;
-  fearOfFailure?: number;
-  urgency?: number;
-  familyPressure?: number;
-  desireForCertainty?: number;
+  [key: string]: number;
 }
 
 interface HotButtonsProps {
   emotionalLevers?: EmotionalLevers;
 }
 
+// Strategy-specific lever configurations
+const leverConfigs: Record<string, {
+  label: string;
+  description: string;
+  lowLabel: string;
+  highLabel: string;
+  icon: string;
+  color: { low: string; mid: string; high: string };
+}> = {
+  // Lease Purchase
+  creditReadiness: {
+    label: 'Credit Readiness',
+    description: 'Ability to improve credit score',
+    lowLabel: 'Not Ready',
+    highLabel: 'Ready',
+    icon: '📊',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-yellow-500', high: 'from-yellow-500 to-green-500' }
+  },
+  ownershipDesire: {
+    label: 'Ownership Desire',
+    description: 'Want to own vs keep renting',
+    lowLabel: 'Content Renting',
+    highLabel: 'Must Own',
+    icon: '🏠',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-teal-500', high: 'from-teal-500 to-emerald-500' }
+  },
+  moveInUrgency: {
+    label: 'Move-In Urgency',
+    description: 'How soon they need housing',
+    lowLabel: 'Flexible',
+    highLabel: 'Immediate',
+    icon: '⏰',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-yellow-500', high: 'from-yellow-500 to-red-500' }
+  },
+  financialCommitment: {
+    label: 'Financial Commitment',
+    description: 'Ability to handle rent + credits',
+    lowLabel: 'Unstable',
+    highLabel: 'Solid',
+    icon: '💰',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-yellow-500 to-green-500', high: 'from-green-500 to-emerald-500' }
+  },
+  longTermConfidence: {
+    label: 'Long-Term Confidence',
+    description: 'Belief in qualifying later',
+    lowLabel: 'Doubtful',
+    highLabel: 'Confident',
+    icon: '🎯',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-green-500', high: 'from-green-500 to-emerald-500' }
+  },
+  // Subject-To
+  foreclosureFear: {
+    label: 'Foreclosure Fear',
+    description: 'Terror of losing the home',
+    lowLabel: 'Calm',
+    highLabel: 'Panicked',
+    icon: '🏚️',
+    color: { low: 'from-green-500 to-yellow-500', mid: 'from-yellow-500 to-orange-500', high: 'from-orange-500 to-red-500' }
+  },
+  reliefUrgency: {
+    label: 'Relief Urgency',
+    description: 'Need immediate solution',
+    lowLabel: 'Can Wait',
+    highLabel: 'Critical',
+    icon: '🚨',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-yellow-500', high: 'from-yellow-500 to-red-500' }
+  },
+  paymentBurden: {
+    label: 'Payment Burden',
+    description: 'Stress of current payments',
+    lowLabel: 'Manageable',
+    highLabel: 'Crushing',
+    icon: '💸',
+    color: { low: 'from-green-500 to-yellow-500', mid: 'from-yellow-500 to-orange-500', high: 'from-orange-500 to-red-500' }
+  },
+  creditProtectionDrive: {
+    label: 'Credit Protection',
+    description: 'Desire to save credit score',
+    lowLabel: 'Don\'t Care',
+    highLabel: 'Must Protect',
+    icon: '🛡️',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-teal-500', high: 'from-teal-500 to-emerald-500' }
+  },
+  trustInProcess: {
+    label: 'Trust in Process',
+    description: 'Belief in due-on-sale protection',
+    lowLabel: 'Skeptical',
+    highLabel: 'Trusting',
+    icon: '🤝',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-green-500', high: 'from-green-500 to-emerald-500' }
+  },
+  // Seller Finance
+  buyerDefaultFear: {
+    label: 'Buyer Default Fear',
+    description: 'Worry buyer won\'t pay',
+    lowLabel: 'Confident',
+    highLabel: 'Worried',
+    icon: '⚠️',
+    color: { low: 'from-green-500 to-yellow-500', mid: 'from-yellow-500 to-orange-500', high: 'from-orange-500 to-red-500' }
+  },
+  incomeNeed: {
+    label: 'Income Need',
+    description: 'Need for monthly cash flow',
+    lowLabel: 'Optional',
+    highLabel: 'Essential',
+    icon: '💵',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-teal-500', high: 'from-teal-500 to-emerald-500' }
+  },
+  taxAdvantageAwareness: {
+    label: 'Tax Advantage',
+    description: 'Understanding of IRS benefits',
+    lowLabel: 'Unaware',
+    highLabel: 'Knowledgeable',
+    icon: '📋',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-green-500', high: 'from-green-500 to-emerald-500' }
+  },
+  controlPreference: {
+    label: 'Control Preference',
+    description: 'Want to maintain some control',
+    lowLabel: 'Let Go',
+    highLabel: 'Stay Involved',
+    icon: '🎛️',
+    color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-purple-500', high: 'from-purple-500 to-pink-500' }
+  },
+  exitConfidence: {
+    label: 'Exit Confidence',
+    description: 'Belief in foreclosure protection',
+    lowLabel: 'Worried',
+    highLabel: 'Confident',
+    icon: '🔒',
+    color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-green-500', high: 'from-green-500 to-emerald-500' }
+  }
+};
+
 export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
-  // Define the 5 emotional levers with their properties
-  const levers = [
-    {
-      key: 'riskTolerance' as keyof EmotionalLevers,
-      label: 'Risk Tolerance',
-      description: 'Willingness to take bold action',
-      lowLabel: 'Risk-Averse',
-      highLabel: 'Risk-Ready',
-      icon: '⚡',
-      color: { low: 'from-red-500 to-orange-500', mid: 'from-orange-500 to-yellow-500', high: 'from-yellow-500 to-green-500' }
-    },
-    {
-      key: 'fearOfFailure' as keyof EmotionalLevers,
-      label: 'Fear of Failure',
-      description: 'Anxiety about making wrong decision',
-      lowLabel: 'Confident',
-      highLabel: 'Paralyzed',
-      icon: '🎯',
-      color: { low: 'from-green-500 to-emerald-500', mid: 'from-yellow-500 to-orange-500', high: 'from-orange-500 to-red-500' }
-    },
-    {
-      key: 'urgency' as keyof EmotionalLevers,
-      label: 'Urgency',
-      description: 'Time pressure and deadline stress',
-      lowLabel: 'Relaxed',
-      highLabel: 'Critical',
-      icon: '⏱️',
+  // Dynamically build levers array from emotionalLevers object
+  const levers = emotionalLevers ? Object.keys(emotionalLevers).map(key => ({
+    key,
+    ...(leverConfigs[key] || {
+      label: key,
+      description: 'Emotional lever',
+      lowLabel: 'Low',
+      highLabel: 'High',
+      icon: '📊',
       color: { low: 'from-blue-500 to-cyan-500', mid: 'from-cyan-500 to-yellow-500', high: 'from-yellow-500 to-red-500' }
-    },
-    {
-      key: 'familyPressure' as keyof EmotionalLevers,
-      label: 'Family Pressure',
-      description: 'Influence from spouse/family',
-      lowLabel: 'Independent',
-      highLabel: 'Dependent',
-      icon: '👨‍👩‍👧‍👦',
-      color: { low: 'from-purple-500 to-blue-500', mid: 'from-blue-500 to-cyan-500', high: 'from-cyan-500 to-emerald-500' }
-    },
-    {
-      key: 'desireForCertainty' as keyof EmotionalLevers,
-      label: 'Desire for Certainty',
-      description: 'Need for guarantees and proof',
-      lowLabel: 'Trusting',
-      highLabel: 'Skeptical',
-      icon: '🔒',
-      color: { low: 'from-emerald-500 to-teal-500', mid: 'from-teal-500 to-cyan-500', high: 'from-cyan-500 to-blue-500' }
-    }
-  ];
+    })
+  })) : [];
 
   const getColorGradient = (value: number, colorSet: { low: string; mid: string; high: string }) => {
     if (value <= 3) return colorSet.low;
@@ -102,7 +196,7 @@ export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
           </div>
         ) : (
           levers.map((lever) => {
-            const value = emotionalLevers[lever.key] || 0;
+            const value = emotionalLevers![lever.key] || 0;
             const percentage = (value / 10) * 100;
             const gradient = getColorGradient(value, lever.color);
             const intensity = getIntensityLabel(value);
@@ -155,18 +249,16 @@ export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
 
       {/* Footer Message - Shows Highest Scoring Lever */}
       {emotionalLevers && Object.keys(emotionalLevers).length > 0 && (() => {
-        // Find the highest scoring emotional lever
-        const leversList = [
-          { key: 'riskTolerance', label: 'Risk Tolerance', value: emotionalLevers.riskTolerance || 0 },
-          { key: 'fearOfFailure', label: 'Fear of Failure', value: emotionalLevers.fearOfFailure || 0 },
-          { key: 'urgency', label: 'Urgency', value: emotionalLevers.urgency || 0 },
-          { key: 'familyPressure', label: 'Family Pressure', value: emotionalLevers.familyPressure || 0 },
-          { key: 'desireForCertainty', label: 'Desire for Certainty', value: emotionalLevers.desireForCertainty || 0 }
-        ];
+        // Find the highest scoring emotional lever dynamically
+        const leversList = levers.map(lever => ({
+          key: lever.key,
+          label: lever.label,
+          value: emotionalLevers[lever.key] || 0
+        }));
         
         const highestLever = leversList.reduce((max, lever) => 
           lever.value > max.value ? lever : max
-        , leversList[0]);
+        , leversList[0] || { key: '', label: 'Unknown', value: 0 });
         
         return (
           <div className="mt-4 pt-4 border-t border-gray-700/50">

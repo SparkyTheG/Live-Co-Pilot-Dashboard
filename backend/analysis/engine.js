@@ -414,10 +414,10 @@ export async function analyzeConversationProgressive(
       emitLubometerIfPossible();
       emitTruthIndexIfPossible();
       
-      // Calculate emotional levers from the 27 indicators
-      aiAnalysis.emotionalLevers = computeEmotionalLevers(aiAnalysis.indicatorSignals);
+      // Calculate emotional levers from the 27 indicators (strategy-specific)
+      aiAnalysis.emotionalLevers = computeEmotionalLevers(aiAnalysis.indicatorSignals, prospectType);
       emit({ emotionalLevers: aiAnalysis.emotionalLevers });
-      console.log('[Engine] Emotional levers calculated from indicators:', aiAnalysis.emotionalLevers);
+      console.log('[Engine] Emotional levers calculated from indicators (strategy:', prospectType, '):', aiAnalysis.emotionalLevers);
     })
     .catch((e) => {
       flushStreamGroup('lubometer', { done: true });
@@ -660,52 +660,82 @@ function computeLubometer(indicatorSignals, pillarWeights) {
 }
 
 /**
- * Calculate 5 emotional levers from the 27 indicators.
+ * Calculate strategy-specific emotional levers from the 27 indicators.
+ * Each strategy has 5 unique hot buttons with custom formulas.
  * This tells the closer: "Press THIS emotional lever right now."
  */
-function computeEmotionalLevers(indicatorSignals) {
+function computeEmotionalLevers(indicatorSignals, strategy = 'subject-to') {
   // Helper to get average of indicator range
   const avg = (start, end) => avgRange(indicatorSignals, start, end);
   const get = (id) => clamp(toNum(indicatorSignals?.[String(id)]), 0, 10);
 
-  // 1. RISK TOLERANCE (0-10)
-  // Derived from: Pain/Desire (high = willing to act) + Decisiveness (high = ready to commit)
-  // Inverse of fear indicators
-  const painDesire = avg(1, 4); // P1: Pain & Desire
-  const decisiveness = avg(9, 12); // P3: Decisiveness
-  const riskTolerance = clamp((painDesire * 0.4) + (decisiveness * 0.6), 0, 10);
+  // Common building blocks
+  const painDesire = avg(1, 4);      // P1: Pain & Desire (1-4)
+  const urgency = avg(5, 8);         // P2: Urgency (5-8)
+  const decisiveness = avg(9, 12);   // P3: Decisiveness (9-12)
+  const money = avg(13, 16);         // P4: Available Money (13-16)
+  const responsibility = avg(17, 20); // P5: Responsibility (17-20)
+  const priceSensitivity = avg(21, 23); // P6: Price Sensitivity (21-23)
+  const trust = avg(24, 27);         // P7: Trust (24-27)
 
-  // 2. FEAR OF FAILURE (0-10)
-  // Derived from: Low Trust (24-27) + Low Decisiveness (9-12) + High Responsibility concerns (17-20)
-  const trust = avg(24, 27); // P7: Trust
-  const responsibility = avg(17, 20); // P5: Responsibility
-  // Inverse trust = fear, low decisiveness = fear, concerns about responsibility = fear
-  const fearOfFailure = clamp((10 - trust) * 0.5 + (10 - decisiveness) * 0.3 + responsibility * 0.2, 0, 10);
-
-  // 3. URGENCY (0-10)
-  // Directly from P2: Urgency indicators (5-8)
-  const urgency = avg(5, 8);
-
-  // 4. FAMILY PRESSURE (0-10)
-  // Derived from: Authority indicators (low authority = need approval from others)
-  // P6 indicators 21-23 relate to authority/decision-making
-  const authority = avg(21, 23); // P6: Authority (price sensitivity actually, but let's check indicator 4 for authority mentions)
-  // Actually, let's look at specific indicators that mention family/spouse
-  // For now, use inverse of decisiveness as proxy (if indecisive, likely needs family approval)
-  const familyPressure = clamp((10 - decisiveness) * 0.7 + (10 - authority) * 0.3, 0, 10);
-
-  // 5. DESIRE FOR CERTAINTY (0-10)  
-  // Derived from: Low Trust (needs proof) + Price Sensitivity (wants guarantees)
-  const priceSensitivity = avg(21, 23); // P6: Price sensitivity (concerns about value)
-  const desireForCertainty = clamp((10 - trust) * 0.6 + priceSensitivity * 0.4, 0, 10);
-
-  return {
-    riskTolerance: Number(riskTolerance.toFixed(1)),
-    fearOfFailure: Number(fearOfFailure.toFixed(1)),
-    urgency: Number(urgency.toFixed(1)),
-    familyPressure: Number(familyPressure.toFixed(1)),
-    desireForCertainty: Number(desireForCertainty.toFixed(1))
-  };
+  if (strategy === 'lease-purchase') {
+    // LEASE PURCHASE: Focus on credit readiness, ownership desire, commitment
+    return {
+      creditReadiness: Number(clamp(
+        (money * 0.4) + ((10 - priceSensitivity) * 0.3) + (decisiveness * 0.3), 0, 10
+      ).toFixed(1)),
+      ownershipDesire: Number(clamp(
+        (painDesire * 0.6) + (urgency * 0.4), 0, 10
+      ).toFixed(1)),
+      moveInUrgency: Number(clamp(
+        (urgency * 0.7) + (painDesire * 0.3), 0, 10
+      ).toFixed(1)),
+      financialCommitment: Number(clamp(
+        (money * 0.5) + (responsibility * 0.3) + (decisiveness * 0.2), 0, 10
+      ).toFixed(1)),
+      longTermConfidence: Number(clamp(
+        (trust * 0.4) + (decisiveness * 0.4) + ((10 - (10 - trust) * 0.5 - (10 - decisiveness) * 0.3 - responsibility * 0.2) * 0.2), 0, 10
+      ).toFixed(1))
+    };
+  } else if (strategy === 'seller-finance') {
+    // SELLER FINANCE: Focus on buyer default fear, income need, tax benefits
+    return {
+      buyerDefaultFear: Number(clamp(
+        ((10 - trust) * 0.5) + (responsibility * 0.3) + ((10 - decisiveness) * 0.2), 0, 10
+      ).toFixed(1)),
+      incomeNeed: Number(clamp(
+        (painDesire * 0.5) + (urgency * 0.3) + (money * 0.2), 0, 10
+      ).toFixed(1)),
+      taxAdvantageAwareness: Number(clamp(
+        (money * 0.4) + (decisiveness * 0.3) + ((10 - priceSensitivity) * 0.3), 0, 10
+      ).toFixed(1)),
+      controlPreference: Number(clamp(
+        (responsibility * 0.5) + ((10 - decisiveness) * 0.3) + ((10 - trust) * 0.2), 0, 10
+      ).toFixed(1)),
+      exitConfidence: Number(clamp(
+        (trust * 0.5) + (decisiveness * 0.3) + ((10 - responsibility) * 0.2), 0, 10
+      ).toFixed(1))
+    };
+  } else {
+    // SUBJECT-TO (default): Focus on foreclosure fear, payment relief, credit protection
+    return {
+      foreclosureFear: Number(clamp(
+        (painDesire * 0.5) + (urgency * 0.4) + (responsibility * 0.1), 0, 10
+      ).toFixed(1)),
+      reliefUrgency: Number(clamp(
+        (urgency * 0.6) + (painDesire * 0.4), 0, 10
+      ).toFixed(1)),
+      paymentBurden: Number(clamp(
+        (painDesire * 0.4) + ((10 - money) * 0.4) + (urgency * 0.2), 0, 10
+      ).toFixed(1)),
+      creditProtectionDrive: Number(clamp(
+        (responsibility * 0.5) + (urgency * 0.3) + (painDesire * 0.2), 0, 10
+      ).toFixed(1)),
+      trustInProcess: Number(clamp(
+        (trust * 0.6) + (decisiveness * 0.3) + ((10 - ((10 - trust) * 0.5 + (10 - decisiveness) * 0.3 + responsibility * 0.2)) * 0.1), 0, 10
+      ).toFixed(1))
+    };
+  }
 }
 
 function avgRange(indicatorSignals, a, b) {
