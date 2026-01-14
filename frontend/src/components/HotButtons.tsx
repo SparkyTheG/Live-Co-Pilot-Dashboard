@@ -8,11 +8,18 @@ interface EmotionalLevers {
   desireForCertainty?: number;
 }
 
-interface HotButtonsProps {
-  emotionalLevers?: EmotionalLevers;
+interface StrategyHotButtons {
+  pain1: string;
+  pain2: string;
+  desire: string;
 }
 
-export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
+interface HotButtonsProps {
+  emotionalLevers?: EmotionalLevers;
+  strategyHotButtons?: StrategyHotButtons;
+}
+
+export default function HotButtons({ emotionalLevers, strategyHotButtons }: HotButtonsProps) {
   // Define the 5 emotional levers with their properties
   const levers = [
     {
@@ -91,6 +98,24 @@ export default function HotButtons({ emotionalLevers }: HotButtonsProps) {
           </div>
         </div>
       </div>
+
+      {/* Strategy-Specific Hot Buttons */}
+      {strategyHotButtons && (
+        <div className="mb-6 space-y-3">
+          <div className="bg-red-500/10 border-2 border-red-400/50 rounded-xl p-4">
+            <div className="text-xs text-red-300 font-bold mb-1">🔥 PAIN POINT #1</div>
+            <div className="text-white font-medium italic">{strategyHotButtons.pain1}</div>
+          </div>
+          <div className="bg-red-500/10 border-2 border-red-400/50 rounded-xl p-4">
+            <div className="text-xs text-red-300 font-bold mb-1">🔥 PAIN POINT #2</div>
+            <div className="text-white font-medium italic">{strategyHotButtons.pain2}</div>
+          </div>
+          <div className="bg-emerald-500/10 border-2 border-emerald-400/50 rounded-xl p-4">
+            <div className="text-xs text-emerald-300 font-bold mb-1">✨ DESIRE</div>
+            <div className="text-white font-medium italic">{strategyHotButtons.desire}</div>
+          </div>
+        </div>
+      )}
 
       {/* Emotional Levers List */}
       <div className="space-y-5 overflow-y-auto pr-2 flex-1 custom-scrollbar">

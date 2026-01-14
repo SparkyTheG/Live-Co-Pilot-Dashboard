@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle2, Circle, Target, Gauge, Shield, Mic } from 'lucide-react';
-import { ProspectType } from '../data/coPilotData';
-import { diagnosticQuestions } from '../data/diagnosticQuestions';
+import { StrategyType, strategyOptions, strategyData } from '../data/coPilotData';
 import { useSettings } from '../contexts/SettingsContext';
 import TopObjections from './TopObjections';
 import HotButtons from './HotButtons';
@@ -15,6 +14,7 @@ interface AnalysisData {
     level: string;
     interpretation: string;
     action: string;
+    maxScore?: number;
   };
   truthIndex?: {
     score: number;
@@ -35,6 +35,13 @@ interface AnalysisData {
     score: number;
     prompt: string;
   }>;
+  emotionalLevers?: {
+    riskTolerance?: number;
+    fearOfFailure?: number;
+    urgency?: number;
+    familyPressure?: number;
+    desireForCertainty?: number;
+  };
   objections?: Array<{
     objectionText: string;
     fear: string;
@@ -56,7 +63,7 @@ interface AnalysisData {
 }
 
 export default function LiveCoPilotDashboard() {
-  const [prospectType, setProspectType] = useState<ProspectType>('foreclosure');
+  const [strategy, setStrategy] = useState<StrategyType>('subject-to');
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [questionStates, setQuestionStates] = useState<Record<number, { asked: boolean }>>({});
   const [liveTranscript, setLiveTranscript] = useState<string>('');
@@ -83,13 +90,15 @@ export default function LiveCoPilotDashboard() {
   // Prevent unbounded growth during long sessions
   const MAX_OBJECTIONS_HISTORY = 25;
 
-  // Reset asked questions and best scores when prospect type changes (different questions for different types)
+  // Reset asked questions and best scores when strategy changes (different questions for different strategies)
   useEffect(() => {
     const newSet = new Set<number>();
     setAskedQuestionsHistory(newSet);
     askedQuestionsRef.current = newSet;
     setQuestionStates({});
-  }, [prospectType]);
+    // Reset objections history when strategy changes
+    setObjectionsHistory([]);
+  }, [strategy]);
 
   // Sync ref with state whenever state changes
   useEffect(() => {
@@ -116,20 +125,38 @@ export default function LiveCoPilotDashboard() {
     return () => clearInterval(interval);
   }, [isCallActive, callStartTime]);
 
-  // Get questions for this prospect type (render + validation)
-  // IMPORTANT: Dashboard renderer expects { question, why, category }.
-  // Settings editor stores { question, helper, badgeText, badgeColor }.
-  const questionsFromSettings = settings.diagnosticQuestionsByProspectType?.[prospectType];
-  const questions = (Array.isArray(questionsFromSettings) && questionsFromSettings.length > 0)
-    ? questionsFromSettings.map((q: any) => ({
-        question: String(q?.question || ''),
-        why: String(q?.helper || ''),
-        // Use badgeColor as the category key for styling
-        category: (q?.badgeColor || 'situation'),
-        // Use explicit badge text if provided
-        badgeText: String(q?.badgeText || '')
-      }))
-    : diagnosticQuestions[prospectType];
+  // Get questions based on strategy (simplified - we'll use a generic set for now)
+  // For strategies, we use a simplified question set focused on the deal structure
+  const getQuestionsForStrategy = (strat: StrategyType) => {
+    const baseQuestions = [
+      { question: 'What\'s motivating this decision right now?', why: 'Understand urgency and pain points', category: 'situation', badgeText: 'Motivation' },
+      { question: 'What\'s your timeline for making this happen?', why: 'Establish urgency', category: 'timeline', badgeText: 'Timeline' },
+      { question: 'Who else needs to be involved in this decision?', why: 'Identify decision makers', category: 'authority', badgeText: 'Authority' },
+      { question: 'What concerns do you have about this approach?', why: 'Surface objections early', category: 'pain', badgeText: 'Concerns' },
+    ];
+    
+    if (strat === 'lease-purchase') {
+      return [
+        ...baseQuestions,
+        { question: 'What\'s preventing you from qualifying for traditional financing right now?', why: 'Understand credit situation', category: 'financial', badgeText: 'Credit Status' },
+        { question: 'How soon do you want to move in and start building equity?', why: 'Establish move-in timeline', category: 'timeline', badgeText: 'Move-in Date' },
+      ];
+    } else if (strat === 'subject-to') {
+      return [
+        ...baseQuestions,
+        { question: 'How far behind are you on payments?', why: 'Assess urgency and foreclosure risk', category: 'financial', badgeText: 'Payment Status' },
+        { question: 'What would happen if you can\'t resolve this soon?', why: 'Amplify consequences', category: 'pain', badgeText: 'Consequences' },
+      ];
+    } else { // seller-finance
+      return [
+        ...baseQuestions,
+        { question: 'What monthly payment would make this attractive to you?', why: 'Understand income needs', category: 'financial', badgeText: 'Income Goal' },
+        { question: 'Have you spoken with a CPA about installment sale benefits?', why: 'Surface tax concerns', category: 'authority', badgeText: 'Tax Planning' },
+      ];
+    }
+  };
+  
+  const questions = getQuestionsForStrategy(strategy);
 
   // Extract analysis update handler so it can be reused
   const handleAnalysisUpdate = useCallback((analysis: any) => {
@@ -270,39 +297,9 @@ export default function LiveCoPilotDashboard() {
       return merged;
     });
 
-    // Update prospect type if detected differently
-    if (analysis.prospectType && analysis.prospectType !== prospectType) {
-      setProspectType(analysis.prospectType as ProspectType);
-    }
-  }, [prospectType]);
+    // Note: Strategy is now manually selected by user, not auto-detected
+  }, [strategy]);
 
-  // Helper function to clean up stuttering/repeated words from speech-to-text
-  const cleanQuote = (text: string): string => {
-    if (!text) return '';
-    // Remove excessive repetitions (more than 2 consecutive identical words)
-    const words = text.split(/\s+/);
-    const cleaned: string[] = [];
-    let lastWord = '';
-    let repeatCount = 0;
-
-    for (const word of words) {
-      const lowerWord = word.toLowerCase();
-      if (lowerWord === lastWord.toLowerCase()) {
-        repeatCount++;
-        if (repeatCount < 2) {
-          cleaned.push(word);
-        }
-      } else {
-        cleaned.push(word);
-        lastWord = word;
-        repeatCount = 0;
-      }
-    }
-
-    // Limit quote length to 150 chars
-    const result = cleaned.join(' ');
-    return result.length > 150 ? result.substring(0, 147) + '...' : result;
-  };
 
   // Get asked questions from accumulated history (persists across updates)
   // Use ref to get latest value (avoids stale state during renders)
@@ -423,7 +420,7 @@ export default function LiveCoPilotDashboard() {
             <div className="flex items-center gap-6">
               {/* Recording Button */}
               <RecordingButton
-                prospectType={prospectType}
+                prospectType={strategy}
                 onTranscriptUpdate={(t) => {
                   const next = (t || '').trim();
                   if (!next) return;
@@ -466,19 +463,23 @@ export default function LiveCoPilotDashboard() {
                 </div>
               </div>
 
-              <select
-                value={prospectType}
-                onChange={(e) => {
-                  setProspectType(e.target.value as ProspectType);
-                }}
-                className="bg-gray-800 text-white px-6 py-3 rounded-xl border border-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-lg font-medium"
-              >
-                <option value="foreclosure">Foreclosure</option>
-                <option value="creative-seller-financing">Creative Seller Finance</option>
-                <option value="distressed-landlord">Distressed Landlord</option>
-                <option value="performing-tired-landlord">Tired Landlord</option>
-                <option value="cash-equity-seller">Cash Equity Seller</option>
-              </select>
+              {/* Strategy Selector */}
+              <div className="relative">
+                <div className="text-xs text-gray-400 mb-1 text-center">Deal Strategy</div>
+                <select
+                  value={strategy}
+                  onChange={(e) => {
+                    setStrategy(e.target.value as StrategyType);
+                  }}
+                  className="bg-gradient-to-r from-cyan-900/40 to-teal-900/40 text-white px-6 py-3 rounded-xl border-2 border-cyan-500/50 focus:outline-none focus:ring-2 focus:ring-cyan-400 text-lg font-bold shadow-lg shadow-cyan-500/20 hover:border-cyan-400 transition-all cursor-pointer"
+                >
+                  {strategyOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id} className="bg-gray-900">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="text-right">
                 <div className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-teal-400 bg-clip-text text-transparent">
                   {analysisData ? completionPercentage : 0}%
@@ -742,13 +743,14 @@ export default function LiveCoPilotDashboard() {
             </div>
 
             {/* Hot Buttons - Emotional Levers */}
-            <HotButtons emotionalLevers={analysisData?.emotionalLevers} />
+            <HotButtons emotionalLevers={analysisData?.emotionalLevers} strategyHotButtons={strategyData[strategy].hotButtons} />
           </div>
 
           {/* RIGHT: Live Intel */}
           <div className="space-y-6">
             <TopObjections
               realTimeObjections={objectionsHistory}
+              strategyObjections={strategyData[strategy].objections}
             />
           </div>
         </div>

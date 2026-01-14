@@ -1,3 +1,14 @@
+export type StrategyType =
+  | 'lease-purchase'
+  | 'subject-to'
+  | 'seller-finance';
+
+export interface StrategyOption {
+  id: StrategyType;
+  label: string;
+  shortLabel: string;
+}
+
 export type ProspectType =
   | 'creative-seller-financing'
   | 'distressed-landlord'
@@ -48,6 +59,35 @@ export interface ProspectTypeData {
   objections: ObjectionExample[];
   truthIndex: TruthSignals;
 }
+
+export interface StrategyData {
+  lubometer: LubometerInterpretation;
+  hotButtons: HotButtons;
+  objections: ObjectionExample[];
+  scripts: {
+    intro: string;
+    mainPitch: string;
+    close: string;
+  };
+}
+
+export const strategyOptions: StrategyOption[] = [
+  {
+    id: 'lease-purchase',
+    label: 'Lease Purchase',
+    shortLabel: 'Lease Purchase'
+  },
+  {
+    id: 'subject-to',
+    label: 'Subject-To',
+    shortLabel: 'Subject-To'
+  },
+  {
+    id: 'seller-finance',
+    label: 'Seller Finance',
+    shortLabel: 'Seller Finance'
+  }
+];
 
 export const prospectTypes: ProspectTypeOption[] = [
   {
@@ -251,6 +291,111 @@ export const prospectTypeData: Record<ProspectType, ProspectTypeData> = {
         'Endless shopping',
         'No commitment criteria'
       ]
+    }
+  }
+};
+
+export const strategyData: Record<StrategyType, StrategyData> = {
+  'lease-purchase': {
+    lubometer: {
+      low: 'Skeptical about rent credits and long-term commitment',
+      medium: 'Understands structure, worried about qualification timeline',
+      high: 'Ready to move forward, sees path to ownership'
+    },
+    hotButtons: {
+      pain1: '"I want to own but banks keep rejecting me"',
+      pain2: '"I\'m tired of wasting money on rent with nothing to show for it"',
+      desire: '"I want to build equity and stability for my family"'
+    },
+    objections: [
+      {
+        objection: 'What if I can\'t qualify at the end?',
+        fear: 'Wasting time and money with no ownership',
+        whisper: 'Emphasize credit repair support and extended timelines'
+      },
+      {
+        objection: 'How do rent credits work?',
+        fear: 'Getting cheated or losing money',
+        whisper: 'Show clear documentation and third-party escrow'
+      },
+      {
+        objection: 'What if the market crashes?',
+        fear: 'Locked into overpriced property',
+        whisper: 'Frame it as locked-in pricing advantage'
+      }
+    ],
+    scripts: {
+      intro: 'This program is designed for people who want to own but need time to qualify. You move in, build equity through rent credits, and we help you qualify for traditional financing.',
+      mainPitch: 'Every month, a portion of your rent goes toward your down payment. Meanwhile, we connect you with credit specialists who help you qualify. You\'re not just renting—you\'re building toward ownership.',
+      close: 'If you\'re ready to stop renting and start building equity, we can get you moved in within 30 days and on the path to ownership. Does that timeline work for you?'
+    }
+  },
+  'subject-to': {
+    lubometer: {
+      low: 'Fearful about liability and due-on-sale clause',
+      medium: 'Understands relief, still worried about long-term risk',
+      high: 'Ready to transfer ownership and walk away'
+    },
+    hotButtons: {
+      pain1: '"I\'m falling behind on payments and terrified of foreclosure"',
+      pain2: '"I can\'t afford this house anymore but don\'t want to destroy my credit"',
+      desire: '"I need relief from this payment stress immediately"'
+    },
+    objections: [
+      {
+        objection: 'What if you stop paying?',
+        fear: 'Foreclosure and credit destruction',
+        whisper: 'Show loan servicing and payment tracking system'
+      },
+      {
+        objection: 'Is this legal?',
+        fear: 'Getting sued or scammed',
+        whisper: 'Explain deed transfer with title company and attorney review'
+      },
+      {
+        objection: 'What about the due-on-sale clause?',
+        fear: 'Bank calling the loan',
+        whisper: 'Explain that banks care about payments, not ownership transfers'
+      }
+    ],
+    scripts: {
+      intro: 'This solution is for homeowners who need relief from mortgage payments but want to protect their credit. We take over your loan and make payments while you walk away debt-free.',
+      mainPitch: 'The deed transfers to us, but the loan stays in your name temporarily. We make every payment through a licensed servicer—you can see proof monthly. Your credit is protected, and you get immediate relief.',
+      close: 'If you\'re ready to stop the stress and protect your credit, we can start the paperwork this week and have you free of this burden within 30 days. Sound good?'
+    }
+  },
+  'seller-finance': {
+    lubometer: {
+      low: 'Worried about buyer default and payment security',
+      medium: 'Interested in monthly income, concerned about documentation',
+      high: 'Ready to carry note with proper protections'
+    },
+    hotButtons: {
+      pain1: '"I need monthly income but can\'t wait for a traditional sale"',
+      pain2: '"I don\'t want to pay massive capital gains taxes"',
+      desire: '"I want steady income and a secured investment"'
+    },
+    objections: [
+      {
+        objection: 'What if they stop paying?',
+        fear: 'Lengthy foreclosure and legal costs',
+        whisper: 'Explain note servicing and foreclosure protection'
+      },
+      {
+        objection: 'How do I know they\'ll qualify?',
+        fear: 'Selling to unqualified buyer',
+        whisper: 'Show buyer vetting process and down payment requirement'
+      },
+      {
+        objection: 'What about taxes?',
+        fear: 'IRS penalties or complications',
+        whisper: 'Frame installment sale benefits with CPA consultation'
+      }
+    ],
+    scripts: {
+      intro: 'This structure lets you sell the property while carrying the financing yourself. You become the bank, earn interest, and defer capital gains while we make monthly payments.',
+      mainPitch: 'You get a substantial down payment upfront, monthly income with interest, and tax advantages through an installment sale. Everything is secured by a deed of trust—your property is protected.',
+      close: 'If you\'re ready to turn your equity into steady income with tax benefits, we can get the paperwork started this week and have your first payment within 30 days. Ready to move forward?'
     }
   }
 };
